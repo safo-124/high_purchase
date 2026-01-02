@@ -157,7 +157,7 @@ export async function getCollectorDashboard(shopSlug: string): Promise<Collector
     : []
 
   return {
-    collectorName: user.name,
+    collectorName: user.name || "Collector",
     shopName: shop.name,
     assignedCustomers,
     activeLoans,
