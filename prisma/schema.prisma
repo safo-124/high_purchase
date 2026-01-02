@@ -1,0 +1,257 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Role enum for RBAC
+enum Role {
+  SUPER_ADMIN
+  SHOP_ADMIN
+  DEBT_COLLECTOR
+  CUSTOMER
+}
+
+// Interest calculation type
+enum InterestType {
+  FLAT    // One-time flat interest
+  MONTHLY // Monthly compounding interest
+}
+
+// Customer payment preference
+enum PaymentPreference {
+  ONLINE          // Mobile money, bank transfer, etc.
+  DEBT_COLLECTOR  // Pay to debt collector in person
+  BOTH            // Either method
+}
+
+// Actual payment method for transactions
+enum PaymentMethod {
+  CASH
+  MOBILE_MONEY
+  BANK_TRANSFER
+  CARD
+}
+
+// User model
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String?
+  passwordHash String
+  role         Role
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  auditLogs    AuditLog[]   @relation("AuditLogActor")
+  memberships  ShopMember[] @relation("UserMemberships")
+}
+
+// Shop (tenant) model
+model Shop {
+  id        String       @id @default(cuid())
+  name      String
+  shopSlug  String       @unique // lowercase, [a-z0-9-] only
+  country   String       @default("Ghana")
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  members   ShopMember[] @relation("ShopMembers")
+  policy    ShopPolicy?  @relation("ShopPolicy")
+  products  Product[]    @relation("ShopProducts")
+  customers Customer[]   @relation("ShopCustomers")
+}
+
+// Customer model - BNPL customers for a shop
+model Customer {
+  id                  String            @id @default(cuid())
+  shopId              String
+  shop                Shop              @relation("ShopCustomers", fields: [shopId], references: [id], onDelete: Cascade)
+  firstName           String
+  lastName            String
+  phone               String            // Primary contact
+  email               String?
+  idType              String?           // e.g., "Ghana Card", "Voter ID", "Passport"
+  idNumber            String?           // ID document number
+  address             String?
+  city                String?
+  region              String?           // State/Region
+  preferredPayment    PaymentPreference @default(BOTH)
+  assignedCollectorId String?           // Preferred debt collector
+  assignedCollector   ShopMember?       @relation("AssignedCustomers", fields: [assignedCollectorId], references: [id], onDelete: SetNull)
+  notes               String?
+  isActive            Boolean           @default(true)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  purchases           Purchase[]        @relation("CustomerPurchases")
+
+  @@unique([shopId, phone])   // Phone unique per shop
+  @@index([shopId])
+  @@index([assignedCollectorId])
+  @@index([isActive])
+}
+
+// Product model for shop inventory
+model Product {
+  id            String         @id @default(cuid())
+  shopId        String
+  shop          Shop           @relation("ShopProducts", fields: [shopId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  sku           String?        // Stock keeping unit
+  price         Decimal        @db.Decimal(12, 2) // Up to 999,999,999,999.99
+  imageUrl      String?
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  purchaseItems PurchaseItem[] @relation("ProductPurchaseItems")
+
+  @@unique([shopId, sku]) // SKU unique per shop
+  @@index([shopId])
+  @@index([isActive])
+}
+
+// Shop membership - links users to shops with roles
+model ShopMember {
+  id                String     @id @default(cuid())
+  userId            String
+  user              User       @relation("UserMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  shopId            String
+  shop              Shop       @relation("ShopMembers", fields: [shopId], references: [id], onDelete: Cascade)
+  role              Role       @default(SHOP_ADMIN) // Role within this shop
+  isActive          Boolean    @default(true)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  assignedCustomers Customer[] @relation("AssignedCustomers") // For debt collectors
+  collectedPayments Payment[]  @relation("CollectorPayments") // Payments collected by this member
+
+  @@unique([userId, shopId])
+  @@index([userId])
+  @@index([shopId])
+}
+
+// Shop BNPL Policy - 1:1 with Shop
+model ShopPolicy {
+  id           String       @id @default(cuid())
+  shopId       String       @unique
+  shop         Shop         @relation("ShopPolicy", fields: [shopId], references: [id], onDelete: Cascade)
+  interestType InterestType @default(FLAT)
+  interestRate Decimal      @default(0.00) @db.Decimal(5, 2) // 0.00 to 100.00%
+  graceDays    Int          @default(3) // Days before interest/late fees kick in
+  maxTenorDays Int          @default(60) // Maximum repayment period
+  lateFeeFixed Decimal?     @db.Decimal(10, 2) // Fixed late fee amount (nullable)
+  lateFeeRate  Decimal?     @db.Decimal(5, 2) // Late fee as percentage (nullable)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+// Audit log for tracking admin actions
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  actor       User?    @relation("AuditLogActor", fields: [actorUserId], references: [id])
+  action      String   // LOGIN, SHOP_CREATED, SHOP_SUSPENDED, SHOP_ACTIVATED, POLICY_UPDATED
+  entityType  String?  // e.g., "Shop", "ShopPolicy"
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+}
+
+// Purchase status enum
+enum PurchaseStatus {
+  PENDING     // Awaiting first payment
+  ACTIVE      // Payments in progress
+  COMPLETED   // Fully paid
+  OVERDUE     // Missed payment deadline
+  DEFAULTED   // Written off as bad debt
+}
+
+// Payment status enum
+enum PaymentStatus {
+  PENDING     // Expected payment not yet made
+  COMPLETED   // Payment received
+  PARTIAL     // Partial payment made
+  MISSED      // Payment deadline passed
+  WAIVED      // Payment waived by shop admin
+}
+
+// Purchase/Order - Customer buying products on credit
+model Purchase {
+  id              String         @id @default(cuid())
+  purchaseNumber  String         // Human-readable purchase number (e.g., "HP-001")
+  customerId      String
+  customer        Customer       @relation("CustomerPurchases", fields: [customerId], references: [id], onDelete: Cascade)
+  status          PurchaseStatus @default(PENDING)
+  // Pricing
+  subtotal        Decimal        @db.Decimal(12, 2) // Total of all items
+  interestAmount  Decimal        @db.Decimal(12, 2) // Calculated interest
+  totalAmount     Decimal        @db.Decimal(12, 2) // subtotal + interest
+  amountPaid      Decimal        @default(0) @db.Decimal(12, 2) // Running total paid
+  outstandingBalance Decimal     @db.Decimal(12, 2) // totalAmount - amountPaid
+  // Payment terms
+  downPayment     Decimal        @default(0) @db.Decimal(12, 2) // Initial payment
+  installments    Int            @default(1) // Number of installments
+  startDate       DateTime       @default(now()) // When payment plan starts
+  dueDate         DateTime       // Final due date
+  // Interest settings (copied from shop policy at time of purchase)
+  interestType    InterestType   @default(FLAT)
+  interestRate    Decimal        @db.Decimal(5, 2)
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  // Relations
+  items           PurchaseItem[] @relation("PurchaseItems")
+  payments        Payment[]      @relation("PurchasePayments")
+
+  @@index([customerId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// Purchase Item - Individual products in a purchase
+model PurchaseItem {
+  id          String   @id @default(cuid())
+  purchaseId  String
+  purchase    Purchase @relation("PurchaseItems", fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId   String?  // Optional - product might be deleted
+  product     Product? @relation("ProductPurchaseItems", fields: [productId], references: [id], onDelete: SetNull)
+  productName String   // Store name in case product is deleted
+  quantity    Int      @default(1)
+  unitPrice   Decimal  @db.Decimal(12, 2) // Price at time of purchase
+  totalPrice  Decimal  @db.Decimal(12, 2) // quantity * unitPrice
+  createdAt   DateTime @default(now())
+
+  @@index([purchaseId])
+  @@index([productId])
+}
+
+// Payment - Individual payment towards a purchase
+model Payment {
+  id            String        @id @default(cuid())
+  purchaseId    String
+  purchase      Purchase      @relation("PurchasePayments", fields: [purchaseId], references: [id], onDelete: Cascade)
+  amount        Decimal       @db.Decimal(12, 2)
+  paymentMethod PaymentMethod // How payment was made
+  status        PaymentStatus @default(COMPLETED)
+  // For collector payments
+  collectorId   String?       // Which collector received payment
+  collector     ShopMember?   @relation("CollectorPayments", fields: [collectorId], references: [id], onDelete: SetNull)
+  // For scheduled/expected payments
+  dueDate       DateTime?     // When payment was expected
+  paidAt        DateTime?     // When payment was actually made
+  // Reference info
+  reference     String?       // Transaction reference, receipt number, etc.
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([purchaseId])
+  @@index([collectorId])
+  @@index([status])
+  @@index([dueDate])
+}
