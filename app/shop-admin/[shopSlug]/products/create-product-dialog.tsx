@@ -9,14 +9,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { createProduct } from "../../actions"
+import { createProduct, CategoryData } from "../../actions"
 import { toast } from "sonner"
 
 interface CreateProductDialogProps {
   shopSlug: string
+  categories: CategoryData[]
 }
 
-export function CreateProductDialog({ shopSlug }: CreateProductDialogProps) {
+export function CreateProductDialog({ shopSlug, categories }: CreateProductDialogProps) {
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   
@@ -25,6 +26,7 @@ export function CreateProductDialog({ shopSlug }: CreateProductDialogProps) {
   const [sku, setSku] = useState("")
   const [price, setPrice] = useState("")
   const [imageUrl, setImageUrl] = useState("")
+  const [categoryId, setCategoryId] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,6 +38,7 @@ export function CreateProductDialog({ shopSlug }: CreateProductDialogProps) {
       sku: sku || null,
       price: parseFloat(price) || 0,
       imageUrl: imageUrl || null,
+      categoryId: categoryId || null,
     })
 
     if (result.success) {
@@ -55,6 +58,7 @@ export function CreateProductDialog({ shopSlug }: CreateProductDialogProps) {
     setSku("")
     setPrice("")
     setImageUrl("")
+    setCategoryId("")
   }
 
   return (
@@ -127,6 +131,34 @@ export function CreateProductDialog({ shopSlug }: CreateProductDialogProps) {
                 rows={3}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all resize-none"
               />
+            </div>
+
+            {/* Category */}
+            <div className="space-y-2">
+              <label htmlFor="category" className="text-sm font-medium text-slate-200 flex items-center gap-2">
+                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                Category
+              </label>
+              <select
+                id="category"
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
+              >
+                <option value="" className="bg-slate-900">No category</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id} className="bg-slate-900">
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+              {categories.length === 0 && (
+                <p className="text-xs text-slate-500">
+                  No categories yet. Create categories in the Categories section above.
+                </p>
+              )}
             </div>
 
             {/* SKU and Price Row */}

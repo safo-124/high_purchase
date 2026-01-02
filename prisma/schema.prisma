@@ -54,17 +54,36 @@ model User {
 
 // Shop (tenant) model
 model Shop {
-  id        String       @id @default(cuid())
-  name      String
-  shopSlug  String       @unique // lowercase, [a-z0-9-] only
-  country   String       @default("Ghana")
-  isActive  Boolean      @default(true)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  members   ShopMember[] @relation("ShopMembers")
-  policy    ShopPolicy?  @relation("ShopPolicy")
-  products  Product[]    @relation("ShopProducts")
-  customers Customer[]   @relation("ShopCustomers")
+  id         String       @id @default(cuid())
+  name       String
+  shopSlug   String       @unique // lowercase, [a-z0-9-] only
+  country    String       @default("Ghana")
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  members    ShopMember[] @relation("ShopMembers")
+  policy     ShopPolicy?  @relation("ShopPolicy")
+  products   Product[]    @relation("ShopProducts")
+  customers  Customer[]   @relation("ShopCustomers")
+  categories Category[]   @relation("ShopCategories")
+}
+
+// Product Category model
+model Category {
+  id          String    @id @default(cuid())
+  shopId      String
+  shop        Shop      @relation("ShopCategories", fields: [shopId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  color       String?   @default("#6366f1") // Category color for UI
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[] @relation("CategoryProducts")
+
+  @@unique([shopId, name]) // Category name unique per shop
+  @@index([shopId])
+  @@index([isActive])
 }
 
 // Customer model - BNPL customers for a shop
@@ -101,6 +120,8 @@ model Product {
   id            String         @id @default(cuid())
   shopId        String
   shop          Shop           @relation("ShopProducts", fields: [shopId], references: [id], onDelete: Cascade)
+  categoryId    String?
+  category      Category?      @relation("CategoryProducts", fields: [categoryId], references: [id], onDelete: SetNull)
   name          String
   description   String?
   sku           String?        // Stock keeping unit
@@ -113,6 +134,7 @@ model Product {
 
   @@unique([shopId, sku]) // SKU unique per shop
   @@index([shopId])
+  @@index([categoryId])
   @@index([isActive])
 }
 

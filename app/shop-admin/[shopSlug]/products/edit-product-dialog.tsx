@@ -9,15 +9,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { updateProduct, ProductData } from "../../actions"
+import { updateProduct, ProductData, CategoryData } from "../../actions"
 import { toast } from "sonner"
 
 interface EditProductDialogProps {
   product: ProductData
   shopSlug: string
+  categories: CategoryData[]
 }
 
-export function EditProductDialog({ product, shopSlug }: EditProductDialogProps) {
+export function EditProductDialog({ product, shopSlug, categories }: EditProductDialogProps) {
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   
@@ -26,6 +27,7 @@ export function EditProductDialog({ product, shopSlug }: EditProductDialogProps)
   const [sku, setSku] = useState(product.sku || "")
   const [price, setPrice] = useState(product.price.toString())
   const [imageUrl, setImageUrl] = useState(product.imageUrl || "")
+  const [categoryId, setCategoryId] = useState(product.categoryId || "")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,6 +39,7 @@ export function EditProductDialog({ product, shopSlug }: EditProductDialogProps)
       sku: sku || null,
       price: parseFloat(price) || 0,
       imageUrl: imageUrl || null,
+      categoryId: categoryId || null,
     })
 
     if (result.success) {
@@ -57,6 +60,7 @@ export function EditProductDialog({ product, shopSlug }: EditProductDialogProps)
       setSku(product.sku || "")
       setPrice(product.price.toString())
       setImageUrl(product.imageUrl || "")
+      setCategoryId(product.categoryId || "")
     }
     setOpen(isOpen)
   }
@@ -130,6 +134,29 @@ export function EditProductDialog({ product, shopSlug }: EditProductDialogProps)
                 rows={3}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all resize-none"
               />
+            </div>
+
+            {/* Category */}
+            <div className="space-y-2">
+              <label htmlFor="edit-category" className="text-sm font-medium text-slate-200 flex items-center gap-2">
+                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                Category
+              </label>
+              <select
+                id="edit-category"
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all"
+              >
+                <option value="" className="bg-slate-900">No category</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id} className="bg-slate-900">
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* SKU and Price Row */}

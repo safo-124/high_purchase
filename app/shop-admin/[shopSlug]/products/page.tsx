@@ -1,9 +1,10 @@
 import { requireShopAdminForShop } from "../../../../lib/auth"
-import { getProducts } from "../../actions"
+import { getProducts, getShopCategories } from "../../actions"
 import Link from "next/link"
 import { ShopAdminLogoutButton } from "../dashboard/logout-button"
 import { ProductsTable } from "./products-table"
 import { CreateProductDialog } from "./create-product-dialog"
+import { CategoriesSection } from "./categories-section"
 
 export default async function ProductsPage({
   params,
@@ -13,6 +14,7 @@ export default async function ProductsPage({
   const { shopSlug } = await params
   const { user, shop } = await requireShopAdminForShop(shopSlug)
   const products = await getProducts(shopSlug)
+  const categories = await getShopCategories(shopSlug)
 
   // Format price for Ghana Cedis
   const formatPrice = (price: number) => {
@@ -111,8 +113,11 @@ export default async function ProductsPage({
               Manage your shop&apos;s product catalog for BNPL financing.
             </p>
           </div>
-          <CreateProductDialog shopSlug={shopSlug} />
+          <CreateProductDialog shopSlug={shopSlug} categories={categories} />
         </div>
+
+        {/* Categories Section */}
+        <CategoriesSection categories={categories} shopSlug={shopSlug} />
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
@@ -164,7 +169,7 @@ export default async function ProductsPage({
 
         {/* Products Table */}
         <div className="glass-card rounded-2xl overflow-hidden">
-          <ProductsTable products={products} shopSlug={shopSlug} />
+          <ProductsTable products={products} shopSlug={shopSlug} categories={categories} />
         </div>
       </main>
     </div>

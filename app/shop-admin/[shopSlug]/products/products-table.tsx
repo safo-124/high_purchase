@@ -1,16 +1,17 @@
 "use client"
 
 import { useState } from "react"
-import { ProductData, deleteProduct, toggleProductStatus } from "../../actions"
+import { ProductData, CategoryData, deleteProduct, toggleProductStatus } from "../../actions"
 import { toast } from "sonner"
 import { EditProductDialog } from "./edit-product-dialog"
 
 interface ProductsTableProps {
   products: ProductData[]
   shopSlug: string
+  categories: CategoryData[]
 }
 
-export function ProductsTable({ products, shopSlug }: ProductsTableProps) {
+export function ProductsTable({ products, shopSlug, categories }: ProductsTableProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -85,6 +86,9 @@ export function ProductsTable({ products, shopSlug }: ProductsTableProps) {
                 Product
               </th>
               <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
+                Category
+              </th>
+              <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
                 SKU
               </th>
               <th className="text-right text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
@@ -127,6 +131,28 @@ export function ProductsTable({ products, shopSlug }: ProductsTableProps) {
                   </div>
                 </td>
 
+                {/* Category */}
+                <td className="px-6 py-4">
+                  {product.categoryName ? (
+                    <span 
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
+                      style={{ 
+                        backgroundColor: `${product.categoryColor}15`,
+                        borderColor: `${product.categoryColor}40`,
+                        color: product.categoryColor || '#6366f1'
+                      }}
+                    >
+                      <span 
+                        className="w-2 h-2 rounded-full" 
+                        style={{ backgroundColor: product.categoryColor || '#6366f1' }} 
+                      />
+                      {product.categoryName}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-slate-500">—</span>
+                  )}
+                </td>
+
                 {/* SKU */}
                 <td className="px-6 py-4">
                   <span className="text-sm text-slate-300 font-mono">
@@ -160,7 +186,7 @@ export function ProductsTable({ products, shopSlug }: ProductsTableProps) {
                 {/* Actions */}
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end gap-2">
-                    <EditProductDialog product={product} shopSlug={shopSlug} />
+                    <EditProductDialog product={product} shopSlug={shopSlug} categories={categories} />
                     <button
                       onClick={() => handleDeleteClick(product)}
                       disabled={deletingId === product.id}
