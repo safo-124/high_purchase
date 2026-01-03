@@ -95,6 +95,9 @@ export function ProductsTable({ products, shopSlug, categories }: ProductsTableP
                 Price
               </th>
               <th className="text-center text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
+                Stock
+              </th>
+              <th className="text-center text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
                 Status
               </th>
               <th className="text-right text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
@@ -164,6 +167,28 @@ export function ProductsTable({ products, shopSlug, categories }: ProductsTableP
                 <td className="px-6 py-4 text-right">
                   <span className="text-sm font-semibold text-white">
                     {formatPrice(product.price)}
+                  </span>
+                </td>
+
+                {/* Stock */}
+                <td className="px-6 py-4 text-center">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                    product.stockQuantity === 0
+                      ? "bg-red-500/10 text-red-400 border-red-500/20"
+                      : product.stockQuantity <= 5
+                      ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                      : "bg-green-500/10 text-green-400 border-green-500/20"
+                  }`}>
+                    {product.stockQuantity === 0 ? (
+                      <>
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Out of Stock
+                      </>
+                    ) : (
+                      `${product.stockQuantity} units`
+                    )}
                   </span>
                 </td>
 

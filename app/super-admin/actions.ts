@@ -5,8 +5,8 @@ import bcrypt from "bcrypt"
 import prisma from "../../lib/prisma"
 import { requireSuperAdmin, createAuditLog } from "../../lib/auth"
 
-// Validation regex for shop slug: lowercase, alphanumeric, hyphens only
-const SHOP_SLUG_REGEX = /^[a-z0-9-]+$/
+// Validation regex for business slug: lowercase, alphanumeric, hyphens only
+const SLUG_REGEX = /^[a-z0-9-]+$/
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export type ActionResult = {
@@ -15,221 +15,281 @@ export type ActionResult = {
   data?: unknown
 }
 
-export async function createShop(formData: FormData): Promise<ActionResult> {
+export interface BusinessData {
+  id: string
+  name: string
+  businessSlug: string
+  country: string
+  isActive: boolean
+  createdAt: Date
+  shopCount: number
+  adminName: string | null
+  adminEmail: string | null
+}
+
+/**
+ * Get all businesses with stats
+ */
+export async function getBusinesses(): Promise<BusinessData[]> {
+  await requireSuperAdmin()
+
+  const businesses = await prisma.business.findMany({
+    include: {
+      _count: {
+        select: { shops: true },
+      },
+      members: {
+        where: { role: "BUSINESS_ADMIN", isActive: true },
+        include: { user: true },
+        take: 1,
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return businesses.map((b) => ({
+    id: b.id,
+    name: b.name,
+    businessSlug: b.businessSlug,
+    country: b.country,
+    isActive: b.isActive,
+    createdAt: b.createdAt,
+    shopCount: b._count.shops,
+    adminName: b.members[0]?.user.name || null,
+    adminEmail: b.members[0]?.user.email || null,
+  }))
+}
+
+/**
+ * Create a new business with optional business admin
+ */
+export async function createBusiness(formData: FormData): Promise<ActionResult> {
   try {
     const user = await requireSuperAdmin()
 
     const name = formData.get("name") as string
-    const shopSlug = formData.get("shopSlug") as string
+    const businessSlug = formData.get("businessSlug") as string
     
-    // Shop Admin fields (optional)
-    const createAdmin = formData.get("createAdmin") === "true"
+    // Business Admin fields
     const adminName = formData.get("adminName") as string | null
     const adminEmail = formData.get("adminEmail") as string | null
     const adminPassword = formData.get("adminPassword") as string | null
 
     // Validation
     if (!name || name.trim().length === 0) {
-      return { success: false, error: "Shop name is required" }
+      return { success: false, error: "Business name is required" }
     }
 
-    if (!shopSlug || shopSlug.trim().length === 0) {
-      return { success: false, error: "Shop slug is required" }
+    if (!businessSlug || businessSlug.trim().length === 0) {
+      return { success: false, error: "Business slug is required" }
     }
 
-    const normalizedSlug = shopSlug.toLowerCase().trim()
+    const normalizedSlug = businessSlug.toLowerCase().trim()
 
-    if (!SHOP_SLUG_REGEX.test(normalizedSlug)) {
+    if (!SLUG_REGEX.test(normalizedSlug)) {
       return {
         success: false,
-        error: "Shop slug must contain only lowercase letters, numbers, and hyphens",
+        error: "Business slug must contain only lowercase letters, numbers, and hyphens",
       }
     }
 
     // Check if slug already exists
-    const existingShop = await prisma.shop.findUnique({
-      where: { shopSlug: normalizedSlug },
+    const existingBusiness = await prisma.business.findUnique({
+      where: { businessSlug: normalizedSlug },
     })
 
-    if (existingShop) {
-      return { success: false, error: "A shop with this slug already exists" }
+    if (existingBusiness) {
+      return { success: false, error: "A business with this slug already exists" }
     }
 
-    // Validate shop admin fields if creating admin
-    if (createAdmin) {
-      if (!adminName || adminName.trim().length === 0) {
-        return { success: false, error: "Admin name is required" }
-      }
-      if (!adminEmail || !EMAIL_REGEX.test(adminEmail)) {
-        return { success: false, error: "Valid admin email is required" }
-      }
-      if (!adminPassword || adminPassword.length < 8) {
-        return { success: false, error: "Admin password must be at least 8 characters" }
-      }
-      
-      // Check if email already exists
-      const existingUser = await prisma.user.findUnique({
-        where: { email: adminEmail.toLowerCase().trim() },
-      })
-      if (existingUser) {
-        return { success: false, error: "A user with this email already exists" }
-      }
+    // Validate business admin fields (required)
+    if (!adminName || adminName.trim().length === 0) {
+      return { success: false, error: "Business admin name is required" }
+    }
+    if (!adminEmail || !EMAIL_REGEX.test(adminEmail)) {
+      return { success: false, error: "Valid business admin email is required" }
+    }
+    if (!adminPassword || adminPassword.length < 8) {
+      return { success: false, error: "Password must be at least 8 characters" }
+    }
+    
+    // Check if email already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: adminEmail.toLowerCase().trim() },
+    })
+    if (existingUser) {
+      return { success: false, error: "A user with this email already exists" }
     }
 
-    // Create shop
-    const shop = await prisma.shop.create({
+    // Create business
+    const business = await prisma.business.create({
       data: {
         name: name.trim(),
-        shopSlug: normalizedSlug,
+        businessSlug: normalizedSlug,
       },
     })
 
-    // Audit log for shop creation
-    await createAuditLog({
-      actorUserId: user.id,
-      action: "SHOP_CREATED",
-      entityType: "Shop",
-      entityId: shop.id,
-      metadata: {
-        shopName: shop.name,
-        shopSlug: shop.shopSlug,
-      },
-    })
-
-    // Create shop admin if requested
-    let shopAdmin = null
-    if (createAdmin && adminName && adminEmail && adminPassword) {
-      const passwordHash = await bcrypt.hash(adminPassword, 12)
-      
-      shopAdmin = await prisma.user.create({
-        data: {
-          email: adminEmail.toLowerCase().trim(),
-          name: adminName.trim(),
-          passwordHash,
-          role: "SHOP_ADMIN",
-          memberships: {
-            create: {
-              shopId: shop.id,
-              role: "SHOP_ADMIN",
-              isActive: true,
-            },
+    // Create business admin user
+    const passwordHash = await bcrypt.hash(adminPassword, 12)
+    
+    const businessAdmin = await prisma.user.create({
+      data: {
+        email: adminEmail.toLowerCase().trim(),
+        name: adminName.trim(),
+        passwordHash,
+        role: "BUSINESS_ADMIN",
+        businessMemberships: {
+          create: {
+            businessId: business.id,
+            role: "BUSINESS_ADMIN",
+            isActive: true,
           },
         },
-      })
+      },
+    })
 
-      // Audit log for admin creation
-      await createAuditLog({
-        actorUserId: user.id,
-        action: "USER_CREATED",
-        entityType: "User",
-        entityId: shopAdmin.id,
-        metadata: {
-          userName: shopAdmin.name,
-          userEmail: shopAdmin.email,
-          userRole: "SHOP_ADMIN",
-          assignedShop: shop.name,
-        },
-      })
-    }
+    // Audit log for business creation
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "BUSINESS_CREATED",
+      entityType: "Business",
+      entityId: business.id,
+      metadata: {
+        businessName: business.name,
+        businessSlug: business.businessSlug,
+        adminEmail: businessAdmin.email,
+      },
+    })
 
-    revalidatePath("/super-admin/shops")
+    revalidatePath("/super-admin/businesses")
     revalidatePath("/super-admin")
 
     return { 
       success: true, 
       data: { 
-        shop, 
-        shopAdmin: shopAdmin ? { 
-          email: shopAdmin.email, 
-          name: shopAdmin.name 
-        } : null 
+        business, 
+        businessAdmin: { 
+          email: businessAdmin.email, 
+          name: businessAdmin.name 
+        }
       } 
     }
   } catch (error) {
-    console.error("Error creating shop:", error)
-    return { success: false, error: "Failed to create shop" }
+    console.error("Error creating business:", error)
+    return { success: false, error: "Failed to create business" }
   }
 }
 
-export async function setShopActive(
-  shopId: string,
+/**
+ * Toggle business active status
+ */
+export async function setBusinessActive(
+  businessId: string,
   isActive: boolean
 ): Promise<ActionResult> {
   try {
     const user = await requireSuperAdmin()
 
-    const shop = await prisma.shop.findUnique({
-      where: { id: shopId },
+    const business = await prisma.business.findUnique({
+      where: { id: businessId },
     })
 
-    if (!shop) {
-      return { success: false, error: "Shop not found" }
+    if (!business) {
+      return { success: false, error: "Business not found" }
     }
 
-    const updatedShop = await prisma.shop.update({
-      where: { id: shopId },
+    const updatedBusiness = await prisma.business.update({
+      where: { id: businessId },
       data: { isActive },
     })
 
     // Audit log
     await createAuditLog({
       actorUserId: user.id,
-      action: isActive ? "SHOP_ACTIVATED" : "SHOP_SUSPENDED",
-      entityType: "Shop",
-      entityId: shop.id,
+      action: isActive ? "BUSINESS_ACTIVATED" : "BUSINESS_SUSPENDED",
+      entityType: "Business",
+      entityId: business.id,
       metadata: {
-        shopName: shop.name,
-        shopSlug: shop.shopSlug,
-        previousStatus: shop.isActive,
+        businessName: business.name,
+        businessSlug: business.businessSlug,
+        previousStatus: business.isActive,
         newStatus: isActive,
       },
     })
 
-    revalidatePath("/super-admin/shops")
+    revalidatePath("/super-admin/businesses")
     revalidatePath("/super-admin")
 
-    return { success: true, data: updatedShop }
+    return { success: true, data: updatedBusiness }
   } catch (error) {
-    console.error("Error updating shop status:", error)
-    return { success: false, error: "Failed to update shop status" }
+    console.error("Error updating business status:", error)
+    return { success: false, error: "Failed to update business status" }
   }
 }
 
-export async function deleteShop(shopId: string): Promise<ActionResult> {
+/**
+ * Delete a business (and all its shops)
+ */
+export async function deleteBusiness(businessId: string): Promise<ActionResult> {
   try {
     const user = await requireSuperAdmin()
 
-    const shop = await prisma.shop.findUnique({
-      where: { id: shopId },
+    const business = await prisma.business.findUnique({
+      where: { id: businessId },
+      include: {
+        _count: { select: { shops: true } },
+      },
     })
 
-    if (!shop) {
-      return { success: false, error: "Shop not found" }
+    if (!business) {
+      return { success: false, error: "Business not found" }
     }
 
-    // Delete the shop
-    await prisma.shop.delete({
-      where: { id: shopId },
+    // Delete the business (cascades to shops)
+    await prisma.business.delete({
+      where: { id: businessId },
     })
 
     // Audit log
     await createAuditLog({
       actorUserId: user.id,
-      action: "SHOP_DELETED",
-      entityType: "Shop",
-      entityId: shopId,
+      action: "BUSINESS_DELETED",
+      entityType: "Business",
+      entityId: businessId,
       metadata: {
-        shopName: shop.name,
-        shopSlug: shop.shopSlug,
+        businessName: business.name,
+        businessSlug: business.businessSlug,
+        shopsDeleted: business._count.shops,
       },
     })
 
-    revalidatePath("/super-admin/shops")
+    revalidatePath("/super-admin/businesses")
     revalidatePath("/super-admin")
 
     return { success: true }
   } catch (error) {
-    console.error("Error deleting shop:", error)
-    return { success: false, error: "Failed to delete shop" }
+    console.error("Error deleting business:", error)
+    return { success: false, error: "Failed to delete business" }
+  }
+}
+
+/**
+ * Get dashboard stats for super admin
+ */
+export async function getSuperAdminStats() {
+  await requireSuperAdmin()
+
+  const [businessCount, shopCount, userCount, activeBusinesses] = await Promise.all([
+    prisma.business.count(),
+    prisma.shop.count(),
+    prisma.user.count({ where: { role: { not: "SUPER_ADMIN" } } }),
+    prisma.business.count({ where: { isActive: true } }),
+  ])
+
+  return {
+    totalBusinesses: businessCount,
+    activeBusinesses,
+    totalShops: shopCount,
+    totalUsers: userCount,
   }
 }

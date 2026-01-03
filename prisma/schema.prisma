@@ -13,7 +13,9 @@ datasource db {
 // Role enum for RBAC
 enum Role {
   SUPER_ADMIN
+  BUSINESS_ADMIN
   SHOP_ADMIN
+  SALES_STAFF
   DEBT_COLLECTOR
   CUSTOMER
 }
@@ -41,20 +43,53 @@ enum PaymentMethod {
 
 // User model
 model User {
-  id           String       @id @default(cuid())
-  email        String       @unique
-  name         String?
-  passwordHash String
-  role         Role
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  auditLogs    AuditLog[]   @relation("AuditLogActor")
-  memberships  ShopMember[] @relation("UserMemberships")
+  id                  String             @id @default(cuid())
+  email               String             @unique
+  name                String?
+  passwordHash        String
+  role                Role
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  auditLogs           AuditLog[]         @relation("AuditLogActor")
+  memberships         ShopMember[]       @relation("UserMemberships")
+  businessMemberships BusinessMember[]   @relation("UserBusinessMemberships")
 }
 
-// Shop (tenant) model
+// Business model - groups multiple shops under one owner
+model Business {
+  id           String           @id @default(cuid())
+  name         String
+  businessSlug String           @unique // lowercase, [a-z0-9-] only
+  country      String           @default("Ghana")
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  shops        Shop[]           @relation("BusinessShops")
+  members      BusinessMember[] @relation("BusinessMembers")
+}
+
+// Business membership - links users to businesses (BUSINESS_ADMIN role)
+model BusinessMember {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation("UserBusinessMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  businessId String
+  business   Business @relation("BusinessMembers", fields: [businessId], references: [id], onDelete: Cascade)
+  role       Role     @default(BUSINESS_ADMIN)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, businessId])
+  @@index([userId])
+  @@index([businessId])
+}
+
+// Shop (tenant) model - belongs to a business
 model Shop {
   id         String       @id @default(cuid())
+  businessId String
+  business   Business     @relation("BusinessShops", fields: [businessId], references: [id], onDelete: Cascade)
   name       String
   shopSlug   String       @unique // lowercase, [a-z0-9-] only
   country    String       @default("Ghana")
@@ -66,6 +101,8 @@ model Shop {
   products   Product[]    @relation("ShopProducts")
   customers  Customer[]   @relation("ShopCustomers")
   categories Category[]   @relation("ShopCategories")
+
+  @@index([businessId])
 }
 
 // Product Category model
@@ -126,6 +163,7 @@ model Product {
   description   String?
   sku           String?        // Stock keeping unit
   price         Decimal        @db.Decimal(12, 2) // Up to 999,999,999,999.99
+  stockQuantity Int            @default(0) // Available quantity in stock
   imageUrl      String?
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
@@ -140,17 +178,18 @@ model Product {
 
 // Shop membership - links users to shops with roles
 model ShopMember {
-  id                String     @id @default(cuid())
-  userId            String
-  user              User       @relation("UserMemberships", fields: [userId], references: [id], onDelete: Cascade)
-  shopId            String
-  shop              Shop       @relation("ShopMembers", fields: [shopId], references: [id], onDelete: Cascade)
-  role              Role       @default(SHOP_ADMIN) // Role within this shop
-  isActive          Boolean    @default(true)
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-  assignedCustomers Customer[] @relation("AssignedCustomers") // For debt collectors
-  collectedPayments Payment[]  @relation("CollectorPayments") // Payments collected by this member
+  id                  String     @id @default(cuid())
+  userId              String
+  user                User       @relation("UserMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  shopId              String
+  shop                Shop       @relation("ShopMembers", fields: [shopId], references: [id], onDelete: Cascade)
+  role                Role       @default(SHOP_ADMIN) // Role within this shop
+  isActive            Boolean    @default(true)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  assignedCustomers   Customer[] @relation("AssignedCustomers") // For debt collectors
+  collectedPayments   Payment[]  @relation("CollectorPayments") // Payments collected by this member
+  deliveredPurchases  Purchase[] @relation("DeliveredPurchases") // Purchases delivered by this member
 
   @@unique([userId, shopId])
   @@index([userId])
@@ -193,6 +232,15 @@ enum PurchaseStatus {
   DEFAULTED   // Written off as bad debt
 }
 
+// Delivery status enum
+enum DeliveryStatus {
+  PENDING     // Not yet scheduled for delivery
+  SCHEDULED   // Delivery date set
+  IN_TRANSIT  // Out for delivery
+  DELIVERED   // Successfully delivered
+  FAILED      // Delivery attempt failed
+}
+
 // Payment status enum
 enum PaymentStatus {
   PENDING     // Expected payment not yet made
@@ -223,16 +271,26 @@ model Purchase {
   // Interest settings (copied from shop policy at time of purchase)
   interestType    InterestType   @default(FLAT)
   interestRate    Decimal        @db.Decimal(5, 2)
+  // Delivery tracking
+  deliveryStatus  DeliveryStatus @default(PENDING)
+  deliveryAddress String?        // Override customer address if different
+  deliveryNotes   String?
+  scheduledDelivery DateTime?    // Scheduled delivery date
+  deliveredAt     DateTime?      // Actual delivery time
+  deliveredById   String?        // Staff who delivered
+  deliveredBy     ShopMember?    @relation("DeliveredPurchases", fields: [deliveredById], references: [id], onDelete: SetNull)
   notes           String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   // Relations
   items           PurchaseItem[] @relation("PurchaseItems")
   payments        Payment[]      @relation("PurchasePayments")
+  waybill         Waybill?       @relation("PurchaseWaybill")
 
   @@index([customerId])
   @@index([status])
   @@index([dueDate])
+  @@index([deliveryStatus])
 }
 
 // Purchase Item - Individual products in a purchase
@@ -276,4 +334,31 @@ model Payment {
   @@index([collectorId])
   @@index([status])
   @@index([dueDate])
+}
+
+// Waybill - Delivery tracking document
+model Waybill {
+  id              String       @id @default(cuid())
+  waybillNumber   String       @unique // e.g., "WB-2026-001"
+  purchaseId      String       @unique
+  purchase        Purchase     @relation("PurchaseWaybill", fields: [purchaseId], references: [id], onDelete: Cascade)
+  // Delivery info
+  recipientName   String       // Who to deliver to
+  recipientPhone  String
+  deliveryAddress String
+  deliveryCity    String?
+  deliveryRegion  String?
+  // Metadata
+  specialInstructions String?
+  generatedById   String?      // Staff who generated waybill
+  generatedAt     DateTime     @default(now())
+  // Signature/proof of delivery
+  receivedBy      String?      // Name of person who received
+  signature       String?      // Base64 signature or URL
+  proofImageUrl   String?      // Photo proof of delivery
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([waybillNumber])
+  @@index([purchaseId])
 }

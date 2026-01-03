@@ -66,6 +66,9 @@ export default async function ShopAdminDashboard({
               <Link href={`/shop-admin/${shopSlug}/collectors`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
                 Collectors
               </Link>
+              <Link href={`/shop-admin/${shopSlug}/staff`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
+                Staff
+              </Link>
               <Link href={`/shop-admin/${shopSlug}/policy`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
                 Policy
               </Link>

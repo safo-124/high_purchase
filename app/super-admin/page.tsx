@@ -7,9 +7,10 @@ export default async function SuperAdminDashboard() {
   const user = await requireSuperAdmin()
 
   // Fetch stats
-  const [totalShops, activeShops, recentLogs] = await Promise.all([
+  const [totalBusinesses, activeBusinesses, totalShops, recentLogs] = await Promise.all([
+    prisma.business.count(),
+    prisma.business.count({ where: { isActive: true } }),
     prisma.shop.count(),
-    prisma.shop.count({ where: { isActive: true } }),
     prisma.auditLog.findMany({
       take: 5,
       orderBy: { createdAt: "desc" },
@@ -17,7 +18,7 @@ export default async function SuperAdminDashboard() {
     }),
   ])
 
-  const suspendedShops = totalShops - activeShops
+  const suspendedBusinesses = totalBusinesses - activeBusinesses
 
   return (
     <div className="min-h-screen bg-mesh">
@@ -71,8 +72,8 @@ export default async function SuperAdminDashboard() {
               <Link href="/super-admin" className="nav-link active text-white text-sm font-medium">
                 Dashboard
               </Link>
-              <Link href="/super-admin/shops" className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Shops
+              <Link href="/super-admin/businesses" className="nav-link text-slate-300 hover:text-white text-sm font-medium">
+                Businesses
               </Link>
             </nav>
 
@@ -110,8 +111,8 @@ export default async function SuperAdminDashboard() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          {/* Total Shops */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+          {/* Total Businesses */}
           <div className="glass-card stat-card stat-card-purple p-6">
             <div className="flex items-start justify-between mb-4">
               <div className="w-12 h-12 rounded-xl icon-container flex items-center justify-center">
@@ -122,9 +123,9 @@ export default async function SuperAdminDashboard() {
               <span className="text-xs text-slate-500 bg-white/5 px-2 py-1 rounded-full">All Time</span>
             </div>
             <div className="mb-2">
-              <span className="text-5xl font-bold text-white">{totalShops}</span>
+              <span className="text-5xl font-bold text-white">{totalBusinesses}</span>
             </div>
-            <p className="text-slate-400 text-sm">Total Registered Shops</p>
+            <p className="text-slate-400 text-sm">Total Businesses</p>
             <div className="mt-4 pt-4 border-t border-white/5">
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -135,7 +136,7 @@ export default async function SuperAdminDashboard() {
             </div>
           </div>
 
-          {/* Active Shops */}
+          {/* Active Businesses */}
           <div className="glass-card stat-card stat-card-green p-6">
             <div className="flex items-start justify-between mb-4">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/15 border border-green-500/30 flex items-center justify-center">
@@ -146,18 +147,18 @@ export default async function SuperAdminDashboard() {
               <span className="text-xs text-green-400/80 bg-green-500/10 px-2 py-1 rounded-full border border-green-500/20">Active</span>
             </div>
             <div className="mb-2">
-              <span className="text-5xl font-bold text-green-400">{activeShops}</span>
+              <span className="text-5xl font-bold text-green-400">{activeBusinesses}</span>
             </div>
-            <p className="text-slate-400 text-sm">Currently Operational</p>
+            <p className="text-slate-400 text-sm">Active Businesses</p>
             <div className="mt-4 pt-4 border-t border-white/5">
               <div className="flex items-center gap-2 text-xs text-green-400/70">
                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                Live & accepting orders
+                Currently operational
               </div>
             </div>
           </div>
 
-          {/* Suspended Shops */}
+          {/* Suspended Businesses */}
           <div className="glass-card stat-card stat-card-orange p-6">
             <div className="flex items-start justify-between mb-4">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-amber-500/15 border border-orange-500/30 flex items-center justify-center">
@@ -168,15 +169,39 @@ export default async function SuperAdminDashboard() {
               <span className="text-xs text-orange-400/80 bg-orange-500/10 px-2 py-1 rounded-full border border-orange-500/20">Suspended</span>
             </div>
             <div className="mb-2">
-              <span className="text-5xl font-bold text-orange-400">{suspendedShops}</span>
+              <span className="text-5xl font-bold text-orange-400">{suspendedBusinesses}</span>
             </div>
-            <p className="text-slate-400 text-sm">Temporarily Paused</p>
+            <p className="text-slate-400 text-sm">Suspended Businesses</p>
             <div className="mt-4 pt-4 border-t border-white/5">
               <div className="flex items-center gap-2 text-xs text-orange-400/70">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 Requires attention
+              </div>
+            </div>
+          </div>
+
+          {/* Total Shops */}
+          <div className="glass-card stat-card p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/15 border border-blue-500/30 flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+              </div>
+              <span className="text-xs text-blue-400/80 bg-blue-500/10 px-2 py-1 rounded-full border border-blue-500/20">Shops</span>
+            </div>
+            <div className="mb-2">
+              <span className="text-5xl font-bold text-blue-400">{totalShops}</span>
+            </div>
+            <p className="text-slate-400 text-sm">Total Shops</p>
+            <div className="mt-4 pt-4 border-t border-white/5">
+              <div className="flex items-center gap-2 text-xs text-blue-400/70">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5" />
+                </svg>
+                Across all businesses
               </div>
             </div>
           </div>
@@ -200,7 +225,7 @@ export default async function SuperAdminDashboard() {
 
             <div className="space-y-3">
               <Link
-                href="/super-admin/shops"
+                href="/super-admin/businesses"
                 className="group flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-purple-500/30 transition-all duration-300"
               >
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/15 border border-purple-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -210,9 +235,9 @@ export default async function SuperAdminDashboard() {
                 </div>
                 <div className="flex-1">
                   <p className="text-white font-medium group-hover:text-purple-300 transition-colors">
-                    Manage Shops
+                    Manage Businesses
                   </p>
-                  <p className="text-sm text-slate-500">Create, view, and manage tenant shops</p>
+                  <p className="text-sm text-slate-500">Create, view, and manage tenant businesses</p>
                 </div>
                 <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
                   <svg className="w-4 h-4 text-slate-400 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -222,7 +247,7 @@ export default async function SuperAdminDashboard() {
               </Link>
 
               <Link
-                href="/super-admin/shops"
+                href="/super-admin/businesses"
                 className="group flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-green-500/30 transition-all duration-300"
               >
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/15 border border-green-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -232,9 +257,9 @@ export default async function SuperAdminDashboard() {
                 </div>
                 <div className="flex-1">
                   <p className="text-white font-medium group-hover:text-green-300 transition-colors">
-                    Create New Shop
+                    Create New Business
                   </p>
-                  <p className="text-sm text-slate-500">Register a new tenant on the platform</p>
+                  <p className="text-sm text-slate-500">Register a new business on the platform</p>
                 </div>
                 <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
                   <svg className="w-4 h-4 text-slate-400 group-hover:text-green-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -279,24 +304,24 @@ export default async function SuperAdminDashboard() {
                   >
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                       log.action === 'LOGIN' ? 'bg-blue-500/15 border border-blue-500/30' :
-                      log.action === 'SHOP_CREATED' ? 'bg-green-500/15 border border-green-500/30' :
-                      log.action === 'SHOP_SUSPENDED' ? 'bg-orange-500/15 border border-orange-500/30' :
+                      log.action.includes('CREATED') ? 'bg-green-500/15 border border-green-500/30' :
+                      log.action.includes('SUSPENDED') ? 'bg-orange-500/15 border border-orange-500/30' :
                       'bg-purple-500/15 border border-purple-500/30'
                     }`}>
                       {log.action === 'LOGIN' && <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>}
-                      {log.action === 'SHOP_CREATED' && <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>}
-                      {log.action === 'SHOP_SUSPENDED' && <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>}
-                      {log.action === 'SHOP_ACTIVATED' && <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                      {log.action.includes('CREATED') && <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>}
+                      {log.action.includes('SUSPENDED') && <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>}
+                      {log.action.includes('ACTIVATED') && <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                           log.action === 'LOGIN' ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30' :
-                          log.action === 'SHOP_CREATED' ? 'bg-green-500/15 text-green-400 border border-green-500/30' :
-                          log.action === 'SHOP_SUSPENDED' ? 'bg-orange-500/15 text-orange-400 border border-orange-500/30' :
+                          log.action.includes('CREATED') ? 'bg-green-500/15 text-green-400 border border-green-500/30' :
+                          log.action.includes('SUSPENDED') ? 'bg-orange-500/15 text-orange-400 border border-orange-500/30' :
                           'bg-purple-500/15 text-purple-400 border border-purple-500/30'
                         }`}>
-                          {log.action.replace('_', ' ')}
+                          {log.action.replace(/_/g, ' ')}
                         </span>
                       </div>
                       <p className="text-sm text-white truncate">{log.actor?.name || 'System'}</p>

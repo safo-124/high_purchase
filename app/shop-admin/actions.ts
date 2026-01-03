@@ -177,6 +177,7 @@ export interface ProductPayload {
   description?: string | null
   sku?: string | null
   price: number
+  stockQuantity?: number
   imageUrl?: string | null
   isActive?: boolean
   categoryId?: string | null
@@ -189,6 +190,7 @@ export interface ProductData {
   description: string | null
   sku: string | null
   price: number
+  stockQuantity: number
   imageUrl: string | null
   isActive: boolean
   categoryId: string | null
@@ -220,6 +222,7 @@ export async function getProducts(shopSlug: string): Promise<ProductData[]> {
     description: p.description,
     sku: p.sku,
     price: Number(p.price),
+    stockQuantity: p.stockQuantity,
     imageUrl: p.imageUrl,
     isActive: p.isActive,
     categoryId: p.categoryId,
@@ -269,6 +272,7 @@ export async function createProduct(
         description: payload.description?.trim() || null,
         sku: payload.sku?.trim() || null,
         price: new Prisma.Decimal(payload.price),
+        stockQuantity: payload.stockQuantity ?? 0,
         imageUrl: payload.imageUrl || null,
         isActive: payload.isActive ?? true,
         categoryId: payload.categoryId || null,
@@ -355,6 +359,7 @@ export async function updateProduct(
         ...(payload.description !== undefined && { description: payload.description?.trim() || null }),
         ...(payload.sku !== undefined && { sku: payload.sku?.trim() || null }),
         ...(payload.price !== undefined && { price: new Prisma.Decimal(payload.price) }),
+        ...(payload.stockQuantity !== undefined && { stockQuantity: payload.stockQuantity }),
         ...(payload.imageUrl !== undefined && { imageUrl: payload.imageUrl || null }),
         ...(payload.isActive !== undefined && { isActive: payload.isActive }),
         ...(payload.categoryId !== undefined && { categoryId: payload.categoryId || null }),
@@ -721,6 +726,236 @@ export async function deleteDebtCollector(
   } catch (error) {
     console.error("Error deleting debt collector:", error)
     return { success: false, error: "Failed to delete debt collector" }
+  }
+}
+
+// ============================================
+// SALES STAFF ACTIONS
+// ============================================
+
+export interface SalesStaffPayload {
+  name: string
+  email: string
+  password: string
+}
+
+export interface SalesStaffData {
+  id: string          // ShopMember ID
+  userId: string
+  name: string | null
+  email: string
+  isActive: boolean
+  createdAt: Date
+}
+
+/**
+ * Get all sales staff for a shop
+ */
+export async function getSalesStaff(shopSlug: string): Promise<SalesStaffData[]> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const members = await prisma.shopMember.findMany({
+    where: {
+      shopId: shop.id,
+      role: "SALES_STAFF",
+    },
+    include: {
+      user: true,
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return members.map((m) => ({
+    id: m.id,
+    userId: m.userId,
+    name: m.user.name,
+    email: m.user.email,
+    isActive: m.isActive,
+    createdAt: m.createdAt,
+  }))
+}
+
+/**
+ * Create a new sales staff member
+ */
+export async function createSalesStaff(
+  shopSlug: string,
+  payload: SalesStaffPayload
+): Promise<ActionResult> {
+  try {
+    const { user: adminUser, shop } = await requireShopAdminForShop(shopSlug)
+
+    // Validation
+    if (!payload.name || payload.name.trim().length === 0) {
+      return { success: false, error: "Name is required" }
+    }
+
+    if (!payload.email || !payload.email.includes("@")) {
+      return { success: false, error: "Valid email is required" }
+    }
+
+    if (!payload.password || payload.password.length < 8) {
+      return { success: false, error: "Password must be at least 8 characters" }
+    }
+
+    const normalizedEmail = payload.email.toLowerCase().trim()
+
+    // Check if email already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    })
+
+    if (existingUser) {
+      // Check if already a member of this shop
+      const existingMember = await prisma.shopMember.findFirst({
+        where: { userId: existingUser.id, shopId: shop.id },
+      })
+
+      if (existingMember) {
+        return { success: false, error: "This user is already a member of your shop" }
+      }
+
+      return { success: false, error: "A user with this email already exists" }
+    }
+
+    // Hash password and create user + membership
+    const passwordHash = await bcrypt.hash(payload.password, 12)
+
+    const newUser = await prisma.user.create({
+      data: {
+        email: normalizedEmail,
+        name: payload.name.trim(),
+        passwordHash,
+        role: "SALES_STAFF",
+        memberships: {
+          create: {
+            shopId: shop.id,
+            role: "SALES_STAFF",
+            isActive: true,
+          },
+        },
+      },
+      include: {
+        memberships: true,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: adminUser.id,
+      action: "SALES_STAFF_CREATED",
+      entityType: "User",
+      entityId: newUser.id,
+      metadata: {
+        shopId: shop.id,
+        shopName: shop.name,
+        staffName: newUser.name,
+        staffEmail: newUser.email,
+      },
+    })
+
+    revalidatePath(`/shop-admin/${shop.shopSlug}/staff`)
+
+    return {
+      success: true,
+      data: {
+        id: newUser.memberships[0]?.id,
+        name: newUser.name,
+        email: newUser.email,
+      },
+    }
+  } catch (error) {
+    console.error("Error creating sales staff:", error)
+    return { success: false, error: "Failed to create sales staff" }
+  }
+}
+
+/**
+ * Toggle sales staff active status
+ */
+export async function toggleSalesStaffStatus(
+  shopSlug: string,
+  memberId: string
+): Promise<ActionResult> {
+  try {
+    const { user: adminUser, shop } = await requireShopAdminForShop(shopSlug)
+
+    const member = await prisma.shopMember.findFirst({
+      where: { id: memberId, shopId: shop.id, role: "SALES_STAFF" },
+      include: { user: true },
+    })
+
+    if (!member) {
+      return { success: false, error: "Sales staff not found" }
+    }
+
+    const updated = await prisma.shopMember.update({
+      where: { id: memberId },
+      data: { isActive: !member.isActive },
+    })
+
+    await createAuditLog({
+      actorUserId: adminUser.id,
+      action: updated.isActive ? "SALES_STAFF_ACTIVATED" : "SALES_STAFF_DEACTIVATED",
+      entityType: "ShopMember",
+      entityId: memberId,
+      metadata: {
+        shopId: shop.id,
+        shopName: shop.name,
+        staffName: member.user.name,
+      },
+    })
+
+    revalidatePath(`/shop-admin/${shop.shopSlug}/staff`)
+
+    return { success: true, data: { isActive: updated.isActive } }
+  } catch (error) {
+    console.error("Error toggling sales staff status:", error)
+    return { success: false, error: "Failed to update status" }
+  }
+}
+
+/**
+ * Delete a sales staff member (removes membership, not user)
+ */
+export async function deleteSalesStaff(
+  shopSlug: string,
+  memberId: string
+): Promise<ActionResult> {
+  try {
+    const { user: adminUser, shop } = await requireShopAdminForShop(shopSlug)
+
+    const member = await prisma.shopMember.findFirst({
+      where: { id: memberId, shopId: shop.id, role: "SALES_STAFF" },
+      include: { user: true },
+    })
+
+    if (!member) {
+      return { success: false, error: "Sales staff not found" }
+    }
+
+    await prisma.shopMember.delete({
+      where: { id: memberId },
+    })
+
+    await createAuditLog({
+      actorUserId: adminUser.id,
+      action: "SALES_STAFF_REMOVED",
+      entityType: "ShopMember",
+      entityId: memberId,
+      metadata: {
+        shopId: shop.id,
+        shopName: shop.name,
+        staffName: member.user.name,
+        staffEmail: member.user.email,
+      },
+    })
+
+    revalidatePath(`/shop-admin/${shop.shopSlug}/staff`)
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting sales staff:", error)
+    return { success: false, error: "Failed to delete sales staff" }
   }
 }
 

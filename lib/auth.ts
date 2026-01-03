@@ -94,7 +94,7 @@ export async function getSessionUser() {
 }
 
 /**
- * Require user to be logged in as SUPER_ADMIN
+ * Require user to be a SUPER_ADMIN
  * Redirects to /login if not authenticated or not SUPER_ADMIN
  */
 export async function requireSuperAdmin() {
@@ -109,6 +109,93 @@ export async function requireSuperAdmin() {
   }
 
   return user
+}
+
+/**
+ * Require user to be a BUSINESS_ADMIN for a specific business
+ * Returns { user, business, membership } if authorized
+ */
+export async function requireBusinessAdmin(businessSlug: string) {
+  const user = await getSessionUser()
+
+  if (!user) {
+    redirect("/login")
+  }
+
+  // SUPER_ADMIN can access any business
+  if (user.role === "SUPER_ADMIN") {
+    const business = await prisma.business.findUnique({
+      where: { businessSlug },
+    })
+
+    if (!business) {
+      redirect("/business-admin/select-business?error=business-not-found")
+    }
+
+    if (!business.isActive) {
+      redirect("/business-admin/select-business?error=business-suspended")
+    }
+
+    return { user, business, membership: null }
+  }
+
+  // For BUSINESS_ADMIN users, verify membership
+  if (user.role !== "BUSINESS_ADMIN") {
+    redirect("/login?error=unauthorized")
+  }
+
+  // Load business and membership
+  const business = await prisma.business.findUnique({
+    where: { businessSlug },
+    include: {
+      members: {
+        where: {
+          userId: user.id,
+          role: "BUSINESS_ADMIN",
+          isActive: true,
+        },
+      },
+    },
+  })
+
+  if (!business) {
+    redirect("/business-admin/select-business?error=business-not-found")
+  }
+
+  if (!business.isActive) {
+    redirect("/business-admin/select-business?error=business-suspended")
+  }
+
+  const membership = business.members[0]
+  if (!membership) {
+    redirect("/business-admin/select-business?error=no-access")
+  }
+
+  return { user, business, membership }
+}
+
+/**
+ * Get all businesses a user has BUSINESS_ADMIN access to
+ */
+export async function getUserBusinessMemberships(userId: string) {
+  return await prisma.businessMember.findMany({
+    where: {
+      userId,
+      role: "BUSINESS_ADMIN",
+      isActive: true,
+      business: {
+        isActive: true,
+      },
+    },
+    include: {
+      business: true,
+    },
+    orderBy: {
+      business: {
+        name: "asc",
+      },
+    },
+  })
 }
 
 /**
@@ -288,6 +375,89 @@ export async function getCollectorShopMemberships(userId: string) {
     where: {
       userId,
       role: "DEBT_COLLECTOR",
+      isActive: true,
+      shop: {
+        isActive: true,
+      },
+    },
+    include: {
+      shop: true,
+    },
+    orderBy: {
+      shop: {
+        name: "asc",
+      },
+    },
+  })
+}
+
+/**
+ * Require user to be a SALES_STAFF for a specific shop
+ * Returns { user, shop, membership } if authorized
+ * Redirects to appropriate error page if not
+ */
+export async function requireSalesStaffForShop(shopSlug: string) {
+  const user = await getSessionUser()
+
+  if (!user) {
+    redirect("/login")
+  }
+
+  // SUPER_ADMIN can access any shop as sales staff (for testing)
+  if (user.role === "SUPER_ADMIN") {
+    const shop = await prisma.shop.findUnique({
+      where: { shopSlug },
+    })
+
+    if (!shop) {
+      redirect("/sales-staff/select-shop?error=shop-not-found")
+    }
+
+    if (!shop.isActive) {
+      redirect("/sales-staff/select-shop?error=shop-suspended")
+    }
+
+    return { user, shop, membership: null }
+  }
+
+  // Load shop and membership
+  const shop = await prisma.shop.findUnique({
+    where: { shopSlug },
+    include: {
+      members: {
+        where: {
+          userId: user.id,
+          role: "SALES_STAFF",
+          isActive: true,
+        },
+      },
+    },
+  })
+
+  if (!shop) {
+    redirect("/sales-staff/select-shop?error=shop-not-found")
+  }
+
+  if (!shop.isActive) {
+    redirect("/sales-staff/select-shop?error=shop-suspended")
+  }
+
+  const membership = shop.members[0]
+  if (!membership) {
+    redirect("/sales-staff/select-shop?error=no-access")
+  }
+
+  return { user, shop, membership }
+}
+
+/**
+ * Get all shops a user has SALES_STAFF access to
+ */
+export async function getSalesStaffShopMemberships(userId: string) {
+  return await prisma.shopMember.findMany({
+    where: {
+      userId,
+      role: "SALES_STAFF",
       isActive: true,
       shop: {
         isActive: true,

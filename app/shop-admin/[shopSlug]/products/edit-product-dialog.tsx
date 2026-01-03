@@ -26,6 +26,7 @@ export function EditProductDialog({ product, shopSlug, categories }: EditProduct
   const [description, setDescription] = useState(product.description || "")
   const [sku, setSku] = useState(product.sku || "")
   const [price, setPrice] = useState(product.price.toString())
+  const [stockQuantity, setStockQuantity] = useState(product.stockQuantity.toString())
   const [imageUrl, setImageUrl] = useState(product.imageUrl || "")
   const [categoryId, setCategoryId] = useState(product.categoryId || "")
 
@@ -38,6 +39,7 @@ export function EditProductDialog({ product, shopSlug, categories }: EditProduct
       description: description || null,
       sku: sku || null,
       price: parseFloat(price) || 0,
+      stockQuantity: parseInt(stockQuantity) || 0,
       imageUrl: imageUrl || null,
       categoryId: categoryId || null,
     })
@@ -59,6 +61,7 @@ export function EditProductDialog({ product, shopSlug, categories }: EditProduct
       setDescription(product.description || "")
       setSku(product.sku || "")
       setPrice(product.price.toString())
+      setStockQuantity(product.stockQuantity.toString())
       setImageUrl(product.imageUrl || "")
       setCategoryId(product.categoryId || "")
     }
@@ -196,6 +199,29 @@ export function EditProductDialog({ product, shopSlug, categories }: EditProduct
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Stock Quantity */}
+            <div className="space-y-2">
+              <label htmlFor="edit-stockQuantity" className="text-sm font-medium text-slate-200 flex items-center gap-2">
+                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
+                Stock Quantity
+              </label>
+              <input
+                id="edit-stockQuantity"
+                type="number"
+                placeholder="0"
+                value={stockQuantity}
+                onChange={(e) => setStockQuantity(e.target.value)}
+                min="0"
+                step="1"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all"
+              />
+              <p className="text-xs text-slate-500">
+                Number of units available in stock
+              </p>
             </div>
 
             {/* Image URL */}
