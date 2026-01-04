@@ -385,33 +385,24 @@ export async function recordPaymentAsCollector(
       return { success: false, error: "This purchase is already fully paid" }
     }
 
-    // Create the payment
+    // Create the payment as PENDING confirmation (isConfirmed = false)
+    // The balance will NOT be updated until shop admin confirms
     const payment = await prisma.payment.create({
       data: {
         purchaseId: purchase.id,
         amount: payload.amount,
         paymentMethod: payload.paymentMethod,
-        status: "COMPLETED",
+        status: "PENDING", // Set to PENDING until confirmed
         collectorId: membership?.id,
         paidAt: new Date(),
         reference: payload.reference,
         notes: payload.notes,
+        isConfirmed: false, // Requires shop admin confirmation
       },
     })
 
-    // Update purchase totals
-    const newAmountPaid = Number(purchase.amountPaid) + payload.amount
-    const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
-    const isCompleted = newOutstanding <= 0
-
-    await prisma.purchase.update({
-      where: { id: purchase.id },
-      data: {
-        amountPaid: newAmountPaid,
-        outstandingBalance: Math.max(0, newOutstanding),
-        status: isCompleted ? "COMPLETED" : purchase.status,
-      },
-    })
+    // NOTE: Purchase balance is NOT updated here
+    // It will be updated when shop admin confirms the payment
 
     await createAuditLog({
       actorUserId: user.id,
@@ -423,14 +414,106 @@ export async function recordPaymentAsCollector(
         customerId: purchase.customerId,
         amount: payload.amount,
         collectorId: membership?.id,
+        awaitingConfirmation: true,
       },
     })
 
     revalidatePath(`/collector/${shopSlug}/customers/${purchase.customerId}`)
     revalidatePath(`/collector/${shopSlug}/dashboard`)
+    revalidatePath(`/collector/${shopSlug}/payments`)
     return { success: true, data: payment }
   } catch (error) {
     console.error("Record payment error:", error)
     return { success: false, error: "Failed to record payment" }
   }
+}
+
+// ============================================
+// GET COLLECTOR'S PENDING PAYMENTS
+// ============================================
+
+export interface PendingPaymentData {
+  id: string
+  amount: number
+  paymentMethod: PaymentMethod
+  reference: string | null
+  notes: string | null
+  paidAt: Date | null
+  createdAt: Date
+  isConfirmed: boolean
+  purchaseNumber: string
+  customerName: string
+  customerId: string
+}
+
+export async function getCollectorPendingPayments(shopSlug: string): Promise<PendingPaymentData[]> {
+  const { shop, membership } = await requireCollectorForShop(shopSlug)
+
+  if (!membership?.id) return []
+
+  const payments = await prisma.payment.findMany({
+    where: {
+      collectorId: membership.id,
+      isConfirmed: false,
+      rejectedAt: null, // Not rejected
+    },
+    include: {
+      purchase: {
+        include: {
+          customer: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return payments.map((p) => ({
+    id: p.id,
+    amount: Number(p.amount),
+    paymentMethod: p.paymentMethod,
+    reference: p.reference,
+    notes: p.notes,
+    paidAt: p.paidAt,
+    createdAt: p.createdAt,
+    isConfirmed: p.isConfirmed,
+    purchaseNumber: p.purchase.purchaseNumber,
+    customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
+    customerId: p.purchase.customerId,
+  }))
+}
+
+// Get all payments by this collector (including confirmed)
+export async function getCollectorPaymentHistory(shopSlug: string): Promise<PendingPaymentData[]> {
+  const { shop, membership } = await requireCollectorForShop(shopSlug)
+
+  if (!membership?.id) return []
+
+  const payments = await prisma.payment.findMany({
+    where: {
+      collectorId: membership.id,
+    },
+    include: {
+      purchase: {
+        include: {
+          customer: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  })
+
+  return payments.map((p) => ({
+    id: p.id,
+    amount: Number(p.amount),
+    paymentMethod: p.paymentMethod,
+    reference: p.reference,
+    notes: p.notes,
+    paidAt: p.paidAt,
+    createdAt: p.createdAt,
+    isConfirmed: p.isConfirmed,
+    purchaseNumber: p.purchase.purchaseNumber,
+    customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
+    customerId: p.purchase.customerId,
+  }))
 }

@@ -25,7 +25,9 @@ export function EditProductDialog({ product, shopSlug, categories }: EditProduct
   const [name, setName] = useState(product.name)
   const [description, setDescription] = useState(product.description || "")
   const [sku, setSku] = useState(product.sku || "")
-  const [price, setPrice] = useState(product.price.toString())
+  const [cashPrice, setCashPrice] = useState(product.cashPrice?.toString() || "0")
+  const [layawayPrice, setLayawayPrice] = useState(product.layawayPrice?.toString() || "0")
+  const [creditPrice, setCreditPrice] = useState(product.creditPrice?.toString() || "0")
   const [stockQuantity, setStockQuantity] = useState(product.stockQuantity.toString())
   const [imageUrl, setImageUrl] = useState(product.imageUrl || "")
   const [categoryId, setCategoryId] = useState(product.categoryId || "")
@@ -38,7 +40,9 @@ export function EditProductDialog({ product, shopSlug, categories }: EditProduct
       name,
       description: description || null,
       sku: sku || null,
-      price: parseFloat(price) || 0,
+      cashPrice: parseFloat(cashPrice) || 0,
+      layawayPrice: parseFloat(layawayPrice) || 0,
+      creditPrice: parseFloat(creditPrice) || 0,
       stockQuantity: parseInt(stockQuantity) || 0,
       imageUrl: imageUrl || null,
       categoryId: categoryId || null,
@@ -60,7 +64,9 @@ export function EditProductDialog({ product, shopSlug, categories }: EditProduct
       setName(product.name)
       setDescription(product.description || "")
       setSku(product.sku || "")
-      setPrice(product.price.toString())
+      setCashPrice(product.cashPrice?.toString() || "0")
+      setLayawayPrice(product.layawayPrice?.toString() || "0")
+      setCreditPrice(product.creditPrice?.toString() || "0")
       setStockQuantity(product.stockQuantity.toString())
       setImageUrl(product.imageUrl || "")
       setCategoryId(product.categoryId || "")
@@ -162,43 +168,97 @@ export function EditProductDialog({ product, shopSlug, categories }: EditProduct
               </select>
             </div>
 
-            {/* SKU and Price Row */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* SKU */}
-              <div className="space-y-2">
-                <label htmlFor="edit-sku" className="text-sm font-medium text-slate-200">
-                  SKU
-                </label>
-                <input
-                  id="edit-sku"
-                  type="text"
-                  placeholder="SGS24U-256"
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all font-mono text-sm"
-                />
-              </div>
+            {/* SKU */}
+            <div className="space-y-2">
+              <label htmlFor="edit-sku" className="text-sm font-medium text-slate-200">
+                SKU
+              </label>
+              <input
+                id="edit-sku"
+                type="text"
+                placeholder="SGS24U-256"
+                value={sku}
+                onChange={(e) => setSku(e.target.value)}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all font-mono text-sm"
+              />
+            </div>
 
-              {/* Price */}
-              <div className="space-y-2">
-                <label htmlFor="edit-price" className="text-sm font-medium text-slate-200">
-                  Price (GHS) <span className="text-red-400">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">₵</span>
-                  <input
-                    id="edit-price"
-                    type="number"
-                    placeholder="0.00"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    required
-                    min="0"
-                    step="0.01"
-                    className="w-full pl-8 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all"
-                  />
+            {/* 3-Tier Pricing */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-slate-200 flex items-center gap-2">
+                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Pricing Tiers (GHS) <span className="text-red-400">*</span>
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                {/* Cash Price */}
+                <div className="space-y-1.5">
+                  <label htmlFor="edit-cashPrice" className="text-xs font-medium text-green-400">
+                    Cash Price
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-green-500/60 text-sm">₵</span>
+                    <input
+                      id="edit-cashPrice"
+                      type="number"
+                      placeholder="0.00"
+                      value={cashPrice}
+                      onChange={(e) => setCashPrice(e.target.value)}
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full pl-7 pr-2 py-2.5 bg-green-500/5 border border-green-500/20 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20 transition-all text-sm"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500">Full payment</p>
+                </div>
+
+                {/* Layaway Price */}
+                <div className="space-y-1.5">
+                  <label htmlFor="edit-layawayPrice" className="text-xs font-medium text-blue-400">
+                    Layaway Price
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500/60 text-sm">₵</span>
+                    <input
+                      id="edit-layawayPrice"
+                      type="number"
+                      placeholder="0.00"
+                      value={layawayPrice}
+                      onChange={(e) => setLayawayPrice(e.target.value)}
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full pl-7 pr-2 py-2.5 bg-blue-500/5 border border-blue-500/20 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all text-sm"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500">Before pickup</p>
+                </div>
+
+                {/* Credit Price */}
+                <div className="space-y-1.5">
+                  <label htmlFor="edit-creditPrice" className="text-xs font-medium text-amber-400">
+                    Credit Price
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500/60 text-sm">₵</span>
+                    <input
+                      id="edit-creditPrice"
+                      type="number"
+                      placeholder="0.00"
+                      value={creditPrice}
+                      onChange={(e) => setCreditPrice(e.target.value)}
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full pl-7 pr-2 py-2.5 bg-amber-500/5 border border-amber-500/20 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all text-sm"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500">BNPL</p>
                 </div>
               </div>
+              <p className="text-xs text-slate-500">Cash ≤ Layaway ≤ Credit (higher risk = higher price)</p>
             </div>
 
             {/* Stock Quantity */}
@@ -243,7 +303,7 @@ export function EditProductDialog({ product, shopSlug, categories }: EditProduct
             </div>
 
             {/* Preview */}
-            {name && price && (
+            {name && cashPrice && (
               <div className="p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/5 border border-blue-500/20">
                 <p className="text-xs text-blue-400/80 font-medium mb-3">Preview</p>
                 <div className="flex items-center gap-3">
@@ -265,11 +325,10 @@ export function EditProductDialog({ product, shopSlug, categories }: EditProduct
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-white font-medium truncate">{name}</p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm text-green-400 font-semibold">
-                        ₵{parseFloat(price || "0").toLocaleString("en-GH", { minimumFractionDigits: 2 })}
-                      </p>
-                      {sku && <span className="text-xs text-slate-500 font-mono">• {sku}</span>}
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="text-green-400">Cash: ₵{parseFloat(cashPrice || "0").toLocaleString()}</span>
+                      <span className="text-blue-400">Layaway: ₵{parseFloat(layawayPrice || "0").toLocaleString()}</span>
+                      <span className="text-amber-400">Credit: ₵{parseFloat(creditPrice || "0").toLocaleString()}</span>
                     </div>
                   </div>
                 </div>

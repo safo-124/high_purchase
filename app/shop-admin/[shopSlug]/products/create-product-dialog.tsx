@@ -24,7 +24,9 @@ export function CreateProductDialog({ shopSlug, categories }: CreateProductDialo
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [sku, setSku] = useState("")
-  const [price, setPrice] = useState("")
+  const [cashPrice, setCashPrice] = useState("")
+  const [layawayPrice, setLayawayPrice] = useState("")
+  const [creditPrice, setCreditPrice] = useState("")
   const [stockQuantity, setStockQuantity] = useState("")
   const [imageUrl, setImageUrl] = useState("")
   const [categoryId, setCategoryId] = useState("")
@@ -37,7 +39,9 @@ export function CreateProductDialog({ shopSlug, categories }: CreateProductDialo
       name,
       description: description || null,
       sku: sku || null,
-      price: parseFloat(price) || 0,
+      cashPrice: parseFloat(cashPrice) || 0,
+      layawayPrice: parseFloat(layawayPrice) || 0,
+      creditPrice: parseFloat(creditPrice) || 0,
       stockQuantity: parseInt(stockQuantity) || 0,
       imageUrl: imageUrl || null,
       categoryId: categoryId || null,
@@ -58,7 +62,9 @@ export function CreateProductDialog({ shopSlug, categories }: CreateProductDialo
     setName("")
     setDescription("")
     setSku("")
-    setPrice("")
+    setCashPrice("")
+    setLayawayPrice("")
+    setCreditPrice("")
     setStockQuantity("")
     setImageUrl("")
     setCategoryId("")
@@ -164,43 +170,114 @@ export function CreateProductDialog({ shopSlug, categories }: CreateProductDialo
               )}
             </div>
 
-            {/* SKU and Price Row */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* SKU */}
-              <div className="space-y-2">
-                <label htmlFor="sku" className="text-sm font-medium text-slate-200">
-                  SKU
-                </label>
-                <input
-                  id="sku"
-                  type="text"
-                  placeholder="SGS24U-256"
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all font-mono text-sm"
-                />
-              </div>
+            {/* SKU */}
+            <div className="space-y-2">
+              <label htmlFor="sku" className="text-sm font-medium text-slate-200">
+                SKU
+              </label>
+              <input
+                id="sku"
+                type="text"
+                placeholder="SGS24U-256"
+                value={sku}
+                onChange={(e) => setSku(e.target.value)}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all font-mono text-sm"
+              />
+            </div>
 
-              {/* Price */}
-              <div className="space-y-2">
-                <label htmlFor="price" className="text-sm font-medium text-slate-200">
-                  Price (GHS) <span className="text-red-400">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">₵</span>
-                  <input
-                    id="price"
-                    type="number"
-                    placeholder="0.00"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    required
-                    min="0"
-                    step="0.01"
-                    className="w-full pl-8 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
-                  />
+            {/* Pricing Tiers Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-medium text-slate-200">Pricing Tiers (GHS)</span>
+                <span className="text-red-400">*</span>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-3">
+                {/* Cash Price */}
+                <div className="space-y-2">
+                  <label htmlFor="cashPrice" className="text-xs font-medium text-green-400 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    Cash
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">₵</span>
+                    <input
+                      id="cashPrice"
+                      type="number"
+                      placeholder="0.00"
+                      value={cashPrice}
+                      onChange={(e) => setCashPrice(e.target.value)}
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full pl-7 pr-2 py-2.5 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 placeholder-slate-500 focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20 transition-all text-sm"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500">Full payment upfront</p>
+                </div>
+
+                {/* Layaway Price */}
+                <div className="space-y-2">
+                  <label htmlFor="layawayPrice" className="text-xs font-medium text-blue-400 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Layaway
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">₵</span>
+                    <input
+                      id="layawayPrice"
+                      type="number"
+                      placeholder="0.00"
+                      value={layawayPrice}
+                      onChange={(e) => setLayawayPrice(e.target.value)}
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full pl-7 pr-2 py-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-400 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all text-sm"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500">Pay before pickup</p>
+                </div>
+
+                {/* Credit Price */}
+                <div className="space-y-2">
+                  <label htmlFor="creditPrice" className="text-xs font-medium text-amber-400 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                    Credit
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">₵</span>
+                    <input
+                      id="creditPrice"
+                      type="number"
+                      placeholder="0.00"
+                      value={creditPrice}
+                      onChange={(e) => setCreditPrice(e.target.value)}
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full pl-7 pr-2 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 placeholder-slate-500 focus:outline-none focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all text-sm"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500">Take now, pay later</p>
                 </div>
               </div>
+              
+              <p className="text-xs text-slate-500 flex items-center gap-1">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Cash ≤ Layaway ≤ Credit (higher risk = higher price)
+              </p>
             </div>
 
             {/* Stock Quantity */}
@@ -248,7 +325,7 @@ export function CreateProductDialog({ shopSlug, categories }: CreateProductDialo
             </div>
 
             {/* Preview */}
-            {name && price && (
+            {name && cashPrice && (
               <div className="p-4 rounded-xl bg-gradient-to-br from-purple-500/10 to-blue-500/5 border border-purple-500/20">
                 <p className="text-xs text-purple-400/80 font-medium mb-3">Preview</p>
                 <div className="flex items-center gap-3">
@@ -270,11 +347,10 @@ export function CreateProductDialog({ shopSlug, categories }: CreateProductDialo
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-white font-medium truncate">{name}</p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm text-green-400 font-semibold">
-                        ₵{parseFloat(price || "0").toLocaleString("en-GH", { minimumFractionDigits: 2 })}
-                      </p>
-                      {sku && <span className="text-xs text-slate-500 font-mono">• {sku}</span>}
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="text-green-400">Cash: ₵{parseFloat(cashPrice || "0").toLocaleString()}</span>
+                      <span className="text-blue-400">Layaway: ₵{parseFloat(layawayPrice || "0").toLocaleString()}</span>
+                      <span className="text-amber-400">Credit: ₵{parseFloat(creditPrice || "0").toLocaleString()}</span>
                     </div>
                   </div>
                 </div>

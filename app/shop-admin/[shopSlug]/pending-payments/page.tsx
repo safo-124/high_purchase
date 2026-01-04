@@ -1,33 +1,28 @@
-import { requireShopAdminForShop } from "../../../../lib/auth"
-import { getProducts, getShopCategories } from "../../actions"
 import Link from "next/link"
+import { requireShopAdminForShop } from "@/lib/auth"
+import { getPendingCollectorPayments, getPaymentConfirmationStats } from "../../actions"
+import { PendingPaymentsTable } from "./pending-payments-table"
 import { ShopAdminLogoutButton } from "../dashboard/logout-button"
-import { ProductsTable } from "./products-table"
-import { CreateProductDialog } from "./create-product-dialog"
-import { CategoriesSection } from "./categories-section"
 
-export default async function ProductsPage({
-  params,
-}: {
+interface PendingPaymentsPageProps {
   params: Promise<{ shopSlug: string }>
-}) {
+}
+
+export default async function PendingPaymentsPage({ params }: PendingPaymentsPageProps) {
   const { shopSlug } = await params
   const { user, shop } = await requireShopAdminForShop(shopSlug)
-  const products = await getProducts(shopSlug)
-  const categories = await getShopCategories(shopSlug)
 
-  // Format price for Ghana Cedis
-  const formatPrice = (price: number) => {
+  const [pendingPayments, stats] = await Promise.all([
+    getPendingCollectorPayments(shopSlug),
+    getPaymentConfirmationStats(shopSlug),
+  ])
+
+  const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-GH", {
       style: "currency",
       currency: "GHS",
-    }).format(price)
+    }).format(amount)
   }
-
-  // Stats
-  const totalProducts = products.length
-  const activeProducts = products.filter((p) => p.isActive).length
-  const totalValue = products.reduce((sum, p) => sum + p.price, 0)
 
   return (
     <div className="min-h-screen bg-mesh">
@@ -70,13 +65,13 @@ export default async function ProductsPage({
               <Link href={`/shop-admin/${shopSlug}/dashboard`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
                 Dashboard
               </Link>
-              <Link href={`/shop-admin/${shopSlug}/products`} className="nav-link active text-white text-sm font-medium">
+              <Link href={`/shop-admin/${shopSlug}/products`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
                 Products
               </Link>
               <Link href={`/shop-admin/${shopSlug}/customers`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
                 Customers
               </Link>
-              <Link href={`/shop-admin/${shopSlug}/pending-payments`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
+              <Link href={`/shop-admin/${shopSlug}/pending-payments`} className="nav-link active text-white text-sm font-medium">
                 Payments
               </Link>
               <Link href={`/shop-admin/${shopSlug}/waybills`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
@@ -113,72 +108,93 @@ export default async function ProductsPage({
       {/* Main Content */}
       <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-          <div>
-            <h2 className="text-3xl font-bold text-white mb-1 tracking-tight">
-              Products
-            </h2>
-            <p className="text-slate-400">
-              Manage your shop&apos;s product catalog for BNPL financing.
-            </p>
-          </div>
-          <CreateProductDialog shopSlug={shopSlug} categories={categories} />
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-white">Pending Payment Confirmations</h2>
+          <p className="text-slate-400 mt-1">
+            Review and confirm payments collected by debt collectors
+          </p>
         </div>
 
-        {/* Categories Section */}
-        <CategoriesSection categories={categories} shopSlug={shopSlug} />
-
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          {/* Total Products */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="glass-card p-5 rounded-2xl">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/15 border border-blue-500/30 flex items-center justify-center">
-                <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/15 border border-amber-500/30 flex items-center justify-center">
+                <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
               <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wider">Total Products</p>
-                <p className="text-2xl font-bold text-white">{totalProducts}</p>
+                <p className="text-xs text-slate-400 uppercase tracking-wider">Pending</p>
+                <p className="text-2xl font-bold text-amber-400">{stats.pendingCount}</p>
               </div>
             </div>
           </div>
 
-          {/* Active Products */}
           <div className="glass-card p-5 rounded-2xl">
-            <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/15 border border-amber-500/30 flex items-center justify-center">
+                <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 uppercase tracking-wider">Pending Amount</p>
+                <p className="text-2xl font-bold text-amber-400">{formatCurrency(stats.pendingTotal)}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-card p-5 rounded-2xl">
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/15 border border-green-500/30 flex items-center justify-center">
                 <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
               <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wider">Active</p>
-                <p className="text-2xl font-bold text-white">{activeProducts}</p>
+                <p className="text-xs text-slate-400 uppercase tracking-wider">Confirmed Today</p>
+                <p className="text-2xl font-bold text-green-400">{stats.confirmedToday}</p>
               </div>
             </div>
           </div>
 
-          {/* Total Value */}
           <div className="glass-card p-5 rounded-2xl">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/15 border border-purple-500/30 flex items-center justify-center">
-                <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500/20 to-rose-500/15 border border-red-500/30 flex items-center justify-center">
+                <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
               <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wider">Catalog Value</p>
-                <p className="text-2xl font-bold text-white">{formatPrice(totalValue)}</p>
+                <p className="text-xs text-slate-400 uppercase tracking-wider">Rejected Today</p>
+                <p className="text-2xl font-bold text-red-400">{stats.rejectedToday}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Products Table */}
-        <div className="glass-card rounded-2xl overflow-hidden">
-          <ProductsTable products={products} shopSlug={shopSlug} categories={categories} />
+        {/* Info Banner */}
+        {stats.pendingCount > 0 && (
+          <div className="glass-card rounded-2xl p-4 border border-amber-500/30 bg-amber-500/5 mb-8">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <p className="font-medium text-amber-400">Payments Awaiting Your Approval</p>
+                <p className="text-sm text-slate-400 mt-1">
+                  Debt collectors have recorded payments that need your confirmation before they reflect on customer accounts. 
+                  Please review each payment carefully and confirm or reject.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pending Payments Table */}
+        <div className="glass-card rounded-2xl p-6">
+          <PendingPaymentsTable payments={pendingPayments} shopSlug={shopSlug} />
         </div>
       </main>
     </div>

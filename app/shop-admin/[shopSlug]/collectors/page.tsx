@@ -66,6 +66,12 @@ export default async function CollectorsPage({
               <Link href={`/shop-admin/${shopSlug}/customers`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
                 Customers
               </Link>
+              <Link href={`/shop-admin/${shopSlug}/pending-payments`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
+                Payments
+              </Link>
+              <Link href={`/shop-admin/${shopSlug}/waybills`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
+                Waybills
+              </Link>
               <Link href={`/shop-admin/${shopSlug}/collectors`} className="nav-link active text-white text-sm font-medium">
                 Collectors
               </Link>

@@ -176,7 +176,11 @@ export interface ProductPayload {
   name: string
   description?: string | null
   sku?: string | null
-  price: number
+  // Pricing tiers
+  cashPrice: number      // Full payment upfront (best price)
+  layawayPrice: number   // Pay in bits before taking product
+  creditPrice: number    // Take product before paying (BNPL)
+  price?: number         // Default display price (usually cashPrice)
   stockQuantity?: number
   imageUrl?: string | null
   isActive?: boolean
@@ -189,6 +193,9 @@ export interface ProductData {
   name: string
   description: string | null
   sku: string | null
+  cashPrice: number
+  layawayPrice: number
+  creditPrice: number
   price: number
   stockQuantity: number
   imageUrl: string | null
@@ -221,6 +228,9 @@ export async function getProducts(shopSlug: string): Promise<ProductData[]> {
     name: p.name,
     description: p.description,
     sku: p.sku,
+    cashPrice: Number(p.cashPrice),
+    layawayPrice: Number(p.layawayPrice),
+    creditPrice: Number(p.creditPrice),
     price: Number(p.price),
     stockQuantity: p.stockQuantity,
     imageUrl: p.imageUrl,
@@ -248,8 +258,16 @@ export async function createProduct(
       return { success: false, error: "Product name is required" }
     }
 
-    if (payload.price < 0) {
-      return { success: false, error: "Price must be 0 or greater" }
+    if (payload.cashPrice < 0 || payload.layawayPrice < 0 || payload.creditPrice < 0) {
+      return { success: false, error: "Prices must be 0 or greater" }
+    }
+
+    // Validate pricing logic: Cash <= Layaway <= Credit
+    if (payload.cashPrice > payload.layawayPrice) {
+      return { success: false, error: "Cash price should not exceed layaway price" }
+    }
+    if (payload.layawayPrice > payload.creditPrice) {
+      return { success: false, error: "Layaway price should not exceed credit price" }
     }
 
     // Check for duplicate SKU if provided
@@ -271,7 +289,10 @@ export async function createProduct(
         name: payload.name.trim(),
         description: payload.description?.trim() || null,
         sku: payload.sku?.trim() || null,
-        price: new Prisma.Decimal(payload.price),
+        cashPrice: new Prisma.Decimal(payload.cashPrice),
+        layawayPrice: new Prisma.Decimal(payload.layawayPrice),
+        creditPrice: new Prisma.Decimal(payload.creditPrice),
+        price: new Prisma.Decimal(payload.price ?? payload.cashPrice), // Default to cash price
         stockQuantity: payload.stockQuantity ?? 0,
         imageUrl: payload.imageUrl || null,
         isActive: payload.isActive ?? true,
@@ -289,7 +310,9 @@ export async function createProduct(
         shopName: shop.name,
         productName: product.name,
         productSku: product.sku,
-        price: Number(product.price),
+        cashPrice: Number(product.cashPrice),
+        layawayPrice: Number(product.layawayPrice),
+        creditPrice: Number(product.creditPrice),
       },
     })
 
@@ -334,8 +357,28 @@ export async function updateProduct(
       return { success: false, error: "Product name cannot be empty" }
     }
 
-    if (payload.price !== undefined && payload.price < 0) {
-      return { success: false, error: "Price must be 0 or greater" }
+    // Price validations
+    if (payload.cashPrice !== undefined && payload.cashPrice < 0) {
+      return { success: false, error: "Cash price must be 0 or greater" }
+    }
+    if (payload.layawayPrice !== undefined && payload.layawayPrice < 0) {
+      return { success: false, error: "Layaway price must be 0 or greater" }
+    }
+    if (payload.creditPrice !== undefined && payload.creditPrice < 0) {
+      return { success: false, error: "Credit price must be 0 or greater" }
+    }
+
+    // Get effective prices for validation
+    const cashPrice = payload.cashPrice ?? Number(existingProduct.cashPrice)
+    const layawayPrice = payload.layawayPrice ?? Number(existingProduct.layawayPrice)
+    const creditPrice = payload.creditPrice ?? Number(existingProduct.creditPrice)
+
+    // Validate pricing logic: Cash <= Layaway <= Credit
+    if (cashPrice > layawayPrice) {
+      return { success: false, error: "Cash price should not exceed layaway price" }
+    }
+    if (layawayPrice > creditPrice) {
+      return { success: false, error: "Layaway price should not exceed credit price" }
     }
 
     // Check for duplicate SKU if changing
@@ -358,6 +401,9 @@ export async function updateProduct(
         ...(payload.name !== undefined && { name: payload.name.trim() }),
         ...(payload.description !== undefined && { description: payload.description?.trim() || null }),
         ...(payload.sku !== undefined && { sku: payload.sku?.trim() || null }),
+        ...(payload.cashPrice !== undefined && { cashPrice: new Prisma.Decimal(payload.cashPrice) }),
+        ...(payload.layawayPrice !== undefined && { layawayPrice: new Prisma.Decimal(payload.layawayPrice) }),
+        ...(payload.creditPrice !== undefined && { creditPrice: new Prisma.Decimal(payload.creditPrice) }),
         ...(payload.price !== undefined && { price: new Prisma.Decimal(payload.price) }),
         ...(payload.stockQuantity !== undefined && { stockQuantity: payload.stockQuantity }),
         ...(payload.imageUrl !== undefined && { imageUrl: payload.imageUrl || null }),
@@ -386,7 +432,9 @@ export async function updateProduct(
       data: {
         id: product.id,
         name: product.name,
-        price: Number(product.price),
+        cashPrice: Number(product.cashPrice),
+        layawayPrice: Number(product.layawayPrice),
+        creditPrice: Number(product.creditPrice),
       },
     }
   } catch (error) {
@@ -2003,4 +2051,492 @@ export async function deleteCategory(
     console.error("Delete category error:", error)
     return { success: false, error: "Failed to delete category" }
   }
+}
+
+// ============================================
+// PAYMENT CONFIRMATION (COLLECTED BY DEBT COLLECTORS)
+// ============================================
+
+export interface PendingPaymentForAdmin {
+  id: string
+  amount: number
+  paymentMethod: PaymentMethod
+  reference: string | null
+  notes: string | null
+  paidAt: Date | null
+  createdAt: Date
+  purchaseId: string
+  purchaseNumber: string
+  customerName: string
+  customerId: string
+  collectorName: string
+  collectorId: string
+}
+
+/**
+ * Get all pending payments awaiting confirmation from collectors
+ */
+export async function getPendingCollectorPayments(shopSlug: string): Promise<PendingPaymentForAdmin[]> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const payments = await prisma.payment.findMany({
+    where: {
+      isConfirmed: false,
+      rejectedAt: null,
+      collectorId: { not: null }, // Only collector-collected payments
+      purchase: {
+        customer: {
+          shopId: shop.id,
+        },
+      },
+    },
+    include: {
+      purchase: {
+        include: {
+          customer: true,
+        },
+      },
+      collector: {
+        include: {
+          user: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return payments.map((p) => ({
+    id: p.id,
+    amount: Number(p.amount),
+    paymentMethod: p.paymentMethod,
+    reference: p.reference,
+    notes: p.notes,
+    paidAt: p.paidAt,
+    createdAt: p.createdAt,
+    purchaseId: p.purchaseId,
+    purchaseNumber: p.purchase.purchaseNumber,
+    customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
+    customerId: p.purchase.customerId,
+    collectorName: p.collector?.user?.name || "Unknown",
+    collectorId: p.collectorId || "",
+  }))
+}
+
+/**
+ * Confirm a payment collected by a debt collector
+ * This will update the customer's account balance
+ */
+export async function confirmPayment(
+  shopSlug: string,
+  paymentId: string
+): Promise<ActionResult> {
+  try {
+    const { user, shop, membership } = await requireShopAdminForShop(shopSlug)
+
+    // Find the payment
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        purchase: {
+          include: {
+            customer: true,
+          },
+        },
+      },
+    })
+
+    if (!payment) {
+      return { success: false, error: "Payment not found" }
+    }
+
+    // Verify payment belongs to this shop
+    if (payment.purchase.customer.shopId !== shop.id) {
+      return { success: false, error: "Payment not found in this shop" }
+    }
+
+    if (payment.isConfirmed) {
+      return { success: false, error: "Payment already confirmed" }
+    }
+
+    if (payment.rejectedAt) {
+      return { success: false, error: "Cannot confirm a rejected payment" }
+    }
+
+    // Get current shop member for confirmedById
+    const shopMember = membership
+
+    // Update the payment as confirmed
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        isConfirmed: true,
+        confirmedAt: new Date(),
+        confirmedById: shopMember?.id || null,
+        status: "COMPLETED",
+      },
+    })
+
+    // Update purchase totals - NOW the balance is updated
+    const purchase = payment.purchase
+    const newAmountPaid = Number(purchase.amountPaid) + Number(payment.amount)
+    const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
+    const isCompleted = newOutstanding <= 0
+
+    await prisma.purchase.update({
+      where: { id: purchase.id },
+      data: {
+        amountPaid: newAmountPaid,
+        outstandingBalance: Math.max(0, newOutstanding),
+        status: isCompleted ? "COMPLETED" : purchase.status === "PENDING" ? "ACTIVE" : purchase.status,
+      },
+    })
+
+    // AUTO-GENERATE WAYBILL when purchase is fully paid
+    if (isCompleted) {
+      // Check if waybill already exists
+      const existingWaybill = await prisma.waybill.findUnique({
+        where: { purchaseId: purchase.id },
+      })
+
+      if (!existingWaybill) {
+        // Generate waybill number
+        const year = new Date().getFullYear()
+        const waybillCount = await prisma.waybill.count()
+        const waybillNumber = `WB-${year}-${String(waybillCount + 1).padStart(5, "0")}`
+
+        await prisma.waybill.create({
+          data: {
+            waybillNumber,
+            purchaseId: purchase.id,
+            recipientName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+            recipientPhone: purchase.customer.phone,
+            deliveryAddress: purchase.deliveryAddress || purchase.customer.address || "N/A",
+            deliveryCity: purchase.customer.city,
+            deliveryRegion: purchase.customer.region,
+            specialInstructions: `Payment completed. Ready for delivery.`,
+            generatedById: user.id,
+          },
+        })
+
+        // Update delivery status to SCHEDULED (ready for delivery)
+        await prisma.purchase.update({
+          where: { id: purchase.id },
+          data: { deliveryStatus: "SCHEDULED" },
+        })
+
+        await createAuditLog({
+          actorUserId: user.id,
+          action: "WAYBILL_AUTO_GENERATED",
+          entityType: "Waybill",
+          entityId: purchase.id,
+          metadata: {
+            waybillNumber,
+            purchaseId: purchase.id,
+            purchaseNumber: purchase.purchaseNumber,
+            reason: "Payment completed",
+          },
+        })
+      }
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PAYMENT_CONFIRMED",
+      entityType: "Payment",
+      entityId: paymentId,
+      metadata: {
+        purchaseId: purchase.id,
+        customerId: purchase.customerId,
+        amount: Number(payment.amount),
+        confirmedById: shopMember?.id,
+        purchaseCompleted: isCompleted,
+      },
+    })
+
+    revalidatePath(`/shop-admin/${shopSlug}/pending-payments`)
+    revalidatePath(`/shop-admin/${shopSlug}/customers/${purchase.customerId}`)
+    revalidatePath(`/shop-admin/${shopSlug}/waybills`)
+    revalidatePath(`/collector/${shopSlug}/payments`)
+    revalidatePath(`/sales-staff/${shopSlug}/deliveries`)
+    return { success: true, data: { purchaseCompleted: isCompleted } }
+  } catch (error) {
+    console.error("Confirm payment error:", error)
+    return { success: false, error: "Failed to confirm payment" }
+  }
+}
+
+/**
+ * Reject a payment collected by a debt collector
+ */
+export async function rejectPayment(
+  shopSlug: string,
+  paymentId: string,
+  reason: string
+): Promise<ActionResult> {
+  try {
+    const { user, shop } = await requireShopAdminForShop(shopSlug)
+
+    // Find the payment
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        purchase: {
+          include: {
+            customer: true,
+          },
+        },
+      },
+    })
+
+    if (!payment) {
+      return { success: false, error: "Payment not found" }
+    }
+
+    // Verify payment belongs to this shop
+    if (payment.purchase.customer.shopId !== shop.id) {
+      return { success: false, error: "Payment not found in this shop" }
+    }
+
+    if (payment.isConfirmed) {
+      return { success: false, error: "Cannot reject a confirmed payment" }
+    }
+
+    if (payment.rejectedAt) {
+      return { success: false, error: "Payment already rejected" }
+    }
+
+    // Mark payment as rejected
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        rejectedAt: new Date(),
+        rejectionReason: reason,
+        status: "MISSED", // Mark as missed/failed
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PAYMENT_REJECTED",
+      entityType: "Payment",
+      entityId: paymentId,
+      metadata: {
+        purchaseId: payment.purchaseId,
+        customerId: payment.purchase.customerId,
+        amount: Number(payment.amount),
+        reason,
+      },
+    })
+
+    revalidatePath(`/shop-admin/${shopSlug}/pending-payments`)
+    revalidatePath(`/collector/${shopSlug}/payments`)
+    return { success: true }
+  } catch (error) {
+    console.error("Reject payment error:", error)
+    return { success: false, error: "Failed to reject payment" }
+  }
+}
+
+/**
+ * Get payment confirmation stats for dashboard
+ */
+export async function getPaymentConfirmationStats(shopSlug: string) {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const [pendingCount, pendingTotal, confirmedToday, rejectedToday] = await Promise.all([
+    prisma.payment.count({
+      where: {
+        isConfirmed: false,
+        rejectedAt: null,
+        collectorId: { not: null },
+        purchase: { customer: { shopId: shop.id } },
+      },
+    }),
+    prisma.payment.aggregate({
+      where: {
+        isConfirmed: false,
+        rejectedAt: null,
+        collectorId: { not: null },
+        purchase: { customer: { shopId: shop.id } },
+      },
+      _sum: { amount: true },
+    }),
+    prisma.payment.count({
+      where: {
+        isConfirmed: true,
+        confirmedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+        purchase: { customer: { shopId: shop.id } },
+      },
+    }),
+    prisma.payment.count({
+      where: {
+        rejectedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+        purchase: { customer: { shopId: shop.id } },
+      },
+    }),
+  ])
+
+  return {
+    pendingCount,
+    pendingTotal: pendingTotal._sum.amount ? Number(pendingTotal._sum.amount) : 0,
+    confirmedToday,
+    rejectedToday,
+  }
+}
+
+// ============================================
+// WAYBILL MANAGEMENT (Shop Admin)
+// ============================================
+
+export interface WaybillForAdmin {
+  id: string
+  waybillNumber: string
+  purchaseId: string
+  purchaseNumber: string
+  customerName: string
+  customerPhone: string
+  deliveryAddress: string
+  deliveryCity: string | null
+  deliveryRegion: string | null
+  deliveryStatus: string
+  items: Array<{
+    productName: string
+    quantity: number
+  }>
+  totalAmount: number
+  specialInstructions: string | null
+  generatedAt: Date
+  receivedBy: string | null
+  isDelivered: boolean
+}
+
+/**
+ * Get all waybills for shop admin view
+ */
+export async function getWaybills(shopSlug: string): Promise<WaybillForAdmin[]> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const waybills = await prisma.waybill.findMany({
+    where: {
+      purchase: { customer: { shopId: shop.id } },
+    },
+    include: {
+      purchase: {
+        include: {
+          customer: true,
+          items: true,
+        },
+      },
+    },
+    orderBy: { generatedAt: "desc" },
+    take: 100,
+  })
+
+  return waybills.map((w) => ({
+    id: w.id,
+    waybillNumber: w.waybillNumber,
+    purchaseId: w.purchaseId,
+    purchaseNumber: w.purchase.purchaseNumber,
+    customerName: `${w.purchase.customer.firstName} ${w.purchase.customer.lastName}`,
+    customerPhone: w.recipientPhone,
+    deliveryAddress: w.deliveryAddress,
+    deliveryCity: w.deliveryCity,
+    deliveryRegion: w.deliveryRegion,
+    deliveryStatus: w.purchase.deliveryStatus,
+    items: w.purchase.items.map((i) => ({
+      productName: i.productName,
+      quantity: i.quantity,
+    })),
+    totalAmount: Number(w.purchase.totalAmount),
+    specialInstructions: w.specialInstructions,
+    generatedAt: w.generatedAt,
+    receivedBy: w.receivedBy,
+    isDelivered: w.purchase.deliveryStatus === "DELIVERED",
+  }))
+}
+
+/**
+ * Get waybills that are ready for delivery (not yet delivered)
+ */
+export async function getPendingWaybills(shopSlug: string): Promise<WaybillForAdmin[]> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const waybills = await prisma.waybill.findMany({
+    where: {
+      purchase: {
+        customer: { shopId: shop.id },
+        deliveryStatus: { in: ["PENDING", "SCHEDULED", "IN_TRANSIT"] },
+      },
+    },
+    include: {
+      purchase: {
+        include: {
+          customer: true,
+          items: true,
+        },
+      },
+    },
+    orderBy: { generatedAt: "desc" },
+  })
+
+  return waybills.map((w) => ({
+    id: w.id,
+    waybillNumber: w.waybillNumber,
+    purchaseId: w.purchaseId,
+    purchaseNumber: w.purchase.purchaseNumber,
+    customerName: `${w.purchase.customer.firstName} ${w.purchase.customer.lastName}`,
+    customerPhone: w.recipientPhone,
+    deliveryAddress: w.deliveryAddress,
+    deliveryCity: w.deliveryCity,
+    deliveryRegion: w.deliveryRegion,
+    deliveryStatus: w.purchase.deliveryStatus,
+    items: w.purchase.items.map((i) => ({
+      productName: i.productName,
+      quantity: i.quantity,
+    })),
+    totalAmount: Number(w.purchase.totalAmount),
+    specialInstructions: w.specialInstructions,
+    generatedAt: w.generatedAt,
+    receivedBy: w.receivedBy,
+    isDelivered: false,
+  }))
+}
+
+/**
+ * Get waybill stats for shop admin
+ */
+export async function getWaybillStats(shopSlug: string) {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const [total, pendingDelivery, inTransit, delivered] = await Promise.all([
+    prisma.waybill.count({
+      where: { purchase: { customer: { shopId: shop.id } } },
+    }),
+    prisma.waybill.count({
+      where: {
+        purchase: {
+          customer: { shopId: shop.id },
+          deliveryStatus: { in: ["PENDING", "SCHEDULED"] },
+        },
+      },
+    }),
+    prisma.waybill.count({
+      where: {
+        purchase: {
+          customer: { shopId: shop.id },
+          deliveryStatus: "IN_TRANSIT",
+        },
+      },
+    }),
+    prisma.waybill.count({
+      where: {
+        purchase: {
+          customer: { shopId: shop.id },
+          deliveryStatus: "DELIVERED",
+        },
+      },
+    }),
+  ])
+
+  return { total, pendingDelivery, inTransit, delivered }
 }

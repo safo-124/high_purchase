@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ProductForSale, CustomerForSale, createSale, createQuickCustomer } from "../../actions"
+import { ProductForSale, CustomerForSale, createSale, createQuickCustomer, PurchaseTypeOption } from "../../actions"
 import { toast } from "sonner"
 
 interface NewSaleFormProps {
@@ -22,6 +22,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers }:
   const [quantity, setQuantity] = useState(1)
   const [downPayment, setDownPayment] = useState("")
   const [tenorDays, setTenorDays] = useState(30)
+  const [purchaseType, setPurchaseType] = useState<PurchaseTypeOption>("CREDIT")
 
   // New customer modal
   const [showNewCustomer, setShowNewCustomer] = useState(false)
@@ -33,8 +34,21 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers }:
   const selectedProduct = products.find((p) => p.id === productId)
   const selectedCustomer = customers.find((c) => c.id === customerId)
 
-  // Calculate totals (simplified - actual calculation uses server policy)
-  const unitPrice = selectedProduct?.price || 0
+  // Get the appropriate price based on purchase type
+  const getUnitPrice = () => {
+    if (!selectedProduct) return 0
+    switch (purchaseType) {
+      case "CASH":
+        return selectedProduct.cashPrice || selectedProduct.price
+      case "LAYAWAY":
+        return selectedProduct.layawayPrice || selectedProduct.price
+      case "CREDIT":
+      default:
+        return selectedProduct.creditPrice || selectedProduct.price
+    }
+  }
+
+  const unitPrice = getUnitPrice()
   const subtotal = unitPrice * quantity
   const downPaymentNum = parseFloat(downPayment) || 0
   const remaining = Math.max(0, subtotal - downPaymentNum)
@@ -48,6 +62,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers }:
       productId,
       quantity,
       downPayment: downPaymentNum,
+      purchaseType,
       tenorDays,
     })
 
@@ -174,20 +189,85 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers }:
 
             {selectedProduct && (
               <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="text-sm text-white font-medium">{selectedProduct.name}</p>
                     {selectedProduct.categoryName && (
                       <p className="text-xs text-slate-400">{selectedProduct.categoryName}</p>
                     )}
                   </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-purple-400">GHS {selectedProduct.price.toLocaleString()}</p>
-                    <p className="text-xs text-slate-400">{selectedProduct.stockQuantity} available</p>
+                  <p className="text-xs text-slate-400">{selectedProduct.stockQuantity} available</p>
+                </div>
+                
+                {/* Price tiers display */}
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="text-center p-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <p className="text-green-400 font-medium">Cash</p>
+                    <p className="text-white">₵{(selectedProduct.cashPrice || selectedProduct.price).toLocaleString()}</p>
+                  </div>
+                  <div className="text-center p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <p className="text-blue-400 font-medium">Layaway</p>
+                    <p className="text-white">₵{(selectedProduct.layawayPrice || selectedProduct.price).toLocaleString()}</p>
+                  </div>
+                  <div className="text-center p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                    <p className="text-amber-400 font-medium">Credit</p>
+                    <p className="text-white">₵{(selectedProduct.creditPrice || selectedProduct.price).toLocaleString()}</p>
                   </div>
                 </div>
               </div>
             )}
+
+            {/* Purchase Type Selection */}
+            <div>
+              <label className="text-sm font-medium text-slate-200 mb-2 block">Payment Type</label>
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPurchaseType("CASH")}
+                  className={`p-3 rounded-xl border text-center transition-all ${
+                    purchaseType === "CASH"
+                      ? "bg-green-500/20 border-green-500/50 text-green-400"
+                      : "bg-white/5 border-white/10 text-slate-400 hover:border-green-500/30"
+                  }`}
+                >
+                  <svg className="w-5 h-5 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  <span className="text-xs font-medium">Cash</span>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Full upfront</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPurchaseType("LAYAWAY")}
+                  className={`p-3 rounded-xl border text-center transition-all ${
+                    purchaseType === "LAYAWAY"
+                      ? "bg-blue-500/20 border-blue-500/50 text-blue-400"
+                      : "bg-white/5 border-white/10 text-slate-400 hover:border-blue-500/30"
+                  }`}
+                >
+                  <svg className="w-5 h-5 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-xs font-medium">Layaway</span>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Pay first</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPurchaseType("CREDIT")}
+                  className={`p-3 rounded-xl border text-center transition-all ${
+                    purchaseType === "CREDIT"
+                      ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+                      : "bg-white/5 border-white/10 text-slate-400 hover:border-amber-500/30"
+                  }`}
+                >
+                  <svg className="w-5 h-5 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  <span className="text-xs font-medium">Credit</span>
+                  <p className="text-[10px] text-slate-500 mt-0.5">BNPL</p>
+                </button>
+              </div>
+            </div>
 
             {/* Quantity */}
             <div>
@@ -257,20 +337,43 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers }:
             <h2 className="text-lg font-semibold text-white mb-4">Order Summary</h2>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between text-slate-300">
+                <span>Payment Type</span>
+                <span className={`font-medium ${
+                  purchaseType === "CASH" ? "text-green-400" : 
+                  purchaseType === "LAYAWAY" ? "text-blue-400" : "text-amber-400"
+                }`}>
+                  {purchaseType === "CASH" ? "💵 Cash" : 
+                   purchaseType === "LAYAWAY" ? "📅 Layaway" : "💳 Credit (BNPL)"}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-300">
                 <span>{selectedProduct.name} × {quantity}</span>
                 <span>GHS {subtotal.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-slate-300">
-                <span>Down Payment</span>
-                <span className="text-green-400">- GHS {downPaymentNum.toLocaleString()}</span>
-              </div>
+              {purchaseType !== "CASH" && (
+                <div className="flex justify-between text-slate-300">
+                  <span>Down Payment</span>
+                  <span className="text-green-400">- GHS {downPaymentNum.toLocaleString()}</span>
+                </div>
+              )}
               <div className="border-t border-white/10 pt-2 mt-2 flex justify-between font-semibold">
-                <span className="text-white">Amount to Finance</span>
-                <span className="text-indigo-400">GHS {remaining.toLocaleString()}</span>
+                <span className="text-white">
+                  {purchaseType === "CASH" ? "Total Due" : "Amount to Finance"}
+                </span>
+                <span className="text-indigo-400">
+                  GHS {purchaseType === "CASH" ? subtotal.toLocaleString() : remaining.toLocaleString()}
+                </span>
               </div>
-              <p className="text-xs text-slate-500 mt-2">
-                * Final amount may include interest based on shop policy
-              </p>
+              {purchaseType !== "CASH" && (
+                <p className="text-xs text-slate-500 mt-2">
+                  * Final amount may include interest based on shop policy
+                </p>
+              )}
+              {purchaseType === "CASH" && (
+                <p className="text-xs text-green-500/70 mt-2">
+                  ✓ No interest - best price for full upfront payment
+                </p>
+              )}
             </div>
           </div>
         )}

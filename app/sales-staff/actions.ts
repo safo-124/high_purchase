@@ -72,6 +72,9 @@ export interface ProductForSale {
   description: string | null
   sku: string | null
   price: number
+  cashPrice: number
+  layawayPrice: number
+  creditPrice: number
   stockQuantity: number
   categoryName: string | null
   categoryColor: string | null
@@ -106,6 +109,9 @@ export async function getProductsForSale(shopSlug: string): Promise<ProductForSa
     description: p.description,
     sku: p.sku,
     price: Number(p.price),
+    cashPrice: Number(p.cashPrice),
+    layawayPrice: Number(p.layawayPrice),
+    creditPrice: Number(p.creditPrice),
     stockQuantity: p.stockQuantity,
     categoryName: p.category?.name || null,
     categoryColor: p.category?.color || null,
@@ -236,12 +242,15 @@ export async function createQuickCustomer(
 // CREATE PURCHASE (SALE)
 // ============================================
 
+export type PurchaseTypeOption = "CASH" | "LAYAWAY" | "CREDIT"
+
 export interface SalePayload {
   customerId: string
   productId: string
   quantity: number
   downPayment: number
   tenorDays: number
+  purchaseType: PurchaseTypeOption
 }
 
 export async function createSale(
@@ -308,17 +317,38 @@ export async function createSale(
       return { success: false, error: `Tenor cannot exceed ${policy.maxTenorDays} days` }
     }
 
-    // Calculate totals
-    const unitPrice = Number(product.price)
+    // Get the appropriate price based on purchase type
+    let unitPrice: number
+    switch (payload.purchaseType) {
+      case "CASH":
+        unitPrice = Number(product.cashPrice)
+        break
+      case "LAYAWAY":
+        unitPrice = Number(product.layawayPrice)
+        break
+      case "CREDIT":
+      default:
+        unitPrice = Number(product.creditPrice)
+        break
+    }
+
+    // Fallback to legacy price if tier price is 0
+    if (unitPrice === 0) {
+      unitPrice = Number(product.price)
+    }
+
     const subtotal = unitPrice * payload.quantity
     const interestRate = Number(policy.interestRate) / 100
 
+    // For CASH purchases, no interest
     let interestAmount = 0
-    if (policy.interestType === "FLAT") {
-      interestAmount = subtotal * interestRate
-    } else if (policy.interestType === "MONTHLY") {
-      const months = payload.tenorDays / 30
-      interestAmount = subtotal * interestRate * months
+    if (payload.purchaseType !== "CASH") {
+      if (policy.interestType === "FLAT") {
+        interestAmount = subtotal * interestRate
+      } else if (policy.interestType === "MONTHLY") {
+        const months = payload.tenorDays / 30
+        interestAmount = subtotal * interestRate * months
+      }
     }
 
     const totalAmount = subtotal + interestAmount
@@ -348,6 +378,7 @@ export async function createSale(
         data: {
           purchaseNumber,
           customerId: customer.id,
+          purchaseType: payload.purchaseType,
           status: outstandingBalance === 0 ? "COMPLETED" : "ACTIVE",
           subtotal: new Prisma.Decimal(subtotal),
           interestAmount: new Prisma.Decimal(interestAmount),
@@ -355,12 +386,12 @@ export async function createSale(
           amountPaid: new Prisma.Decimal(downPayment),
           outstandingBalance: new Prisma.Decimal(outstandingBalance),
           downPayment: new Prisma.Decimal(downPayment),
-          installments: Math.ceil(payload.tenorDays / 30), // Monthly installments
+          installments: payload.purchaseType === "CASH" ? 1 : Math.ceil(payload.tenorDays / 30), // Monthly installments
           startDate: new Date(),
           dueDate,
           interestType: policy.interestType,
           interestRate: policy.interestRate,
-          notes: `Sale by ${user.name}`,
+          notes: `${payload.purchaseType} sale by ${user.name}`,
           items: {
             create: {
               productId: product.id,
@@ -810,6 +841,92 @@ export async function getAllDeliveries(shopSlug: string): Promise<DeliveryData[]
     waybillNumber: p.waybill?.waybillNumber || null,
     createdAt: p.createdAt,
   }))
+}
+
+// ============================================
+// READY FOR DELIVERY (Fully Paid Purchases)
+// ============================================
+
+export interface ReadyForDeliveryData {
+  purchaseId: string
+  purchaseNumber: string
+  customerName: string
+  customerPhone: string
+  deliveryAddress: string
+  deliveryStatus: DeliveryStatus
+  items: Array<{
+    productName: string
+    quantity: number
+  }>
+  totalAmount: number
+  amountPaid: number
+  waybillNumber: string
+  waybillGeneratedAt: Date
+  paymentCompletedAt: Date | null
+  createdAt: Date
+}
+
+/**
+ * Get purchases that are fully paid (COMPLETED status) with waybills
+ * and ready for delivery (not yet delivered)
+ */
+export async function getReadyForDelivery(shopSlug: string): Promise<ReadyForDeliveryData[]> {
+  const { shop } = await requireSalesStaffForShop(shopSlug)
+
+  const purchases = await prisma.purchase.findMany({
+    where: {
+      customer: { shopId: shop.id },
+      status: "COMPLETED", // Fully paid
+      deliveryStatus: { in: ["PENDING", "SCHEDULED", "IN_TRANSIT"] }, // Not yet delivered
+      waybill: { isNot: null }, // Has waybill
+    },
+    include: {
+      customer: true,
+      items: true,
+      waybill: true,
+      payments: {
+        where: { isConfirmed: true },
+        orderBy: { confirmedAt: "desc" },
+        take: 1,
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+  })
+
+  return purchases.map((p) => ({
+    purchaseId: p.id,
+    purchaseNumber: p.purchaseNumber,
+    customerName: `${p.customer.firstName} ${p.customer.lastName}`,
+    customerPhone: p.customer.phone,
+    deliveryAddress: p.waybill?.deliveryAddress || p.deliveryAddress || p.customer.address || "No address",
+    deliveryStatus: p.deliveryStatus,
+    items: p.items.map((i) => ({
+      productName: i.productName,
+      quantity: i.quantity,
+    })),
+    totalAmount: Number(p.totalAmount),
+    amountPaid: Number(p.amountPaid),
+    waybillNumber: p.waybill!.waybillNumber,
+    waybillGeneratedAt: p.waybill!.generatedAt,
+    paymentCompletedAt: p.payments[0]?.confirmedAt || null,
+    createdAt: p.createdAt,
+  }))
+}
+
+/**
+ * Get count of purchases ready for delivery (for navigation badges)
+ */
+export async function getReadyForDeliveryCount(shopSlug: string): Promise<number> {
+  const { shop } = await requireSalesStaffForShop(shopSlug)
+
+  return prisma.purchase.count({
+    where: {
+      customer: { shopId: shop.id },
+      status: "COMPLETED",
+      deliveryStatus: { in: ["PENDING", "SCHEDULED"] },
+      waybill: { isNot: null },
+    },
+  })
 }
 
 export async function updateDeliveryStatus(

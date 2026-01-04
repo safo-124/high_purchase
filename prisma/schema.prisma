@@ -162,7 +162,11 @@ model Product {
   name          String
   description   String?
   sku           String?        // Stock keeping unit
-  price         Decimal        @db.Decimal(12, 2) // Up to 999,999,999,999.99
+  // Pricing tiers based on payment type
+  cashPrice     Decimal        @default(0) @db.Decimal(12, 2) // Full payment upfront (best price)
+  layawayPrice  Decimal        @default(0) @db.Decimal(12, 2) // Pay in installments BEFORE taking product
+  creditPrice   Decimal        @default(0) @db.Decimal(12, 2) // Take product BEFORE paying (BNPL - highest price)
+  price         Decimal        @db.Decimal(12, 2) // Default/display price (usually cashPrice)
   stockQuantity Int            @default(0) // Available quantity in stock
   imageUrl      String?
   isActive      Boolean        @default(true)
@@ -189,6 +193,7 @@ model ShopMember {
   updatedAt           DateTime   @updatedAt
   assignedCustomers   Customer[] @relation("AssignedCustomers") // For debt collectors
   collectedPayments   Payment[]  @relation("CollectorPayments") // Payments collected by this member
+  confirmedPayments   Payment[]  @relation("ConfirmedPayments") // Payments confirmed by this member (shop admin)
   deliveredPurchases  Purchase[] @relation("DeliveredPurchases") // Purchases delivered by this member
 
   @@unique([userId, shopId])
@@ -223,6 +228,13 @@ model AuditLog {
   createdAt   DateTime @default(now())
 }
 
+// Purchase/Payment type enum - determines pricing tier
+enum PurchaseType {
+  CASH        // Full payment upfront - uses cashPrice
+  LAYAWAY     // Pay in installments before taking product - uses layawayPrice
+  CREDIT      // Take product before paying (BNPL) - uses creditPrice
+}
+
 // Purchase status enum
 enum PurchaseStatus {
   PENDING     // Awaiting first payment
@@ -250,16 +262,17 @@ enum PaymentStatus {
   WAIVED      // Payment waived by shop admin
 }
 
-// Purchase/Order - Customer buying products on credit
+// Purchase/Order - Customer buying products
 model Purchase {
   id              String         @id @default(cuid())
   purchaseNumber  String         // Human-readable purchase number (e.g., "HP-001")
   customerId      String
   customer        Customer       @relation("CustomerPurchases", fields: [customerId], references: [id], onDelete: Cascade)
   status          PurchaseStatus @default(PENDING)
+  purchaseType    PurchaseType   @default(CREDIT) // CASH, LAYAWAY, or CREDIT
   // Pricing
-  subtotal        Decimal        @db.Decimal(12, 2) // Total of all items
-  interestAmount  Decimal        @db.Decimal(12, 2) // Calculated interest
+  subtotal        Decimal        @db.Decimal(12, 2) // Total of all items (based on purchaseType pricing)
+  interestAmount  Decimal        @db.Decimal(12, 2) // Calculated interest (0 for CASH)
   totalAmount     Decimal        @db.Decimal(12, 2) // subtotal + interest
   amountPaid      Decimal        @default(0) @db.Decimal(12, 2) // Running total paid
   outstandingBalance Decimal     @db.Decimal(12, 2) // totalAmount - amountPaid
@@ -291,6 +304,7 @@ model Purchase {
   @@index([status])
   @@index([dueDate])
   @@index([deliveryStatus])
+  @@index([purchaseType])
 }
 
 // Purchase Item - Individual products in a purchase
@@ -321,6 +335,13 @@ model Payment {
   // For collector payments
   collectorId   String?       // Which collector received payment
   collector     ShopMember?   @relation("CollectorPayments", fields: [collectorId], references: [id], onDelete: SetNull)
+  // Confirmation workflow (for collector-collected payments)
+  isConfirmed   Boolean       @default(false) // Must be confirmed by shop admin to reflect on customer account
+  confirmedAt   DateTime?     // When payment was confirmed
+  confirmedById String?       // Shop admin who confirmed
+  confirmedBy   ShopMember?   @relation("ConfirmedPayments", fields: [confirmedById], references: [id], onDelete: SetNull)
+  rejectedAt    DateTime?     // If payment was rejected
+  rejectionReason String?     // Why payment was rejected
   // For scheduled/expected payments
   dueDate       DateTime?     // When payment was expected
   paidAt        DateTime?     // When payment was actually made
@@ -334,6 +355,7 @@ model Payment {
   @@index([collectorId])
   @@index([status])
   @@index([dueDate])
+  @@index([isConfirmed])
 }
 
 // Waybill - Delivery tracking document
