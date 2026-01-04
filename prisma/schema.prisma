@@ -53,6 +53,8 @@ model User {
   auditLogs           AuditLog[]         @relation("AuditLogActor")
   memberships         ShopMember[]       @relation("UserMemberships")
   businessMemberships BusinessMember[]   @relation("UserBusinessMemberships")
+  customerProfiles    Customer[]         @relation("CustomerUser")
+  sentMessages        Message[]          @relation("MessageSender")
 }
 
 // Business model - groups multiple shops under one owner
@@ -101,6 +103,7 @@ model Shop {
   products   Product[]    @relation("ShopProducts")
   customers  Customer[]   @relation("ShopCustomers")
   categories Category[]   @relation("ShopCategories")
+  messages   Message[]    @relation("ShopMessages")
 
   @@index([businessId])
 }
@@ -128,6 +131,9 @@ model Customer {
   id                  String            @id @default(cuid())
   shopId              String
   shop                Shop              @relation("ShopCustomers", fields: [shopId], references: [id], onDelete: Cascade)
+  // Optional user account for customer portal access
+  userId              String?
+  user                User?             @relation("CustomerUser", fields: [userId], references: [id], onDelete: SetNull)
   firstName           String
   lastName            String
   phone               String            // Primary contact
@@ -140,14 +146,20 @@ model Customer {
   preferredPayment    PaymentPreference @default(BOTH)
   assignedCollectorId String?           // Preferred debt collector
   assignedCollector   ShopMember?       @relation("AssignedCustomers", fields: [assignedCollectorId], references: [id], onDelete: SetNull)
+  // Notification preferences
+  emailNotifications  Boolean           @default(true)
+  smsNotifications    Boolean           @default(true)
   notes               String?
   isActive            Boolean           @default(true)
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
   purchases           Purchase[]        @relation("CustomerPurchases")
+  messages            Message[]         @relation("CustomerMessages")
+  notifications       Notification[]    @relation("CustomerNotifications")
 
   @@unique([shopId, phone])   // Phone unique per shop
   @@index([shopId])
+  @@index([userId])
   @@index([assignedCollectorId])
   @@index([isActive])
 }
@@ -383,4 +395,74 @@ model Waybill {
 
   @@index([waybillNumber])
   @@index([purchaseId])
+}
+
+// Message types
+enum MessageType {
+  EMAIL
+  SMS
+  IN_APP
+}
+
+// Message status
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  READ
+}
+
+// Message model - for emails, SMS, and in-app messages
+model Message {
+  id            String        @id @default(cuid())
+  shopId        String
+  shop          Shop          @relation("ShopMessages", fields: [shopId], references: [id], onDelete: Cascade)
+  customerId    String
+  customer      Customer      @relation("CustomerMessages", fields: [customerId], references: [id], onDelete: Cascade)
+  senderId      String        // User who sent the message
+  sender        User          @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  // Message content
+  type          MessageType
+  subject       String?       // For emails
+  body          String
+  // Delivery tracking
+  status        MessageStatus @default(PENDING)
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  readAt        DateTime?
+  errorMessage  String?       // If failed
+  // Metadata
+  metadata      Json?         // Extra data like SMS provider response, email headers
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([shopId])
+  @@index([customerId])
+  @@index([senderId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Notification model - in-app notifications for customers with accounts
+model Notification {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation("CustomerNotifications", fields: [customerId], references: [id], onDelete: Cascade)
+  // Notification content
+  title       String
+  body        String
+  type        String   // e.g., "PAYMENT_DUE", "PAYMENT_RECEIVED", "PURCHASE_UPDATE"
+  link        String?  // Optional link to navigate to
+  // Status
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  // Metadata
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([customerId])
+  @@index([isRead])
+  @@index([createdAt])
 }

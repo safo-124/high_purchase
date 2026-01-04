@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -197,7 +198,21 @@ export default function LoginPage() {
           </form>
 
           {/* Footer */}
-          <div className="mt-8 pt-6 border-t border-white/5 text-center">
+          <div className="mt-8 pt-6 border-t border-white/5 text-center space-y-4">
+            <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+              <p className="text-sm text-slate-300 mb-2">
+                Are you a customer?
+              </p>
+              <Link 
+                href="/customer-portal"
+                className="text-indigo-400 hover:text-indigo-300 font-medium text-sm flex items-center justify-center gap-2 transition-colors"
+              >
+                Go to Customer Portal
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </Link>
+            </div>
             <p className="text-xs text-slate-500">
               Secure admin access • Protected by encryption
             </p>

@@ -159,6 +159,46 @@ export async function getCustomersForSale(shopSlug: string): Promise<CustomerFor
 }
 
 // ============================================
+// GET COLLECTORS FOR DROPDOWN
+// ============================================
+
+export interface CollectorOption {
+  id: string
+  name: string
+  email: string | null
+}
+
+export async function getCollectorsForDropdown(shopSlug: string): Promise<CollectorOption[]> {
+  await requireSalesStaffForShop(shopSlug)
+
+  const shop = await prisma.shop.findUnique({
+    where: { shopSlug },
+  })
+
+  if (!shop) return []
+
+  const collectors = await prisma.shopMember.findMany({
+    where: {
+      shopId: shop.id,
+      role: "DEBT_COLLECTOR",
+      isActive: true,
+    },
+    include: {
+      user: {
+        select: { name: true, email: true },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  })
+
+  return collectors.map((c) => ({
+    id: c.id,
+    name: c.user.name || "Unknown",
+    email: c.user.email,
+  }))
+}
+
+// ============================================
 // CREATE CUSTOMER (Quick Add)
 // ============================================
 
@@ -167,6 +207,14 @@ export interface QuickCustomerPayload {
   lastName: string
   phone: string
   email?: string | null
+  idType?: string | null
+  idNumber?: string | null
+  address?: string | null
+  city?: string | null
+  region?: string | null
+  preferredPayment?: "ONLINE" | "COLLECTOR" | "BOTH"
+  assignedCollectorId?: string | null
+  notes?: string | null
 }
 
 export async function createQuickCustomer(
@@ -204,7 +252,14 @@ export async function createQuickCustomer(
         lastName: payload.lastName.trim(),
         phone: payload.phone.trim(),
         email: payload.email?.trim() || null,
-        preferredPayment: "BOTH" as PaymentPreference,
+        idType: payload.idType?.trim() || null,
+        idNumber: payload.idNumber?.trim() || null,
+        address: payload.address?.trim() || null,
+        city: payload.city?.trim() || null,
+        region: payload.region?.trim() || null,
+        preferredPayment: (payload.preferredPayment || "BOTH") as PaymentPreference,
+        assignedCollectorId: payload.assignedCollectorId || null,
+        notes: payload.notes?.trim() || null,
       },
     })
 
@@ -549,6 +604,10 @@ export interface CreateCustomerPayload {
   region?: string | null
   preferredPayment?: PaymentPreference
   assignedCollectorId?: string | null
+  // Customer portal account fields
+  createAccount?: boolean
+  accountEmail?: string
+  accountPassword?: string
 }
 
 export async function createFullCustomer(
@@ -595,13 +654,47 @@ export async function createFullCustomer(
       }
     }
 
+    // If creating account, validate and check email uniqueness
+    let userAccount = null
+    if (payload.createAccount) {
+      if (!payload.accountEmail || payload.accountEmail.trim().length === 0) {
+        return { success: false, error: "Email is required for account creation" }
+      }
+      if (!payload.accountPassword || payload.accountPassword.length < 8) {
+        return { success: false, error: "Password must be at least 8 characters" }
+      }
+
+      const existingUser = await prisma.user.findUnique({
+        where: { email: payload.accountEmail.trim().toLowerCase() },
+      })
+
+      if (existingUser) {
+        return { success: false, error: "An account with this email already exists" }
+      }
+
+      // Import bcrypt dynamically to hash password
+      const bcrypt = await import("bcryptjs")
+      const passwordHash = await bcrypt.hash(payload.accountPassword, 12)
+
+      userAccount = await prisma.user.create({
+        data: {
+          email: payload.accountEmail.trim().toLowerCase(),
+          name: `${payload.firstName.trim()} ${payload.lastName.trim()}`,
+          passwordHash,
+          role: "CUSTOMER",
+        },
+      })
+    }
+
     const customer = await prisma.customer.create({
       data: {
         shopId: shop.id,
         firstName: payload.firstName.trim(),
         lastName: payload.lastName.trim(),
         phone: payload.phone.trim(),
-        email: payload.email?.trim() || null,
+        email: payload.createAccount 
+          ? payload.accountEmail?.trim().toLowerCase() 
+          : (payload.email?.trim() || null),
         idType: payload.idType?.trim() || null,
         idNumber: payload.idNumber?.trim() || null,
         address: payload.address?.trim() || null,
@@ -609,6 +702,7 @@ export async function createFullCustomer(
         region: payload.region?.trim() || null,
         preferredPayment: payload.preferredPayment || "BOTH",
         assignedCollectorId: payload.assignedCollectorId || null,
+        userId: userAccount?.id || null,
       },
     })
 
@@ -621,13 +715,14 @@ export async function createFullCustomer(
         shopId: shop.id,
         shopName: shop.name,
         customerName: `${customer.firstName} ${customer.lastName}`,
+        hasAccount: !!userAccount,
       },
     })
 
     revalidatePath(`/sales-staff/${shopSlug}/customers`)
     revalidatePath(`/sales-staff/${shopSlug}/dashboard`)
 
-    return { success: true, data: { customerId: customer.id } }
+    return { success: true, data: { customerId: customer.id, hasAccount: !!userAccount } }
   } catch (error) {
     console.error("Error creating customer:", error)
     return { success: false, error: "Failed to create customer" }
@@ -638,11 +733,7 @@ export async function createFullCustomer(
 // GET DEBT COLLECTORS FOR ASSIGNMENT
 // ============================================
 
-export interface CollectorOption {
-  id: string
-  name: string
-  phone: string | null
-}
+// CollectorOption interface is already defined above
 
 export async function getDebtCollectorsForAssignment(shopSlug: string): Promise<CollectorOption[]> {
   await requireSalesStaffForShop(shopSlug)
@@ -665,14 +756,14 @@ export async function getDebtCollectorsForAssignment(shopSlug: string): Promise<
       },
     },
     orderBy: {
-      user: { name: "asc" },
+      createdAt: "asc",
     },
   })
 
   return collectors.map((c) => ({
     id: c.id,
     name: c.user.name || c.user.email,
-    phone: null, // User doesn't have phone in schema
+    email: c.user.email,
   }))
 }
 
@@ -1212,4 +1303,178 @@ export async function getCustomerPurchases(
     dueDate: p.dueDate,
     hasWaybill: !!p.waybill,
   }))
+}
+
+// ============================================
+// MESSAGING FUNCTIONS
+// ============================================
+
+export interface SendMessagePayload {
+  customerId: string
+  type: "EMAIL" | "SMS" | "IN_APP"
+  subject?: string
+  body: string
+}
+
+export async function sendMessageToCustomer(
+  shopSlug: string,
+  payload: SendMessagePayload
+): Promise<ActionResult> {
+  const { user, shop } = await requireSalesStaffForShop(shopSlug)
+
+  try {
+    // Verify customer belongs to this shop
+    const customer = await prisma.customer.findFirst({
+      where: { id: payload.customerId, shopId: shop.id },
+    })
+
+    if (!customer) {
+      return { success: false, error: "Customer not found" }
+    }
+
+    // Create the message record
+    const message = await prisma.message.create({
+      data: {
+        shopId: shop.id,
+        customerId: customer.id,
+        senderId: user.id,
+        type: payload.type,
+        subject: payload.subject,
+        body: payload.body,
+        status: "PENDING",
+      },
+    })
+
+    // Simulate sending based on type
+    if (payload.type === "EMAIL") {
+      // In production: integrate with email service (SendGrid, SES, etc.)
+      console.log(`[EMAIL] To: ${customer.email}, Subject: ${payload.subject}`)
+      console.log(`Body: ${payload.body}`)
+      
+      await prisma.message.update({
+        where: { id: message.id },
+        data: { status: "SENT", sentAt: new Date() },
+      })
+    } else if (payload.type === "SMS") {
+      // In production: integrate with SMS service (Twilio, Africa's Talking, etc.)
+      console.log(`[SMS] To: ${customer.phone}`)
+      console.log(`Body: ${payload.body}`)
+      
+      await prisma.message.update({
+        where: { id: message.id },
+        data: { status: "SENT", sentAt: new Date() },
+      })
+    } else if (payload.type === "IN_APP") {
+      // Create notification for customer portal (only if customer has account)
+      if (customer.userId) {
+        await prisma.notification.create({
+          data: {
+            customerId: customer.id,
+            title: payload.subject || "New Message",
+            body: payload.body,
+            type: "MESSAGE",
+          },
+        })
+        
+        await prisma.message.update({
+          where: { id: message.id },
+          data: { status: "DELIVERED", sentAt: new Date() },
+        })
+      } else {
+        await prisma.message.update({
+          where: { id: message.id },
+          data: { status: "FAILED" },
+        })
+        return { 
+          success: false, 
+          error: "Customer doesn't have a portal account for in-app messages" 
+        }
+      }
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "SEND_MESSAGE",
+      entityType: "Message",
+      entityId: message.id,
+      metadata: { type: payload.type, customerId: customer.id },
+    })
+
+    revalidatePath(`/sales-staff/${shopSlug}`)
+    return { success: true, data: { messageId: message.id } }
+  } catch (error) {
+    console.error("Send message error:", error)
+    return { success: false, error: "Failed to send message" }
+  }
+}
+
+export async function sendPaymentReminder(
+  shopSlug: string,
+  customerId: string,
+  purchaseId: string
+): Promise<ActionResult> {
+  const { user, shop } = await requireSalesStaffForShop(shopSlug)
+
+  try {
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, shopId: shop.id },
+    })
+
+    if (!customer) {
+      return { success: false, error: "Customer not found" }
+    }
+
+    const purchase = await prisma.purchase.findFirst({
+      where: { id: purchaseId, customerId },
+    })
+
+    if (!purchase) {
+      return { success: false, error: "Purchase not found" }
+    }
+
+    const reminderBody = `Dear ${customer.firstName}, this is a friendly reminder that you have an outstanding balance of GHS ${Number(purchase.outstandingBalance).toFixed(2)} for purchase ${purchase.purchaseNumber}. Please make payment at your earliest convenience. Thank you for your patronage!`
+
+    // Send SMS reminder
+    await prisma.message.create({
+      data: {
+        shopId: shop.id,
+        customerId: customer.id,
+        senderId: user.id,
+        type: "SMS",
+        body: reminderBody,
+        status: "SENT",
+        sentAt: new Date(),
+      },
+    })
+
+    console.log(`[SMS REMINDER] To: ${customer.phone}`)
+    console.log(`Body: ${reminderBody}`)
+
+    // If customer has account, also send in-app notification
+    if (customer.userId) {
+      await prisma.notification.create({
+        data: {
+          customerId: customer.id,
+          title: "Payment Reminder",
+          body: reminderBody,
+          type: "REMINDER",
+          link: `/customer/${shopSlug}/purchases`,
+        },
+      })
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "SEND_PAYMENT_REMINDER",
+      entityType: "Purchase",
+      entityId: purchaseId,
+      metadata: { customerId },
+    })
+
+    revalidatePath(`/sales-staff/${shopSlug}`)
+    return { success: true }
+  } catch (error) {
+    console.error("Send reminder error:", error)
+    return { success: false, error: "Failed to send reminder" }
+  }
 }

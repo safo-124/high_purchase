@@ -83,6 +83,9 @@ export default async function PendingPaymentsPage({ params }: PendingPaymentsPag
               <Link href={`/shop-admin/${shopSlug}/staff`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
                 Staff
               </Link>
+              <Link href={`/shop-admin/${shopSlug}/messages`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
+                Messages
+              </Link>
               <Link href={`/shop-admin/${shopSlug}/policy`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
                 Policy
               </Link>

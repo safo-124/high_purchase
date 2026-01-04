@@ -60,16 +60,36 @@ export function CreateCustomerDialog({ shopSlug, collectors }: CreateCustomerDia
   const [preferredPayment, setPreferredPayment] = useState("BOTH")
   const [assignedCollectorId, setAssignedCollectorId] = useState("")
   const [notes, setNotes] = useState("")
+  
+  // Customer portal account fields
+  const [createAccount, setCreateAccount] = useState(false)
+  const [accountEmail, setAccountEmail] = useState("")
+  const [accountPassword, setAccountPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
 
+    // Validate passwords if creating account
+    if (createAccount) {
+      if (accountPassword !== confirmPassword) {
+        toast.error("Passwords do not match")
+        setIsLoading(false)
+        return
+      }
+      if (accountPassword.length < 8) {
+        toast.error("Password must be at least 8 characters")
+        setIsLoading(false)
+        return
+      }
+    }
+
     const result = await createCustomer(shopSlug, {
       firstName,
       lastName,
       phone,
-      email: email || undefined,
+      email: createAccount ? undefined : (email || undefined),
       idType: idType || undefined,
       idNumber: idNumber || undefined,
       address: address || undefined,
@@ -78,10 +98,18 @@ export function CreateCustomerDialog({ shopSlug, collectors }: CreateCustomerDia
       preferredPayment: preferredPayment as "ONLINE" | "DEBT_COLLECTOR" | "BOTH",
       assignedCollectorId: assignedCollectorId || undefined,
       notes: notes || undefined,
+      createAccount,
+      accountEmail: createAccount ? accountEmail : undefined,
+      accountPassword: createAccount ? accountPassword : undefined,
     })
 
     if (result.success) {
-      toast.success(`Customer "${firstName} ${lastName}" added successfully!`)
+      const data = result.data as { hasAccount?: boolean }
+      if (data?.hasAccount) {
+        toast.success(`Customer "${firstName} ${lastName}" added with portal account!`)
+      } else {
+        toast.success(`Customer "${firstName} ${lastName}" added successfully!`)
+      }
       setOpen(false)
       resetForm()
     } else {
@@ -104,6 +132,10 @@ export function CreateCustomerDialog({ shopSlug, collectors }: CreateCustomerDia
     setPreferredPayment("BOTH")
     setAssignedCollectorId("")
     setNotes("")
+    setCreateAccount(false)
+    setAccountEmail("")
+    setAccountPassword("")
+    setConfirmPassword("")
   }
 
   return (
@@ -399,6 +431,95 @@ export function CreateCustomerDialog({ shopSlug, collectors }: CreateCustomerDia
                 rows={2}
                 className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/20 transition-all text-sm resize-none"
               />
+            </div>
+
+            {/* Customer Portal Account */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                  <h3 className="text-sm font-semibold text-white">Customer Portal Access</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCreateAccount(!createAccount)}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${
+                    createAccount ? "bg-violet-600" : "bg-slate-700"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      createAccount ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+              
+              {createAccount && (
+                <div className="p-4 bg-violet-500/10 border border-violet-500/20 rounded-xl space-y-4">
+                  <p className="text-xs text-violet-300">
+                    Create login credentials for customer to access their portal and view purchases.
+                  </p>
+                  
+                  <div className="space-y-2">
+                    <label htmlFor="accountEmail" className="text-sm font-medium text-slate-200">
+                      Account Email <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      id="accountEmail"
+                      type="email"
+                      placeholder="customer@email.com"
+                      value={accountEmail}
+                      onChange={(e) => setAccountEmail(e.target.value)}
+                      required={createAccount}
+                      className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/20 transition-all text-sm"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label htmlFor="accountPassword" className="text-sm font-medium text-slate-200">
+                        Password <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        id="accountPassword"
+                        type="password"
+                        placeholder="••••••••"
+                        value={accountPassword}
+                        onChange={(e) => setAccountPassword(e.target.value)}
+                        required={createAccount}
+                        minLength={8}
+                        className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/20 transition-all text-sm"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label htmlFor="confirmPassword" className="text-sm font-medium text-slate-200">
+                        Confirm Password <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        id="confirmPassword"
+                        type="password"
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required={createAccount}
+                        minLength={8}
+                        className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/20 transition-all text-sm"
+                      />
+                    </div>
+                  </div>
+                  
+                  {accountPassword && confirmPassword && accountPassword !== confirmPassword && (
+                    <p className="text-xs text-red-400">Passwords do not match</p>
+                  )}
+                  {accountPassword && accountPassword.length > 0 && accountPassword.length < 8 && (
+                    <p className="text-xs text-amber-400">Password must be at least 8 characters</p>
+                  )}
+                </div>
+              )}
             </div>
             
             {/* Actions */}

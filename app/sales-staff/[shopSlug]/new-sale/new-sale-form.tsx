@@ -2,16 +2,45 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ProductForSale, CustomerForSale, createSale, createQuickCustomer, PurchaseTypeOption } from "../../actions"
+import { ProductForSale, CustomerForSale, createSale, createQuickCustomer, PurchaseTypeOption, CollectorOption } from "../../actions"
 import { toast } from "sonner"
 
 interface NewSaleFormProps {
   shopSlug: string
   products: ProductForSale[]
   customers: CustomerForSale[]
+  collectors: CollectorOption[]
 }
 
-export function NewSaleForm({ shopSlug, products, customers: initialCustomers }: NewSaleFormProps) {
+const GHANA_REGIONS = [
+  "Greater Accra",
+  "Ashanti",
+  "Central",
+  "Eastern",
+  "Northern",
+  "Western",
+  "Volta",
+  "Upper East",
+  "Upper West",
+  "Bono",
+  "Bono East",
+  "Ahafo",
+  "Western North",
+  "Oti",
+  "North East",
+  "Savannah",
+]
+
+const ID_TYPES = [
+  "Ghana Card",
+  "Voter ID",
+  "Passport",
+  "Driver's License",
+  "NHIS Card",
+  "SSNIT Card",
+]
+
+export function NewSaleForm({ shopSlug, products, customers: initialCustomers, collectors }: NewSaleFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [customers, setCustomers] = useState(initialCustomers)
@@ -27,9 +56,21 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers }:
   // New customer modal
   const [showNewCustomer, setShowNewCustomer] = useState(false)
   const [newCustomerLoading, setNewCustomerLoading] = useState(false)
+  // Personal Information
   const [newFirstName, setNewFirstName] = useState("")
   const [newLastName, setNewLastName] = useState("")
   const [newPhone, setNewPhone] = useState("")
+  const [newEmail, setNewEmail] = useState("")
+  const [newIdType, setNewIdType] = useState("")
+  const [newIdNumber, setNewIdNumber] = useState("")
+  // Address Information
+  const [newAddress, setNewAddress] = useState("")
+  const [newCity, setNewCity] = useState("")
+  const [newRegion, setNewRegion] = useState("")
+  // Payment Preference
+  const [newPreferredPayment, setNewPreferredPayment] = useState<"ONLINE" | "COLLECTOR" | "BOTH">("BOTH")
+  const [newAssignedCollectorId, setNewAssignedCollectorId] = useState("")
+  const [newNotes, setNewNotes] = useState("")
 
   const selectedProduct = products.find((p) => p.id === productId)
   const selectedCustomer = customers.find((c) => c.id === customerId)
@@ -84,6 +125,15 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers }:
       firstName: newFirstName,
       lastName: newLastName,
       phone: newPhone,
+      email: newEmail || null,
+      idType: newIdType || null,
+      idNumber: newIdNumber || null,
+      address: newAddress || null,
+      city: newCity || null,
+      region: newRegion || null,
+      preferredPayment: newPreferredPayment,
+      assignedCollectorId: newAssignedCollectorId || null,
+      notes: newNotes || null,
     })
 
     if (result.success) {
@@ -96,22 +146,35 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers }:
         firstName: data.firstName,
         lastName: data.lastName,
         phone: data.phone,
-        email: null,
+        email: newEmail || null,
       }])
       
       // Select the new customer
       setCustomerId(data.id)
       
-      // Close modal
+      // Close modal and reset form
       setShowNewCustomer(false)
-      setNewFirstName("")
-      setNewLastName("")
-      setNewPhone("")
+      resetNewCustomerForm()
     } else {
       toast.error(result.error || "Failed to create customer")
     }
 
     setNewCustomerLoading(false)
+  }
+
+  const resetNewCustomerForm = () => {
+    setNewFirstName("")
+    setNewLastName("")
+    setNewPhone("")
+    setNewEmail("")
+    setNewIdType("")
+    setNewIdNumber("")
+    setNewAddress("")
+    setNewCity("")
+    setNewRegion("")
+    setNewPreferredPayment("BOTH")
+    setNewAssignedCollectorId("")
+    setNewNotes("")
   }
 
   return (
@@ -408,63 +471,281 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers }:
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div 
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowNewCustomer(false)}
+            onClick={() => { setShowNewCustomer(false); resetNewCustomerForm(); }}
           />
           
-          <div className="relative bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
-            <h3 className="text-lg font-semibold text-white mb-4">Add New Customer</h3>
-            
-            <form onSubmit={handleNewCustomer} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-slate-200 mb-1 block">First Name *</label>
-                  <input
-                    type="text"
-                    value={newFirstName}
-                    onChange={(e) => setNewFirstName(e.target.value)}
-                    required
-                    placeholder="Kwame"
-                    className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-slate-200 mb-1 block">Last Name *</label>
-                  <input
-                    type="text"
-                    value={newLastName}
-                    onChange={(e) => setNewLastName(e.target.value)}
-                    required
-                    placeholder="Asante"
-                    className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-all"
-                  />
-                </div>
+          <div className="relative bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-indigo-500/15 border border-purple-500/30 flex items-center justify-center">
+                <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-200 mb-1 block">Phone Number *</label>
-                <input
-                  type="tel"
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                  required
-                  placeholder="0244123456"
-                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-all"
+                <h3 className="text-lg font-semibold text-white">Add New Customer</h3>
+                <p className="text-sm text-slate-400">Enter customer details and payment preferences</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowNewCustomer(false); resetNewCustomerForm(); }}
+                className="ml-auto p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <form onSubmit={handleNewCustomer} className="space-y-5">
+              {/* Personal Information */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-purple-400 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Personal Information
+                </h4>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 mb-1 block">First Name <span className="text-red-400">*</span></label>
+                    <input
+                      type="text"
+                      value={newFirstName}
+                      onChange={(e) => setNewFirstName(e.target.value)}
+                      required
+                      placeholder="Kwame"
+                      className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 transition-all text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 mb-1 block">Last Name <span className="text-red-400">*</span></label>
+                    <input
+                      type="text"
+                      value={newLastName}
+                      onChange={(e) => setNewLastName(e.target.value)}
+                      required
+                      placeholder="Asante"
+                      className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 transition-all text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 mb-1 block">Phone <span className="text-red-400">*</span></label>
+                    <input
+                      type="tel"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value)}
+                      required
+                      placeholder="0244123456"
+                      className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 transition-all text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 mb-1 block">Email</label>
+                    <input
+                      type="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder="customer@example.com"
+                      className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 transition-all text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 mb-1 block">ID Type</label>
+                    <select
+                      value={newIdType}
+                      onChange={(e) => setNewIdType(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 transition-all text-sm"
+                    >
+                      <option value="" className="bg-slate-900">Select ID Type</option>
+                      {ID_TYPES.map((type) => (
+                        <option key={type} value={type} className="bg-slate-900">{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 mb-1 block">ID Number</label>
+                    <input
+                      type="text"
+                      value={newIdNumber}
+                      onChange={(e) => setNewIdNumber(e.target.value)}
+                      placeholder="GHA-123456789-0"
+                      className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 transition-all text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Address Information */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-blue-400 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Address Information
+                </h4>
+
+                <div>
+                  <label className="text-xs font-medium text-slate-300 mb-1 block">Street Address</label>
+                  <input
+                    type="text"
+                    value={newAddress}
+                    onChange={(e) => setNewAddress(e.target.value)}
+                    placeholder="12 Independence Ave"
+                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition-all text-sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 mb-1 block">City/Town</label>
+                    <input
+                      type="text"
+                      value={newCity}
+                      onChange={(e) => setNewCity(e.target.value)}
+                      placeholder="Accra"
+                      className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition-all text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 mb-1 block">Region</label>
+                    <select
+                      value={newRegion}
+                      onChange={(e) => setNewRegion(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-blue-500/50 transition-all text-sm"
+                    >
+                      <option value="" className="bg-slate-900">Select Region</option>
+                      {GHANA_REGIONS.map((region) => (
+                        <option key={region} value={region} className="bg-slate-900">{region}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Preference */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-green-400 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Payment Preference
+                </h4>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewPreferredPayment("ONLINE")}
+                    className={`p-3 rounded-xl border text-center transition-all ${
+                      newPreferredPayment === "ONLINE"
+                        ? "bg-green-500/20 border-green-500/50 text-green-400"
+                        : "bg-white/5 border-white/10 text-slate-400 hover:border-green-500/30"
+                    }`}
+                  >
+                    <svg className="w-5 h-5 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-xs font-medium">Online</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewPreferredPayment("COLLECTOR")}
+                    className={`p-3 rounded-xl border text-center transition-all ${
+                      newPreferredPayment === "COLLECTOR"
+                        ? "bg-green-500/20 border-green-500/50 text-green-400"
+                        : "bg-white/5 border-white/10 text-slate-400 hover:border-green-500/30"
+                    }`}
+                  >
+                    <svg className="w-5 h-5 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <span className="text-xs font-medium">Collector</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewPreferredPayment("BOTH")}
+                    className={`p-3 rounded-xl border text-center transition-all ${
+                      newPreferredPayment === "BOTH"
+                        ? "bg-green-500/20 border-green-500/50 text-green-400"
+                        : "bg-white/5 border-white/10 text-slate-400 hover:border-green-500/30"
+                    }`}
+                  >
+                    <svg className="w-5 h-5 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                    <span className="text-xs font-medium">Both</span>
+                  </button>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-slate-300 mb-1 block">Assign Collector (optional)</label>
+                  <select
+                    value={newAssignedCollectorId}
+                    onChange={(e) => setNewAssignedCollectorId(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-green-500/50 transition-all text-sm"
+                  >
+                    <option value="" className="bg-slate-900">Select Collector (optional)</option>
+                    {collectors.map((c) => (
+                      <option key={c.id} value={c.id} className="bg-slate-900">
+                        {c.name} {c.email ? `— ${c.email}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {collectors.length === 0 && (
+                    <p className="text-xs text-amber-400 mt-1">No active collectors available. Add collectors first.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-xs font-medium text-slate-300 mb-1 block">Notes</label>
+                <textarea
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  placeholder="Additional notes about this customer..."
+                  rows={2}
+                  className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-slate-500/50 transition-all text-sm resize-none"
                 />
               </div>
               
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex justify-end gap-3 pt-2 border-t border-white/5">
                 <button
                   type="button"
-                  onClick={() => setShowNewCustomer(false)}
-                  className="px-4 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-all"
+                  onClick={() => { setShowNewCustomer(false); resetNewCustomerForm(); }}
+                  className="px-4 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={newCustomerLoading}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-medium disabled:opacity-50 transition-all"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-medium shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 disabled:opacity-50 transition-all flex items-center gap-2"
                 >
-                  {newCustomerLoading ? "Adding..." : "Add Customer"}
+                  {newCustomerLoading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                      </svg>
+                      Add Customer
+                    </>
+                  )}
                 </button>
               </div>
             </form>

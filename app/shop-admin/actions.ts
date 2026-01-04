@@ -1024,6 +1024,10 @@ export interface CustomerPayload {
   preferredPayment?: PaymentPreference
   assignedCollectorId?: string | null
   notes?: string | null
+  // Customer portal account fields
+  createAccount?: boolean
+  accountEmail?: string
+  accountPassword?: string
 }
 
 export interface CustomerData {
@@ -1135,13 +1139,47 @@ export async function createCustomer(
       }
     }
 
+    // If creating account, validate and check email uniqueness
+    let userAccount = null
+    if (payload.createAccount) {
+      if (!payload.accountEmail || payload.accountEmail.trim().length === 0) {
+        return { success: false, error: "Email is required for account creation" }
+      }
+      if (!payload.accountPassword || payload.accountPassword.length < 8) {
+        return { success: false, error: "Password must be at least 8 characters" }
+      }
+
+      const existingUser = await prisma.user.findUnique({
+        where: { email: payload.accountEmail.trim().toLowerCase() },
+      })
+
+      if (existingUser) {
+        return { success: false, error: "An account with this email already exists" }
+      }
+
+      // Import bcrypt dynamically to hash password
+      const bcrypt = await import("bcryptjs")
+      const passwordHash = await bcrypt.hash(payload.accountPassword, 12)
+
+      userAccount = await prisma.user.create({
+        data: {
+          email: payload.accountEmail.trim().toLowerCase(),
+          name: `${payload.firstName.trim()} ${payload.lastName.trim()}`,
+          passwordHash,
+          role: "CUSTOMER",
+        },
+      })
+    }
+
     const customer = await prisma.customer.create({
       data: {
         shopId: shop.id,
         firstName: payload.firstName.trim(),
         lastName: payload.lastName.trim(),
         phone: normalizedPhone,
-        email: payload.email?.trim() || null,
+        email: payload.createAccount 
+          ? payload.accountEmail?.trim().toLowerCase() 
+          : (payload.email?.trim() || null),
         idType: payload.idType?.trim() || null,
         idNumber: payload.idNumber?.trim() || null,
         address: payload.address?.trim() || null,
@@ -1151,6 +1189,7 @@ export async function createCustomer(
         assignedCollectorId: payload.assignedCollectorId || null,
         notes: payload.notes?.trim() || null,
         isActive: true,
+        userId: userAccount?.id || null,
       },
     })
 
@@ -1164,6 +1203,7 @@ export async function createCustomer(
         shopName: shop.name,
         customerName: `${customer.firstName} ${customer.lastName}`,
         customerPhone: customer.phone,
+        hasAccount: !!userAccount,
       },
     })
 
@@ -1174,6 +1214,7 @@ export async function createCustomer(
       data: {
         id: customer.id,
         name: `${customer.firstName} ${customer.lastName}`,
+        hasAccount: !!userAccount,
       },
     }
   } catch (error) {
@@ -2540,3 +2581,369 @@ export async function getWaybillStats(shopSlug: string) {
 
   return { total, pendingDelivery, inTransit, delivered }
 }
+
+// ============================================
+// MESSAGING SYSTEM
+// ============================================
+
+export interface SendMessagePayload {
+  customerId: string
+  type: "EMAIL" | "SMS" | "IN_APP"
+  subject?: string
+  body: string
+}
+
+export interface MessageData {
+  id: string
+  customerId: string
+  customerName: string
+  customerPhone: string
+  customerEmail: string | null
+  type: "EMAIL" | "SMS" | "IN_APP"
+  subject: string | null
+  body: string
+  status: string
+  sentAt: Date | null
+  createdAt: Date
+}
+
+/**
+ * Send a message to a customer (email, SMS, or in-app)
+ */
+export async function sendMessageToCustomer(
+  shopSlug: string,
+  payload: SendMessagePayload
+): Promise<ActionResult> {
+  try {
+    const { user, shop } = await requireShopAdminForShop(shopSlug)
+
+    // Validate customer belongs to shop
+    const customer = await prisma.customer.findFirst({
+      where: { id: payload.customerId, shopId: shop.id },
+    })
+
+    if (!customer) {
+      return { success: false, error: "Customer not found" }
+    }
+
+    // Validate based on message type
+    if (payload.type === "EMAIL" && !customer.email) {
+      return { success: false, error: "Customer does not have an email address" }
+    }
+
+    if (payload.type === "SMS" && !customer.phone) {
+      return { success: false, error: "Customer does not have a phone number" }
+    }
+
+    if (payload.type === "IN_APP" && !customer.userId) {
+      return { success: false, error: "Customer does not have an account for in-app messages" }
+    }
+
+    // Create the message record
+    const message = await prisma.message.create({
+      data: {
+        shopId: shop.id,
+        customerId: customer.id,
+        senderId: user.id,
+        type: payload.type,
+        subject: payload.subject || null,
+        body: payload.body,
+        status: "PENDING",
+      },
+    })
+
+    // Handle different message types
+    if (payload.type === "EMAIL") {
+      // TODO: Integrate with email service (SendGrid, AWS SES, etc.)
+      // For now, mark as sent (simulate)
+      await prisma.message.update({
+        where: { id: message.id },
+        data: { status: "SENT", sentAt: new Date() },
+      })
+      console.log(`[EMAIL] To: ${customer.email}, Subject: ${payload.subject}, Body: ${payload.body}`)
+    } else if (payload.type === "SMS") {
+      // TODO: Integrate with SMS service (Twilio, Africa's Talking, etc.)
+      // For now, mark as sent (simulate)
+      await prisma.message.update({
+        where: { id: message.id },
+        data: { status: "SENT", sentAt: new Date() },
+      })
+      console.log(`[SMS] To: ${customer.phone}, Body: ${payload.body}`)
+    } else if (payload.type === "IN_APP") {
+      // Create notification for customer
+      await prisma.notification.create({
+        data: {
+          customerId: customer.id,
+          title: payload.subject || "New Message",
+          body: payload.body,
+          type: "MESSAGE",
+        },
+      })
+      await prisma.message.update({
+        where: { id: message.id },
+        data: { status: "DELIVERED", sentAt: new Date(), deliveredAt: new Date() },
+      })
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "MESSAGE_SENT",
+      entityType: "Message",
+      entityId: message.id,
+      metadata: {
+        customerId: customer.id,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        messageType: payload.type,
+      },
+    })
+
+    revalidatePath(`/shop-admin/${shopSlug}/customers`)
+    revalidatePath(`/shop-admin/${shopSlug}/messages`)
+
+    return { success: true, data: { messageId: message.id } }
+  } catch (error) {
+    console.error("Send message error:", error)
+    return { success: false, error: "Failed to send message" }
+  }
+}
+
+/**
+ * Send bulk message to multiple customers
+ */
+export async function sendBulkMessage(
+  shopSlug: string,
+  customerIds: string[],
+  payload: Omit<SendMessagePayload, "customerId">
+): Promise<ActionResult> {
+  try {
+    const { user, shop } = await requireShopAdminForShop(shopSlug)
+
+    // Get all valid customers
+    const customers = await prisma.customer.findMany({
+      where: {
+        id: { in: customerIds },
+        shopId: shop.id,
+      },
+    })
+
+    if (customers.length === 0) {
+      return { success: false, error: "No valid customers found" }
+    }
+
+    let sentCount = 0
+    let failedCount = 0
+
+    for (const customer of customers) {
+      // Skip if customer doesn't have required contact info
+      if (payload.type === "EMAIL" && !customer.email) {
+        failedCount++
+        continue
+      }
+      if (payload.type === "SMS" && !customer.phone) {
+        failedCount++
+        continue
+      }
+      if (payload.type === "IN_APP" && !customer.userId) {
+        failedCount++
+        continue
+      }
+
+      try {
+        const message = await prisma.message.create({
+          data: {
+            shopId: shop.id,
+            customerId: customer.id,
+            senderId: user.id,
+            type: payload.type,
+            subject: payload.subject || null,
+            body: payload.body,
+            status: "SENT",
+            sentAt: new Date(),
+          },
+        })
+
+        if (payload.type === "IN_APP") {
+          await prisma.notification.create({
+            data: {
+              customerId: customer.id,
+              title: payload.subject || "New Message",
+              body: payload.body,
+              type: "MESSAGE",
+            },
+          })
+          await prisma.message.update({
+            where: { id: message.id },
+            data: { status: "DELIVERED", deliveredAt: new Date() },
+          })
+        }
+
+        sentCount++
+      } catch {
+        failedCount++
+      }
+    }
+
+    revalidatePath(`/shop-admin/${shopSlug}/messages`)
+
+    return {
+      success: true,
+      data: { sentCount, failedCount, totalCustomers: customers.length },
+    }
+  } catch (error) {
+    console.error("Bulk message error:", error)
+    return { success: false, error: "Failed to send bulk messages" }
+  }
+}
+
+/**
+ * Get message history for a customer
+ */
+export async function getCustomerMessages(
+  shopSlug: string,
+  customerId: string
+): Promise<MessageData[]> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const messages = await prisma.message.findMany({
+    where: {
+      shopId: shop.id,
+      customerId,
+    },
+    include: {
+      customer: true,
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return messages.map((m) => ({
+    id: m.id,
+    customerId: m.customerId,
+    customerName: `${m.customer.firstName} ${m.customer.lastName}`,
+    customerPhone: m.customer.phone,
+    customerEmail: m.customer.email,
+    type: m.type as "EMAIL" | "SMS" | "IN_APP",
+    subject: m.subject,
+    body: m.body,
+    status: m.status,
+    sentAt: m.sentAt,
+    createdAt: m.createdAt,
+  }))
+}
+
+/**
+ * Get all messages for the shop
+ */
+export async function getShopMessages(shopSlug: string): Promise<MessageData[]> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const messages = await prisma.message.findMany({
+    where: { shopId: shop.id },
+    include: {
+      customer: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  })
+
+  return messages.map((m) => ({
+    id: m.id,
+    customerId: m.customerId,
+    customerName: `${m.customer.firstName} ${m.customer.lastName}`,
+    customerPhone: m.customer.phone,
+    customerEmail: m.customer.email,
+    type: m.type as "EMAIL" | "SMS" | "IN_APP",
+    subject: m.subject,
+    body: m.body,
+    status: m.status,
+    sentAt: m.sentAt,
+    createdAt: m.createdAt,
+  }))
+}
+
+/**
+ * Send payment reminder to customer
+ */
+export async function sendPaymentReminder(
+  shopSlug: string,
+  customerId: string,
+  purchaseId: string
+): Promise<ActionResult> {
+  try {
+    const { user, shop } = await requireShopAdminForShop(shopSlug)
+
+    const purchase = await prisma.purchase.findFirst({
+      where: {
+        id: purchaseId,
+        customerId,
+        customer: { shopId: shop.id },
+      },
+      include: { customer: true },
+    })
+
+    if (!purchase) {
+      return { success: false, error: "Purchase not found" }
+    }
+
+    const customer = purchase.customer
+    const outstanding = Number(purchase.outstandingBalance)
+    const dueDate = purchase.dueDate
+      ? purchase.dueDate.toLocaleDateString("en-GB")
+      : "N/A"
+
+    const body = `Dear ${customer.firstName}, this is a reminder that you have an outstanding balance of GHS ${outstanding.toLocaleString()} for purchase ${purchase.purchaseNumber}. Due date: ${dueDate}. Please make your payment at your earliest convenience. Thank you.`
+
+    // Send SMS if phone available
+    if (customer.phone && customer.smsNotifications) {
+      await prisma.message.create({
+        data: {
+          shopId: shop.id,
+          customerId: customer.id,
+          senderId: user.id,
+          type: "SMS",
+          body,
+          status: "SENT",
+          sentAt: new Date(),
+        },
+      })
+      console.log(`[SMS REMINDER] To: ${customer.phone}`)
+    }
+
+    // Send email if available
+    if (customer.email && customer.emailNotifications) {
+      await prisma.message.create({
+        data: {
+          shopId: shop.id,
+          customerId: customer.id,
+          senderId: user.id,
+          type: "EMAIL",
+          subject: `Payment Reminder - ${purchase.purchaseNumber}`,
+          body,
+          status: "SENT",
+          sentAt: new Date(),
+        },
+      })
+      console.log(`[EMAIL REMINDER] To: ${customer.email}`)
+    }
+
+    // Send in-app if customer has account
+    if (customer.userId) {
+      await prisma.notification.create({
+        data: {
+          customerId: customer.id,
+          title: "Payment Reminder",
+          body: `Your outstanding balance of GHS ${outstanding.toLocaleString()} for ${purchase.purchaseNumber} is due on ${dueDate}.`,
+          type: "PAYMENT_REMINDER",
+          link: `/customer/purchases/${purchase.id}`,
+        },
+      })
+    }
+
+    revalidatePath(`/shop-admin/${shopSlug}/customers`)
+
+    return { success: true }
+  } catch (error) {
+    console.error("Payment reminder error:", error)
+    return { success: false, error: "Failed to send reminder" }
+  }
+}
+

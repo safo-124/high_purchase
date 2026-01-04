@@ -1,5 +1,5 @@
 import { requireSalesStaffForShop } from "@/lib/auth"
-import { getProductsForSale, getCustomersForSale, getSalesStaffDashboard } from "../../actions"
+import { getProductsForSale, getCustomersForSale, getSalesStaffDashboard, getCollectorsForDropdown } from "../../actions"
 import { NewSaleForm } from "./new-sale-form"
 import { SalesStaffNavbar } from "../components/sales-staff-navbar"
 
@@ -11,10 +11,11 @@ export default async function NewSalePage({ params }: NewSalePageProps) {
   const { shopSlug } = await params
   await requireSalesStaffForShop(shopSlug)
 
-  const [dashboard, products, customers] = await Promise.all([
+  const [dashboard, products, customers, collectors] = await Promise.all([
     getSalesStaffDashboard(shopSlug),
     getProductsForSale(shopSlug),
     getCustomersForSale(shopSlug),
+    getCollectorsForDropdown(shopSlug),
   ])
 
   // Only show products in stock
@@ -39,7 +40,8 @@ export default async function NewSalePage({ params }: NewSalePageProps) {
           <NewSaleForm 
             shopSlug={shopSlug} 
             products={availableProducts} 
-            customers={customers} 
+            customers={customers}
+            collectors={collectors}
           />
         </div>
       </main>
