@@ -33,7 +33,7 @@ export default async function SalesStaffDashboard({ params }: SalesStaffDashboar
         staffName={dashboard.staffName}
       />
 
-      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+      <main className="relative z-10 w-full px-6 py-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           <div className="glass-card p-5 rounded-2xl">

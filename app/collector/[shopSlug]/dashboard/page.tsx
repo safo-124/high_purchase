@@ -27,7 +27,7 @@ export default async function CollectorDashboardPage({ params }: CollectorDashbo
 
       {/* Header */}
       <header className="glass-header sticky top-0 z-50 border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="w-full px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/15 border border-emerald-500/30 flex items-center justify-center">
               <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -61,7 +61,7 @@ export default async function CollectorDashboardPage({ params }: CollectorDashbo
         </div>
       </header>
 
-      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+      <main className="relative z-10 w-full px-6 py-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           <div className="glass-card p-5 rounded-2xl">

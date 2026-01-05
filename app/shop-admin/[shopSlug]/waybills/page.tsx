@@ -45,7 +45,7 @@ export default async function WaybillsPage({ params }: WaybillsPageProps) {
 
       {/* Header */}
       <header className="relative z-10 glass-header">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="w-full px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Logo & Shop Name */}
             <div className="flex items-center gap-4">
@@ -109,7 +109,7 @@ export default async function WaybillsPage({ params }: WaybillsPageProps) {
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+      <main className="relative z-10 w-full px-6 py-8">
         {/* Page Header */}
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-white">Waybills & Deliveries</h2>

@@ -43,7 +43,7 @@ export default async function CustomerNotificationsPage({ params }: CustomerNoti
           unreadCount={dashboardData.notifications.length}
         />
         
-        <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="w-full px-4 sm:px-6 lg:px-8 py-8">
           <NotificationsContent notifications={notifications} />
         </main>
       </div>

@@ -38,7 +38,7 @@ export default async function MessagesPage({ params }: MessagesPageProps) {
 
       {/* Header */}
       <header className="relative z-10 glass-header">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="w-full px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Logo & Shop Name */}
             <div className="flex items-center gap-4">
@@ -97,7 +97,7 @@ export default async function MessagesPage({ params }: MessagesPageProps) {
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+      <main className="relative z-10 w-full px-6 py-8">
         <MessagesContent 
           shopSlug={shopSlug} 
           customers={customers} 

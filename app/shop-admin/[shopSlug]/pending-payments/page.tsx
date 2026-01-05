@@ -1,28 +1,35 @@
 import Link from "next/link"
 import { requireShopAdminForShop } from "@/lib/auth"
-import { getPendingCollectorPayments, getPaymentConfirmationStats } from "../../actions"
-import { PendingPaymentsTable } from "./pending-payments-table"
+import { getAllShopPayments, getPaymentStats } from "../../actions"
+import { PaymentsContent } from "./payments-content"
 import { ShopAdminLogoutButton } from "../dashboard/logout-button"
 
-interface PendingPaymentsPageProps {
+interface PaymentsPageProps {
   params: Promise<{ shopSlug: string }>
+  searchParams: Promise<{ tab?: string; startDate?: string; endDate?: string }>
 }
 
-export default async function PendingPaymentsPage({ params }: PendingPaymentsPageProps) {
+export default async function PaymentsPage({ params, searchParams }: PaymentsPageProps) {
   const { shopSlug } = await params
+  const { tab, startDate, endDate } = await searchParams
   const { user, shop } = await requireShopAdminForShop(shopSlug)
 
-  const [pendingPayments, stats] = await Promise.all([
-    getPendingCollectorPayments(shopSlug),
-    getPaymentConfirmationStats(shopSlug),
-  ])
+  // Parse dates
+  const parsedStartDate = startDate ? new Date(startDate) : undefined
+  const parsedEndDate = endDate ? new Date(endDate) : undefined
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-GH", {
-      style: "currency",
-      currency: "GHS",
-    }).format(amount)
-  }
+  // Determine active tab
+  const activeTab = (tab === "confirmed" || tab === "rejected" || tab === "pending") ? tab : "pending"
+
+  // Fetch payments and stats
+  const [payments, stats] = await Promise.all([
+    getAllShopPayments(shopSlug, {
+      status: activeTab,
+      startDate: parsedStartDate,
+      endDate: parsedEndDate,
+    }),
+    getPaymentStats(shopSlug, parsedStartDate, parsedEndDate),
+  ])
 
   return (
     <div className="min-h-screen bg-mesh">
@@ -45,7 +52,7 @@ export default async function PendingPaymentsPage({ params }: PendingPaymentsPag
 
       {/* Header */}
       <header className="relative z-10 glass-header">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="w-full px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Logo & Shop Name */}
             <div className="flex items-center gap-4">
@@ -109,96 +116,24 @@ export default async function PendingPaymentsPage({ params }: PendingPaymentsPag
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+      <main className="relative z-10 w-full px-6 py-8">
         {/* Page Header */}
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-white">Pending Payment Confirmations</h2>
+          <h2 className="text-2xl font-bold text-white">Payment Management</h2>
           <p className="text-slate-400 mt-1">
-            Review and confirm payments collected by debt collectors
+            View and manage all payments collected by debt collectors
           </p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="glass-card p-5 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/15 border border-amber-500/30 flex items-center justify-center">
-                <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wider">Pending</p>
-                <p className="text-2xl font-bold text-amber-400">{stats.pendingCount}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-card p-5 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/15 border border-amber-500/30 flex items-center justify-center">
-                <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wider">Pending Amount</p>
-                <p className="text-2xl font-bold text-amber-400">{formatCurrency(stats.pendingTotal)}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-card p-5 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/15 border border-green-500/30 flex items-center justify-center">
-                <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wider">Confirmed Today</p>
-                <p className="text-2xl font-bold text-green-400">{stats.confirmedToday}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-card p-5 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500/20 to-rose-500/15 border border-red-500/30 flex items-center justify-center">
-                <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wider">Rejected Today</p>
-                <p className="text-2xl font-bold text-red-400">{stats.rejectedToday}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Info Banner */}
-        {stats.pendingCount > 0 && (
-          <div className="glass-card rounded-2xl p-4 border border-amber-500/30 bg-amber-500/5 mb-8">
-            <div className="flex items-start gap-3">
-              <svg className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <div>
-                <p className="font-medium text-amber-400">Payments Awaiting Your Approval</p>
-                <p className="text-sm text-slate-400 mt-1">
-                  Debt collectors have recorded payments that need your confirmation before they reflect on customer accounts. 
-                  Please review each payment carefully and confirm or reject.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Pending Payments Table */}
-        <div className="glass-card rounded-2xl p-6">
-          <PendingPaymentsTable payments={pendingPayments} shopSlug={shopSlug} />
-        </div>
+        {/* Payments Content */}
+        <PaymentsContent
+          payments={payments}
+          shopSlug={shopSlug}
+          stats={stats}
+          initialTab={activeTab}
+          startDate={startDate || ""}
+          endDate={endDate || ""}
+        />
       </main>
     </div>
   )

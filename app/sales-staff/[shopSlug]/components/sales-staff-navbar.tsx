@@ -25,7 +25,7 @@ export function SalesStaffNavbar({ shopSlug, shopName, staffName, rightContent }
 
   return (
     <header className="glass-header sticky top-0 z-50 border-b border-white/5">
-      <div className="max-w-7xl mx-auto px-6 py-4">
+      <div className="w-full px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-linear-to-br from-indigo-500/20 to-purple-500/15 border border-indigo-500/30 flex items-center justify-center">

@@ -35,7 +35,7 @@ export default async function NewSalePage({ params }: NewSalePageProps) {
         staffName={dashboard.staffName}
       />
 
-      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+      <main className="relative z-10 w-full px-6 py-8">
         <div className="max-w-4xl mx-auto">
           <NewSaleForm 
             shopSlug={shopSlug} 

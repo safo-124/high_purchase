@@ -66,7 +66,7 @@ export default async function CollectorCustomerDetailPage({ params }: CollectorC
 
       {/* Header */}
       <header className="glass-header sticky top-0 z-50 border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="w-full px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
               href={`/collector/${shopSlug}/customers`}
@@ -92,7 +92,7 @@ export default async function CollectorCustomerDetailPage({ params }: CollectorC
         </div>
       </header>
 
-      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+      <main className="relative z-10 w-full px-6 py-8">
         {/* Stats Row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           <div className="glass-card p-5 rounded-2xl">

@@ -1646,6 +1646,23 @@ export async function createPurchase(
 
     const purchaseNumber = await generatePurchaseNumber(customer.id)
 
+    // Validate stock availability for all items
+    for (const item of payload.items) {
+      const product = await prisma.product.findUnique({
+        where: { id: item.productId },
+        select: { stockQuantity: true, name: true },
+      })
+      if (!product) {
+        return { success: false, error: `Product not found: ${item.productName}` }
+      }
+      if (product.stockQuantity < item.quantity) {
+        return { 
+          success: false, 
+          error: `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}` 
+        }
+      }
+    }
+
     const purchase = await prisma.purchase.create({
       data: {
         purchaseNumber,
@@ -1675,6 +1692,18 @@ export async function createPurchase(
       },
     })
 
+    // Deduct stock for each item
+    for (const item of payload.items) {
+      await prisma.product.update({
+        where: { id: item.productId },
+        data: {
+          stockQuantity: {
+            decrement: item.quantity,
+          },
+        },
+      })
+    }
+
     // If down payment was made, record it as a payment
     if (downPayment > 0) {
       await prisma.payment.create({
@@ -1699,11 +1728,13 @@ export async function createPurchase(
         customerId: customer.id,
         customerName: `${customer.firstName} ${customer.lastName}`,
         totalAmount,
+        itemsWithStock: payload.items.map(i => ({ productId: i.productId, quantity: i.quantity })),
       },
     })
 
     revalidatePath(`/shop-admin/${shopSlug}/customers`)
     revalidatePath(`/shop-admin/${shopSlug}/purchases`)
+    revalidatePath(`/shop-admin/${shopSlug}/products`) // Refresh products to show updated stock
 
     return { success: true, data: { purchaseId: purchase.id, purchaseNumber } }
   } catch (error) {
@@ -2091,6 +2122,188 @@ export async function deleteCategory(
   } catch (error) {
     console.error("Delete category error:", error)
     return { success: false, error: "Failed to delete category" }
+  }
+}
+
+// ============================================
+// PAYMENT MANAGEMENT (ALL PAYMENTS)
+// ============================================
+
+export interface PaymentForAdmin {
+  id: string
+  amount: number
+  paymentMethod: PaymentMethod
+  status: string
+  reference: string | null
+  notes: string | null
+  paidAt: Date | null
+  createdAt: Date
+  purchaseId: string
+  purchaseNumber: string
+  customerName: string
+  customerId: string
+  collectorName: string | null
+  collectorId: string | null
+  isConfirmed: boolean
+  confirmedAt: Date | null
+  rejectedAt: Date | null
+  rejectionReason: string | null
+}
+
+/**
+ * Get all payments for shop with optional date filtering
+ */
+export async function getAllShopPayments(
+  shopSlug: string,
+  filters?: {
+    status?: "pending" | "confirmed" | "rejected" | "all"
+    startDate?: Date
+    endDate?: Date
+  }
+): Promise<PaymentForAdmin[]> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const whereClause: Prisma.PaymentWhereInput = {
+    purchase: {
+      customer: {
+        shopId: shop.id,
+      },
+    },
+  }
+
+  // Apply status filter
+  if (filters?.status === "pending") {
+    whereClause.isConfirmed = false
+    whereClause.rejectedAt = null
+  } else if (filters?.status === "confirmed") {
+    whereClause.isConfirmed = true
+  } else if (filters?.status === "rejected") {
+    whereClause.rejectedAt = { not: null }
+  }
+
+  // Apply date filter
+  if (filters?.startDate || filters?.endDate) {
+    whereClause.createdAt = {}
+    if (filters.startDate) {
+      whereClause.createdAt.gte = filters.startDate
+    }
+    if (filters.endDate) {
+      // Include the entire end date
+      const endOfDay = new Date(filters.endDate)
+      endOfDay.setHours(23, 59, 59, 999)
+      whereClause.createdAt.lte = endOfDay
+    }
+  }
+
+  const payments = await prisma.payment.findMany({
+    where: whereClause,
+    include: {
+      purchase: {
+        include: {
+          customer: true,
+        },
+      },
+      collector: {
+        include: {
+          user: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 500, // Limit for performance
+  })
+
+  return payments.map((p) => ({
+    id: p.id,
+    amount: Number(p.amount),
+    paymentMethod: p.paymentMethod,
+    status: p.status,
+    reference: p.reference,
+    notes: p.notes,
+    paidAt: p.paidAt,
+    createdAt: p.createdAt,
+    purchaseId: p.purchaseId,
+    purchaseNumber: p.purchase.purchaseNumber,
+    customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
+    customerId: p.purchase.customerId,
+    collectorName: p.collector?.user?.name || null,
+    collectorId: p.collectorId,
+    isConfirmed: p.isConfirmed,
+    confirmedAt: p.confirmedAt,
+    rejectedAt: p.rejectedAt,
+    rejectionReason: p.rejectionReason,
+  }))
+}
+
+/**
+ * Get payment stats with date range
+ */
+export async function getPaymentStats(
+  shopSlug: string,
+  startDate?: Date,
+  endDate?: Date
+) {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const dateFilter: Prisma.PaymentWhereInput["createdAt"] = {}
+  if (startDate) {
+    dateFilter.gte = startDate
+  }
+  if (endDate) {
+    const endOfDay = new Date(endDate)
+    endOfDay.setHours(23, 59, 59, 999)
+    dateFilter.lte = endOfDay
+  }
+
+  const baseWhere: Prisma.PaymentWhereInput = {
+    purchase: { customer: { shopId: shop.id } },
+    ...(startDate || endDate ? { createdAt: dateFilter } : {}),
+  }
+
+  const [
+    pendingCount,
+    pendingTotal,
+    confirmedCount,
+    confirmedTotal,
+    rejectedCount,
+    rejectedTotal,
+  ] = await Promise.all([
+    prisma.payment.count({
+      where: { ...baseWhere, isConfirmed: false, rejectedAt: null },
+    }),
+    prisma.payment.aggregate({
+      where: { ...baseWhere, isConfirmed: false, rejectedAt: null },
+      _sum: { amount: true },
+    }),
+    prisma.payment.count({
+      where: { ...baseWhere, isConfirmed: true },
+    }),
+    prisma.payment.aggregate({
+      where: { ...baseWhere, isConfirmed: true },
+      _sum: { amount: true },
+    }),
+    prisma.payment.count({
+      where: { ...baseWhere, rejectedAt: { not: null } },
+    }),
+    prisma.payment.aggregate({
+      where: { ...baseWhere, rejectedAt: { not: null } },
+      _sum: { amount: true },
+    }),
+  ])
+
+  return {
+    pending: {
+      count: pendingCount,
+      total: pendingTotal._sum.amount ? Number(pendingTotal._sum.amount) : 0,
+    },
+    confirmed: {
+      count: confirmedCount,
+      total: confirmedTotal._sum.amount ? Number(confirmedTotal._sum.amount) : 0,
+    },
+    rejected: {
+      count: rejectedCount,
+      total: rejectedTotal._sum.amount ? Number(rejectedTotal._sum.amount) : 0,
+    },
   }
 }
 

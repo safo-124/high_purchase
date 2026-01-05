@@ -37,7 +37,7 @@ export default async function ShopAdminDashboard({
 
       {/* Header */}
       <header className="relative z-10 glass-header">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="w-full px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Logo & Shop Name */}
             <div className="flex items-center gap-4">
@@ -101,7 +101,7 @@ export default async function ShopAdminDashboard({
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+      <main className="relative z-10 w-full px-6 py-8">
         {/* Welcome Section */}
         <div className="mb-10">
           <div className="flex items-center gap-3 mb-2">
@@ -294,7 +294,7 @@ export default async function ShopAdminDashboard({
 
       {/* Footer */}
       <footer className="relative z-10 mt-12 border-t border-white/5">
-        <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="w-full px-6 py-6">
           <div className="flex items-center justify-between text-xs text-slate-500">
             <p>© 2025 High Purchase • {shop.name}</p>
             <p>Shop Admin Dashboard v1.0</p>

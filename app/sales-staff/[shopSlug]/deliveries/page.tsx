@@ -37,7 +37,7 @@ export default async function DeliveriesPage({ params }: DeliveriesPageProps) {
         staffName={dashboard.staffName}
       />
 
-      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+      <main className="relative z-10 w-full px-6 py-8">
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="glass-card p-4 rounded-2xl border-2 border-green-500/30 bg-green-500/5">

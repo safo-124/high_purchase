@@ -33,7 +33,7 @@ export default async function BusinessesPage() {
 
       {/* Header */}
       <header className="relative z-10 glass-header">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="w-full px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Logo */}
             <div className="flex items-center gap-4">
@@ -87,7 +87,7 @@ export default async function BusinessesPage() {
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+      <main className="relative z-10 w-full px-6 py-8">
         {/* Page Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
           <div>
@@ -268,7 +268,7 @@ export default async function BusinessesPage() {
 
       {/* Footer */}
       <footer className="relative z-10 mt-12 border-t border-white/5">
-        <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="w-full px-6 py-6">
           <div className="flex items-center justify-between text-xs text-slate-500">
             <p>© 2025 High Purchase • Ghana</p>
             <p>Super Admin Dashboard v1.0</p>

@@ -128,6 +128,12 @@ export function CollectorPurchasesSection({ purchases, shopSlug }: CollectorPurc
                         <div className="text-right">
                           <p className="text-lg font-bold text-orange-400">GHS {purchase.outstandingBalance.toLocaleString()}</p>
                           <p className="text-xs text-slate-400">outstanding</p>
+                          {/* Show minimum monthly payment for Credit purchases */}
+                          {purchase.notes?.includes('[CREDIT]') && purchase.installments > 0 && (
+                            <p className="text-xs text-cyan-400 mt-1">
+                              Min/month: GHS {Math.ceil(purchase.outstandingBalance / purchase.installments).toLocaleString()}
+                            </p>
+                          )}
                         </div>
                         <span className={`px-2.5 py-1 rounded-lg text-xs font-medium ${status.bg} ${status.text}`}>
                           {status.label}
@@ -296,6 +302,25 @@ export function CollectorPurchasesSection({ purchases, shopSlug }: CollectorPurc
                   GHS {paymentModal.purchase.outstandingBalance.toLocaleString()}
                 </span>
               </div>
+
+              {/* Minimum Monthly Payment for Credit purchases */}
+              {paymentModal.purchase.notes?.includes('[CREDIT]') && paymentModal.purchase.installments > 0 && (
+                <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-xl p-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm text-slate-300">Minimum Monthly Payment</span>
+                    <span className="text-lg font-bold text-cyan-400">
+                      GHS {Math.ceil(paymentModal.purchase.outstandingBalance / paymentModal.purchase.installments).toLocaleString()}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentAmount(Math.ceil(paymentModal.purchase!.outstandingBalance / paymentModal.purchase!.installments).toString())}
+                    className="w-full mt-2 px-3 py-2 bg-cyan-500/20 border border-cyan-500/30 rounded-lg text-cyan-400 text-sm font-medium hover:bg-cyan-500/30 transition-all"
+                  >
+                    Use Minimum Amount
+                  </button>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Amount Collected (GHS)</label>

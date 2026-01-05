@@ -421,7 +421,13 @@ export async function recordPaymentAsCollector(
     revalidatePath(`/collector/${shopSlug}/customers/${purchase.customerId}`)
     revalidatePath(`/collector/${shopSlug}/dashboard`)
     revalidatePath(`/collector/${shopSlug}/payments`)
-    return { success: true, data: payment }
+    return { 
+      success: true, 
+      data: {
+        ...payment,
+        amount: Number(payment.amount),
+      }
+    }
   } catch (error) {
     console.error("Record payment error:", error)
     return { success: false, error: "Failed to record payment" }
