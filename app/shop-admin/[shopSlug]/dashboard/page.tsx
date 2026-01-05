@@ -1,7 +1,6 @@
-import { requireShopAdminForShop } from "../../../../lib/auth"
-import prisma from "../../../../lib/prisma"
+import { requireShopAdminForShop } from "@/lib/auth"
+import prisma from "@/lib/prisma"
 import Link from "next/link"
-import { ShopAdminLogoutButton } from "./logout-button"
 
 export default async function ShopAdminDashboard({
   params,
@@ -17,120 +16,36 @@ export default async function ShopAdminDashboard({
   })
 
   return (
-    <div className="min-h-screen bg-mesh">
-      {/* Animated Background Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="orb orb-1" />
-        <div className="orb orb-2" />
-        <div className="orb orb-3" />
+    <div className="p-6">
+      {/* Welcome Section */}
+      <div className="mb-10">
+        <div className="flex items-center gap-3 mb-2">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            Active
+          </span>
+          <span className="text-xs text-slate-500">🇬🇭 {shop.country}</span>
+        </div>
+        <h2 className="text-4xl font-bold text-white mb-2 tracking-tight">
+          Welcome, <span className="text-gradient">{user.name?.split(' ')[0]}</span>
+        </h2>
+        <p className="text-slate-400 text-lg">
+          Manage your shop&apos;s BNPL settings and policies.
+        </p>
       </div>
 
-      {/* Grid Pattern */}
-      <div 
-        className="fixed inset-0 opacity-[0.02] pointer-events-none"
-        style={{
-          backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
-                           linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
-          backgroundSize: '60px 60px'
-        }}
-      />
-
-      {/* Header */}
-      <header className="relative z-10 glass-header">
-        <div className="w-full px-6 py-4">
-          <div className="flex items-center justify-between">
-            {/* Logo & Shop Name */}
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl logo-glow flex items-center justify-center">
-                <span className="text-lg font-bold text-white">
-                  {shop.name.charAt(0).toUpperCase()}
-                </span>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-white tracking-tight">{shop.name}</h1>
-                <p className="text-xs text-slate-400">Shop Admin Portal</p>
-              </div>
+      {/* Stats/Info Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+        {/* Shop Info Card */}
+        <div className="glass-card p-6 rounded-2xl">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/15 border border-violet-500/30 flex items-center justify-center">
+              <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
             </div>
-
-            {/* Navigation */}
-            <nav className="hidden md:flex items-center gap-2">
-              <Link href={`/shop-admin/${shopSlug}/dashboard`} className="nav-link active text-white text-sm font-medium">
-                Dashboard
-              </Link>
-              <Link href={`/shop-admin/${shopSlug}/products`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Products
-              </Link>
-              <Link href={`/shop-admin/${shopSlug}/customers`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Customers
-              </Link>
-              <Link href={`/shop-admin/${shopSlug}/pending-payments`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Payments
-              </Link>
-              <Link href={`/shop-admin/${shopSlug}/waybills`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Waybills
-              </Link>
-              <Link href={`/shop-admin/${shopSlug}/collectors`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Collectors
-              </Link>
-              <Link href={`/shop-admin/${shopSlug}/staff`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Staff
-              </Link>
-              <Link href={`/shop-admin/${shopSlug}/messages`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Messages
-              </Link>
-              <Link href={`/shop-admin/${shopSlug}/policy`} className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Policy
-              </Link>
-            </nav>
-
-            {/* User Menu */}
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:block text-right">
-                <p className="text-sm font-medium text-white">{user.name}</p>
-                <p className="text-xs text-slate-400">{user.email}</p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-white/10 flex items-center justify-center">
-                <span className="text-sm font-semibold text-purple-300">
-                  {user.name?.charAt(0).toUpperCase() || 'A'}
-                </span>
-              </div>
-              <ShopAdminLogoutButton />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="relative z-10 w-full px-6 py-8">
-        {/* Welcome Section */}
-        <div className="mb-10">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              Active
-            </span>
-            <span className="text-xs text-slate-500">🇬🇭 {shop.country}</span>
-          </div>
-          <h2 className="text-4xl font-bold text-white mb-2 tracking-tight">
-            Welcome, <span className="text-gradient">{user.name?.split(' ')[0]}</span>
-          </h2>
-          <p className="text-slate-400 text-lg">
-            Manage your shop&apos;s BNPL settings and policies.
-          </p>
-        </div>
-
-        {/* Stats/Info Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
-          {/* Shop Info Card */}
-          <div className="glass-card p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/15 border border-violet-500/30 flex items-center justify-center">
-                <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">Shop Details</h3>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Shop Details</h3>
                 <p className="text-xs text-slate-400">Your shop information</p>
               </div>
             </div>
@@ -158,8 +73,8 @@ export default async function ShopAdminDashboard({
             </div>
           </div>
 
-          {/* Policy Summary Card */}
-          <div className="glass-card p-6">
+        {/* Policy Summary Card */}
+        <div className="glass-card p-6 rounded-2xl">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/15 border border-blue-500/30 flex items-center justify-center">
@@ -241,7 +156,7 @@ export default async function ShopAdminDashboard({
         </div>
 
         {/* Quick Actions */}
-        <div className="glass-card p-6">
+        <div className="glass-card p-6 rounded-2xl">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/15 border border-green-500/30 flex items-center justify-center">
               <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -254,12 +169,52 @@ export default async function ShopAdminDashboard({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Link
+              href={`/shop-admin/${shopSlug}/products`}
+              className="group flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-violet-500/30 transition-all duration-300"
+            >
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/15 border border-violet-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <svg className="w-6 h-6 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-white font-medium group-hover:text-violet-300 transition-colors">
+                  Manage Products
+                </p>
+                <p className="text-sm text-slate-500">Add and update inventory</p>
+              </div>
+              <svg className="w-5 h-5 text-slate-500 group-hover:text-violet-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+
+            <Link
+              href={`/shop-admin/${shopSlug}/customers`}
+              className="group flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-blue-500/30 transition-all duration-300"
+            >
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/15 border border-blue-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <svg className="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-white font-medium group-hover:text-blue-300 transition-colors">
+                  View Customers
+                </p>
+                <p className="text-sm text-slate-500">Manage customer accounts</p>
+              </div>
+              <svg className="w-5 h-5 text-slate-500 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+
             <Link
               href={`/shop-admin/${shopSlug}/policy`}
               className="group flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-purple-500/30 transition-all duration-300"
             >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/15 border border-purple-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/15 border border-purple-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
                 <svg className="w-6 h-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -267,40 +222,16 @@ export default async function ShopAdminDashboard({
               </div>
               <div className="flex-1">
                 <p className="text-white font-medium group-hover:text-purple-300 transition-colors">
-                  Configure BNPL Policy
+                  Configure Policy
                 </p>
-                <p className="text-sm text-slate-500">Set interest rates, grace period, and fees</p>
+                <p className="text-sm text-slate-500">Set rates and terms</p>
               </div>
               <svg className="w-5 h-5 text-slate-500 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </Link>
-
-            <div className="flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/5 opacity-50 cursor-not-allowed">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-500/20 to-slate-500/10 border border-slate-500/30 flex items-center justify-center">
-                <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <p className="text-slate-400 font-medium">Manage Products</p>
-                <p className="text-sm text-slate-500">Coming soon</p>
-              </div>
-              <span className="px-2 py-1 rounded-lg text-xs bg-white/5 text-slate-500">Soon</span>
-            </div>
           </div>
         </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="relative z-10 mt-12 border-t border-white/5">
-        <div className="w-full px-6 py-6">
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <p>© 2025 High Purchase • {shop.name}</p>
-            <p>Shop Admin Dashboard v1.0</p>
-          </div>
-        </div>
-      </footer>
     </div>
   )
 }

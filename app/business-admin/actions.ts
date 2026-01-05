@@ -28,6 +28,16 @@ export interface ShopData {
   adminEmail: string | null
 }
 
+export interface ShopWithMetrics extends ShopData {
+  totalSales: number
+  totalCollected: number
+  totalOutstanding: number
+  activePurchases: number
+  overduePurchases: number
+  staffCount: number
+  collectorCount: number
+}
+
 /**
  * Get all shops for a business
  */
@@ -327,4 +337,350 @@ export async function getBusinessStats(businessSlug: string) {
     totalCustomers,
     totalPurchases,
   }
+}
+
+/**
+ * Get all shops with detailed performance metrics
+ */
+export async function getBusinessShopsWithMetrics(businessSlug: string): Promise<ShopWithMetrics[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    include: {
+      _count: {
+        select: { 
+          products: true,
+          customers: true,
+        },
+      },
+      members: {
+        where: { isActive: true },
+        include: { user: true },
+      },
+      customers: {
+        include: {
+          purchases: {
+            include: {
+              payments: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return shops.map((shop) => {
+    // Find admin
+    const admin = shop.members.find(m => m.role === "SHOP_ADMIN")
+    
+    // Count staff by role
+    const staffCount = shop.members.filter(m => m.role === "SALES_STAFF").length
+    const collectorCount = shop.members.filter(m => m.role === "DEBT_COLLECTOR").length
+    
+    // Calculate sales metrics
+    let totalSales = 0
+    let totalCollected = 0
+    let activePurchases = 0
+    let overduePurchases = 0
+    
+    const today = new Date()
+    
+    for (const customer of shop.customers) {
+      for (const purchase of customer.purchases) {
+        totalSales += Number(purchase.totalAmount)
+        
+        // Sum payments
+        for (const payment of purchase.payments) {
+          totalCollected += Number(payment.amount)
+        }
+        
+        // Count active/overdue
+        if (purchase.status === "ACTIVE") {
+          activePurchases++
+          if (purchase.dueDate && new Date(purchase.dueDate) < today) {
+            overduePurchases++
+          }
+        }
+      }
+    }
+    
+    const totalOutstanding = totalSales - totalCollected
+
+    return {
+      id: shop.id,
+      name: shop.name,
+      shopSlug: shop.shopSlug,
+      country: shop.country,
+      isActive: shop.isActive,
+      createdAt: shop.createdAt,
+      productCount: shop._count.products,
+      customerCount: shop._count.customers,
+      adminName: admin?.user.name || null,
+      adminEmail: admin?.user.email || null,
+      totalSales,
+      totalCollected,
+      totalOutstanding,
+      activePurchases,
+      overduePurchases,
+      staffCount,
+      collectorCount,
+    }
+  })
+}
+
+/**
+ * Get all customers across the business
+ */
+export async function getBusinessCustomers(businessSlug: string) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const customers = await prisma.customer.findMany({
+    where: { shop: { businessId: business.id } },
+    include: {
+      shop: {
+        select: { name: true, shopSlug: true },
+      },
+      purchases: {
+        include: {
+          payments: true,
+          items: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return customers.map((customer) => {
+    let totalPurchased = 0
+    let totalPaid = 0
+    let activePurchases = 0
+    
+    for (const purchase of customer.purchases) {
+      totalPurchased += Number(purchase.totalAmount)
+      for (const payment of purchase.payments) {
+        totalPaid += Number(payment.amount)
+      }
+      if (purchase.status === "ACTIVE") {
+        activePurchases++
+      }
+    }
+
+    return {
+      id: customer.id,
+      fullName: `${customer.firstName} ${customer.lastName}`,
+      phone: customer.phone,
+      idType: customer.idType,
+      idNumber: customer.idNumber,
+      createdAt: customer.createdAt,
+      shopName: customer.shop.name,
+      shopSlug: customer.shop.shopSlug,
+      totalPurchases: customer.purchases.length,
+      activePurchases,
+      totalPurchased,
+      totalPaid,
+      outstanding: totalPurchased - totalPaid,
+    }
+  })
+}
+
+/**
+ * Get all purchases across the business
+ */
+export async function getBusinessPurchases(businessSlug: string) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const purchases = await prisma.purchase.findMany({
+    where: { customer: { shop: { businessId: business.id } } },
+    include: {
+      customer: {
+        include: {
+          shop: {
+            select: { name: true, shopSlug: true },
+          },
+        },
+      },
+      items: {
+        include: {
+          product: true,
+        },
+      },
+      payments: {
+        orderBy: { createdAt: "desc" },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return purchases.map((purchase) => {
+    const totalPaid = purchase.payments.reduce((sum, p) => sum + Number(p.amount), 0)
+    const outstanding = Number(purchase.totalAmount) - totalPaid
+    const isOverdue = purchase.status === "ACTIVE" && 
+      purchase.dueDate && 
+      new Date(purchase.dueDate) < new Date()
+    
+    // Get product names from items
+    const productNames = purchase.items.map(item => item.productName).join(", ")
+    const firstItem = purchase.items[0]
+    
+    // Calculate installment amount
+    const installmentAmount = purchase.installments > 0 
+      ? (Number(purchase.totalAmount) - Number(purchase.downPayment)) / purchase.installments 
+      : 0
+    
+    // Calculate paid installments based on amount paid
+    const paidInstallments = installmentAmount > 0 
+      ? Math.floor((totalPaid - Number(purchase.downPayment)) / installmentAmount)
+      : 0
+
+    return {
+      id: purchase.id,
+      productName: productNames || "N/A",
+      productSku: firstItem?.product?.sku || "N/A",
+      customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+      customerPhone: purchase.customer.phone,
+      shopName: purchase.customer.shop.name,
+      shopSlug: purchase.customer.shop.shopSlug,
+      totalPrice: Number(purchase.totalAmount),
+      downPayment: Number(purchase.downPayment),
+      installmentAmount,
+      installmentCount: purchase.installments,
+      paidInstallments: Math.max(0, paidInstallments),
+      totalPaid,
+      outstanding,
+      status: purchase.status,
+      dueDate: purchase.dueDate,
+      isOverdue,
+      createdAt: purchase.createdAt,
+      lastPayment: purchase.payments[0] ? {
+        id: purchase.payments[0].id,
+        amount: Number(purchase.payments[0].amount),
+        paidAt: purchase.payments[0].paidAt,
+        createdAt: purchase.payments[0].createdAt,
+      } : null,
+    }
+  })
+}
+
+/**
+ * Get all payments across the business
+ */
+export async function getBusinessPayments(businessSlug: string) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const payments = await prisma.payment.findMany({
+    where: { purchase: { customer: { shop: { businessId: business.id } } } },
+    include: {
+      purchase: {
+        include: {
+          customer: {
+            include: {
+              shop: {
+                select: { name: true, shopSlug: true },
+              },
+            },
+          },
+          items: true,
+        },
+      },
+      collector: {
+        include: {
+          user: {
+            select: { name: true, email: true },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return payments.map((payment) => {
+    const productNames = payment.purchase.items.map(item => item.productName).join(", ")
+    
+    return {
+      id: payment.id,
+      amount: Number(payment.amount),
+      paidAt: payment.paidAt,
+      paymentMethod: payment.paymentMethod,
+      notes: payment.notes,
+      productName: productNames || "N/A",
+      customerName: `${payment.purchase.customer.firstName} ${payment.purchase.customer.lastName}`,
+      customerPhone: payment.purchase.customer.phone,
+      shopName: payment.purchase.customer.shop.name,
+      shopSlug: payment.purchase.customer.shop.shopSlug,
+      collectorName: payment.collector?.user?.name || "System",
+      collectorEmail: payment.collector?.user?.email || null,
+      createdAt: payment.createdAt,
+    }
+  })
+}
+
+/**
+ * Get all staff members across the business
+ */
+export async function getBusinessStaff(businessSlug: string) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const members = await prisma.shopMember.findMany({
+    where: { shop: { businessId: business.id } },
+    include: {
+      user: true,
+      shop: {
+        select: { name: true, shopSlug: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return members.map((member) => ({
+    id: member.id,
+    userId: member.userId,
+    userName: member.user.name,
+    userEmail: member.user.email,
+    role: member.role,
+    isActive: member.isActive,
+    shopName: member.shop.name,
+    shopSlug: member.shop.shopSlug,
+    createdAt: member.createdAt,
+  }))
+}
+
+/**
+ * Get all products across the business
+ */
+export async function getBusinessProducts(businessSlug: string) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const products = await prisma.product.findMany({
+    where: { shop: { businessId: business.id } },
+    include: {
+      shop: {
+        select: { name: true, shopSlug: true },
+      },
+      category: {
+        select: { name: true },
+      },
+      purchaseItems: {
+        select: { id: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return products.map((product) => ({
+    id: product.id,
+    name: product.name,
+    sku: product.sku,
+    description: product.description,
+    category: product.category?.name || null,
+    cashPrice: Number(product.cashPrice),
+    hpPrice: Number(product.creditPrice),
+    stockQuantity: product.stockQuantity,
+    isActive: product.isActive,
+    shopName: product.shop.name,
+    shopSlug: product.shop.shopSlug,
+    purchaseCount: product.purchaseItems.length,
+    createdAt: product.createdAt,
+  }))
 }

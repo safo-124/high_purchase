@@ -1,7 +1,5 @@
 import { requireBusinessAdmin } from "../../../lib/auth"
 import { getBusinessStats, getBusinessShops } from "../actions"
-import Link from "next/link"
-import { LogoutButton } from "./logout-button"
 import { CreateShopDialog } from "./create-shop-dialog"
 import { ShopActions } from "./shop-actions"
 
@@ -16,88 +14,14 @@ export default async function BusinessDashboard({ params }: Props) {
   const shops = await getBusinessShops(businessSlug)
 
   return (
-    <div className="min-h-screen bg-mesh">
-      {/* Animated Background Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="orb orb-1" />
-        <div className="orb orb-2" />
-        <div className="orb orb-3" />
-      </div>
-
-      {/* Grid Pattern */}
-      <div 
-        className="fixed inset-0 opacity-[0.02] pointer-events-none"
-        style={{
-          backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
-                           linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
-          backgroundSize: '60px 60px'
-        }}
-      />
-
-      {/* Header */}
-      <header className="relative z-10 glass-header">
-        <div className="w-full px-6 py-4">
-          <div className="flex items-center justify-between">
-            {/* Logo */}
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl logo-glow flex items-center justify-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6 text-white relative z-10"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-white tracking-tight">{business.name}</h1>
-                <p className="text-xs text-slate-400">Business Admin Portal</p>
-              </div>
-            </div>
-
-            {/* Navigation */}
-            <nav className="hidden md:flex items-center gap-2">
-              <Link href={`/business-admin/${businessSlug}`} className="nav-link active text-white text-sm font-medium">
-                Dashboard
-              </Link>
-              <Link href="/business-admin/select-business" className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Switch Business
-              </Link>
-            </nav>
-
-            {/* User Menu */}
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:block text-right">
-                <p className="text-sm font-medium text-white">{user.name}</p>
-                <p className="text-xs text-slate-400">{user.email}</p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-white/10 flex items-center justify-center">
-                <span className="text-sm font-semibold text-purple-300">
-                  {user.name?.charAt(0).toUpperCase() || 'A'}
-                </span>
-              </div>
-              <LogoutButton />
-            </div>
-          </div>
+    <div className="p-8">
+      {/* Welcome Section */}
+      <div className="mb-10">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-sm text-green-400 font-medium">Business Active</span>
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="relative z-10 w-full px-6 py-8">
-        {/* Welcome Section */}
-        <div className="mb-10">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-sm text-green-400 font-medium">Business Active</span>
-          </div>
-          <h2 className="text-4xl font-bold text-white mb-2 tracking-tight">
+        <h2 className="text-4xl font-bold text-white mb-2 tracking-tight">
             Welcome back, <span className="text-gradient">{user.name?.split(' ')[0]}</span>
           </h2>
           <p className="text-slate-400 text-lg">
@@ -301,17 +225,6 @@ export default async function BusinessDashboard({ params }: Props) {
             </div>
           )}
         </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="relative z-10 mt-12 border-t border-white/5">
-        <div className="w-full px-6 py-6">
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <p>© 2025 High Purchase • Ghana</p>
-            <p>Business Admin Dashboard v1.0</p>
-          </div>
-        </div>
-      </footer>
-    </div>
+      </div>
   )
 }
