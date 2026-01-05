@@ -5,6 +5,7 @@ import { CustomerPurchaseData, updateDeliveryStatus, generateWaybill } from "../
 import { DeliveryStatus } from "@/app/generated/prisma/client"
 import { toast } from "sonner"
 import { WaybillModal } from "../../deliveries/waybill-modal"
+import { BillModal } from "../../components/bill-modal"
 
 interface CustomerPurchasesTableProps {
   purchases: CustomerPurchaseData[]
@@ -39,6 +40,7 @@ export function CustomerPurchasesTable({
 }: CustomerPurchasesTableProps) {
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [waybillPurchaseId, setWaybillPurchaseId] = useState<string | null>(null)
+  const [billPurchaseId, setBillPurchaseId] = useState<string | null>(null)
 
   async function handleStatusChange(purchaseId: string, newStatus: DeliveryStatus) {
     setLoadingId(purchaseId)
@@ -154,6 +156,12 @@ export function CustomerPurchasesTable({
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => setBillPurchaseId(purchase.id)}
+                      className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 text-xs font-medium hover:bg-purple-500/30 transition-all"
+                    >
+                      View Bill
+                    </button>
                     {purchase.hasWaybill ? (
                       <button
                         onClick={() => setWaybillPurchaseId(purchase.id)}
@@ -192,6 +200,14 @@ export function CustomerPurchasesTable({
           shopSlug={shopSlug} 
           purchaseId={waybillPurchaseId} 
           onClose={() => setWaybillPurchaseId(null)} 
+        />
+      )}
+
+      {billPurchaseId && (
+        <BillModal 
+          shopSlug={shopSlug} 
+          purchaseId={billPurchaseId} 
+          onClose={() => setBillPurchaseId(null)} 
         />
       )}
     </>

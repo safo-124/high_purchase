@@ -117,11 +117,11 @@ export function CustomersTable({ customers, collectors, shopSlug }: CustomersTab
                     value={customer.assignedCollectorId || ""}
                     onChange={(e) => handleAssignCollector(customer.id, e.target.value || null)}
                     disabled={assigningId === customer.id}
-                    className="text-sm bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white focus:outline-none focus:border-indigo-500/50 disabled:opacity-50"
+                    className="text-sm bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-white focus:outline-none focus:border-indigo-500/50 disabled:opacity-50"
                   >
-                    <option value="">No collector</option>
+                    <option value="" className="bg-slate-800 text-white">No collector</option>
                     {collectors.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                      <option key={c.id} value={c.id} className="bg-slate-800 text-white">{c.name}</option>
                     ))}
                   </select>
                 </td>

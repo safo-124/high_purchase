@@ -46,89 +46,58 @@ export function WaybillModal({ shopSlug, purchaseId, onClose }: WaybillModalProp
               padding: 20px;
               max-width: 800px;
               margin: 0 auto;
+              color: #111;
             }
-            .header {
-              text-align: center;
-              border-bottom: 2px solid #000;
-              padding-bottom: 20px;
-              margin-bottom: 20px;
-            }
-            .title {
-              font-size: 24px;
-              font-weight: bold;
-              margin-bottom: 5px;
-            }
-            .waybill-number {
-              font-size: 18px;
-              color: #666;
-            }
-            .section {
-              margin-bottom: 20px;
-            }
-            .section-title {
-              font-size: 14px;
-              font-weight: bold;
-              text-transform: uppercase;
-              color: #666;
-              margin-bottom: 10px;
-              border-bottom: 1px solid #ddd;
-              padding-bottom: 5px;
-            }
-            .info-grid {
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 10px;
-            }
-            .info-item label {
-              font-size: 12px;
-              color: #888;
-              display: block;
-            }
-            .info-item span {
-              font-size: 14px;
-              font-weight: 500;
-            }
-            .items-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-top: 10px;
-            }
-            .items-table th,
-            .items-table td {
-              border: 1px solid #ddd;
-              padding: 8px 12px;
-              text-align: left;
-            }
-            .items-table th {
-              background: #f5f5f5;
-              font-size: 12px;
-              text-transform: uppercase;
-            }
-            .total-row {
-              font-weight: bold;
-              background: #f5f5f5;
-            }
-            .signature-section {
-              margin-top: 40px;
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 40px;
-            }
-            .signature-box {
-              border-top: 1px solid #000;
-              padding-top: 10px;
-              text-align: center;
-            }
-            .signature-label {
-              font-size: 12px;
-              color: #666;
-            }
-            .footer {
-              margin-top: 40px;
-              text-align: center;
-              font-size: 12px;
-              color: #888;
-            }
+            * { box-sizing: border-box; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .text-2xl { font-size: 24px; }
+            .text-xl { font-size: 20px; }
+            .text-lg { font-size: 18px; }
+            .text-base { font-size: 16px; }
+            .text-sm { font-size: 14px; }
+            .text-xs { font-size: 12px; }
+            .font-bold { font-weight: bold; }
+            .font-semibold { font-weight: 600; }
+            .font-medium { font-weight: 500; }
+            .uppercase { text-transform: uppercase; }
+            .text-gray-900 { color: #111; }
+            .text-gray-700 { color: #374151; }
+            .text-gray-600 { color: #4b5563; }
+            .text-gray-500 { color: #6b7280; }
+            .border-gray-900 { border-color: #111; }
+            .border-gray-400 { border-color: #9ca3af; }
+            .border-gray-300 { border-color: #d1d5db; }
+            .border-gray-200 { border-color: #e5e7eb; }
+            .border-b { border-bottom-width: 1px; border-bottom-style: solid; }
+            .border-b-2 { border-bottom-width: 2px; border-bottom-style: solid; }
+            .border-t { border-top-width: 1px; border-top-style: solid; }
+            .border { border-width: 1px; border-style: solid; }
+            .bg-gray-100 { background-color: #f3f4f6; }
+            .grid { display: grid; }
+            .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+            .gap-4 { gap: 16px; }
+            .gap-10 { gap: 40px; }
+            .mb-2 { margin-bottom: 8px; }
+            .mb-3 { margin-bottom: 12px; }
+            .mb-5 { margin-bottom: 20px; }
+            .mt-3 { margin-top: 12px; }
+            .mt-4 { margin-top: 16px; }
+            .mt-8 { margin-top: 32px; }
+            .mt-10 { margin-top: 40px; }
+            .pb-1 { padding-bottom: 4px; }
+            .pb-5 { padding-bottom: 20px; }
+            .pt-2 { padding-top: 8px; }
+            .pt-5 { padding-top: 20px; }
+            .p-2 { padding: 8px; }
+            .h-8 { height: 32px; }
+            .h-16 { height: 64px; }
+            .w-full { width: 100%; }
+            .col-span-2 { grid-column: span 2; }
+            .block { display: block; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #d1d5db; padding: 8px; }
+            th { background: #f3f4f6; font-size: 12px; text-transform: uppercase; font-weight: 600; }
             @media print {
               body { padding: 0; }
             }
@@ -189,43 +158,51 @@ export function WaybillModal({ shopSlug, purchaseId, onClose }: WaybillModalProp
             </div>
 
             {/* Waybill Content */}
-            <div ref={printRef}>
+            <div ref={printRef} className="text-gray-900">
               {/* Header */}
-              <div className="header">
-                <div className="title">HIGH PURCHASE</div>
-                <div className="waybill-number">Waybill #{waybill.waybillNumber}</div>
+              <div className="text-center border-b-2 border-gray-900 pb-5 mb-5">
+                <div className="text-2xl font-bold text-gray-900">{waybill.businessName}</div>
+                <div className="text-base text-gray-600">{waybill.shopName}</div>
+                <div className="text-lg font-semibold text-gray-700 mt-3">WAYBILL</div>
+                <div className="text-sm text-gray-500">#{waybill.waybillNumber}</div>
               </div>
 
               {/* Order Info */}
-              <div className="section">
-                <div className="section-title">Order Information</div>
-                <div className="info-grid">
-                  <div className="info-item">
-                    <label>Purchase Number</label>
-                    <span>{waybill.purchaseNumber}</span>
+              <div className="mb-5">
+                <div className="text-xs font-bold uppercase text-gray-600 border-b border-gray-200 pb-1 mb-3">Order Information</div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase block">Purchase Number</label>
+                    <span className="text-sm font-medium text-gray-900">{waybill.purchaseNumber}</span>
                   </div>
-                  <div className="info-item">
-                    <label>Date Generated</label>
-                    <span>{new Date(waybill.generatedAt).toLocaleDateString()}</span>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase block">Date Generated</label>
+                    <span className="text-sm font-medium text-gray-900">{new Date(waybill.generatedAt).toLocaleDateString()}</span>
                   </div>
+                  {waybill.generatedByName && (
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase block">Generated By</label>
+                      <span className="text-sm font-medium text-gray-900">{waybill.generatedByName}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Recipient Info */}
-              <div className="section">
-                <div className="section-title">Recipient Details</div>
-                <div className="info-grid">
-                  <div className="info-item">
-                    <label>Name</label>
-                    <span>{waybill.recipientName}</span>
+              <div className="mb-5">
+                <div className="text-xs font-bold uppercase text-gray-600 border-b border-gray-200 pb-1 mb-3">Recipient Details</div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase block">Name</label>
+                    <span className="text-sm font-medium text-gray-900">{waybill.recipientName}</span>
                   </div>
-                  <div className="info-item">
-                    <label>Phone</label>
-                    <span>{waybill.recipientPhone}</span>
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase block">Phone</label>
+                    <span className="text-sm font-medium text-gray-900">{waybill.recipientPhone}</span>
                   </div>
-                  <div className="info-item" style={{ gridColumn: "1 / -1" }}>
-                    <label>Delivery Address</label>
-                    <span>
+                  <div className="col-span-2">
+                    <label className="text-xs text-gray-500 uppercase block">Delivery Address</label>
+                    <span className="text-sm font-medium text-gray-900">
                       {waybill.deliveryAddress}
                       {waybill.deliveryCity && `, ${waybill.deliveryCity}`}
                       {waybill.deliveryRegion && `, ${waybill.deliveryRegion}`}
@@ -235,29 +212,29 @@ export function WaybillModal({ shopSlug, purchaseId, onClose }: WaybillModalProp
               </div>
 
               {/* Items */}
-              <div className="section">
-                <div className="section-title">Items</div>
-                <table className="items-table">
+              <div className="mb-5">
+                <div className="text-xs font-bold uppercase text-gray-600 border-b border-gray-200 pb-1 mb-3">Items</div>
+                <table className="w-full border-collapse">
                   <thead>
-                    <tr>
-                      <th>Item</th>
-                      <th style={{ textAlign: "center" }}>Qty</th>
-                      <th style={{ textAlign: "right" }}>Unit Price</th>
-                      <th style={{ textAlign: "right" }}>Total</th>
+                    <tr className="bg-gray-100">
+                      <th className="border border-gray-300 p-2 text-left text-xs uppercase font-semibold text-gray-700">Item</th>
+                      <th className="border border-gray-300 p-2 text-center text-xs uppercase font-semibold text-gray-700">Qty</th>
+                      <th className="border border-gray-300 p-2 text-right text-xs uppercase font-semibold text-gray-700">Unit Price</th>
+                      <th className="border border-gray-300 p-2 text-right text-xs uppercase font-semibold text-gray-700">Total</th>
                     </tr>
                   </thead>
                   <tbody>
                     {waybill.items.map((item, i) => (
                       <tr key={i}>
-                        <td>{item.productName}</td>
-                        <td style={{ textAlign: "center" }}>{item.quantity}</td>
-                        <td style={{ textAlign: "right" }}>GHS {item.unitPrice.toLocaleString()}</td>
-                        <td style={{ textAlign: "right" }}>GHS {(item.unitPrice * item.quantity).toLocaleString()}</td>
+                        <td className="border border-gray-300 p-2 text-gray-900">{item.productName}</td>
+                        <td className="border border-gray-300 p-2 text-center text-gray-900">{item.quantity}</td>
+                        <td className="border border-gray-300 p-2 text-right text-gray-900">GHS {item.unitPrice.toLocaleString()}</td>
+                        <td className="border border-gray-300 p-2 text-right text-gray-900">GHS {(item.unitPrice * item.quantity).toLocaleString()}</td>
                       </tr>
                     ))}
-                    <tr className="total-row">
-                      <td colSpan={3}>Subtotal</td>
-                      <td style={{ textAlign: "right" }}>GHS {waybill.subtotal.toLocaleString()}</td>
+                    <tr className="bg-gray-100 font-bold">
+                      <td colSpan={3} className="border border-gray-300 p-2 text-gray-900">Subtotal</td>
+                      <td className="border border-gray-300 p-2 text-right text-gray-900">GHS {waybill.subtotal.toLocaleString()}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -265,29 +242,73 @@ export function WaybillModal({ shopSlug, purchaseId, onClose }: WaybillModalProp
 
               {/* Special Instructions */}
               {waybill.specialInstructions && (
-                <div className="section">
-                  <div className="section-title">Special Instructions</div>
-                  <p style={{ fontSize: "14px" }}>{waybill.specialInstructions}</p>
+                <div className="mb-5">
+                  <div className="text-xs font-bold uppercase text-gray-600 border-b border-gray-200 pb-1 mb-3">Special Instructions</div>
+                  <p className="text-sm text-gray-900">{waybill.specialInstructions}</p>
                 </div>
               )}
 
               {/* Signature Section */}
-              <div className="signature-section">
-                <div>
-                  <div className="signature-box">
-                    <div className="signature-label">Delivered By (Signature & Date)</div>
+              <div className="mt-10">
+                <div className="text-xs font-bold uppercase text-gray-600 border-b border-gray-200 pb-1 mb-5">Authorization & Receipt</div>
+                
+                <div className="grid grid-cols-2 gap-10">
+                  {/* Sales Staff Signature */}
+                  <div>
+                    <div className="mb-2">
+                      <label className="text-xs text-gray-500 uppercase block">Sales Staff</label>
+                      <span className="text-sm font-medium text-gray-900">{waybill.generatedByName || "-"}</span>
+                    </div>
+                    <div className="h-16 border-b-2 border-gray-400 mb-2"></div>
+                    <div className="text-xs text-gray-600 text-center">Signature</div>
+                    <div className="h-8 border-b border-gray-300 mt-4 mb-1"></div>
+                    <div className="text-xs text-gray-600 text-center">Date</div>
+                  </div>
+
+                  {/* Shop Admin Signature */}
+                  <div>
+                    <div className="mb-2">
+                      <label className="text-xs text-gray-500 uppercase block">Authorized By (Shop Admin)</label>
+                      <span className="text-sm font-medium text-gray-900">_____________________</span>
+                    </div>
+                    <div className="h-16 border-b-2 border-gray-400 mb-2"></div>
+                    <div className="text-xs text-gray-600 text-center">Signature</div>
+                    <div className="h-8 border-b border-gray-300 mt-4 mb-1"></div>
+                    <div className="text-xs text-gray-600 text-center">Date</div>
                   </div>
                 </div>
-                <div>
-                  <div className="signature-box">
-                    <div className="signature-label">Received By (Signature & Date)</div>
+
+                {/* Delivery Person & Receiver */}
+                <div className="grid grid-cols-2 gap-10 mt-8">
+                  {/* Delivery Person */}
+                  <div>
+                    <div className="mb-2">
+                      <label className="text-xs text-gray-500 uppercase block">Delivered By</label>
+                      <span className="text-sm font-medium text-gray-900">_____________________</span>
+                    </div>
+                    <div className="h-16 border-b-2 border-gray-400 mb-2"></div>
+                    <div className="text-xs text-gray-600 text-center">Signature</div>
+                    <div className="h-8 border-b border-gray-300 mt-4 mb-1"></div>
+                    <div className="text-xs text-gray-600 text-center">Date</div>
+                  </div>
+
+                  {/* Receiver */}
+                  <div>
+                    <div className="mb-2">
+                      <label className="text-xs text-gray-500 uppercase block">Received By</label>
+                      <span className="text-sm font-medium text-gray-900">{waybill.receivedBy || "_____________________"}</span>
+                    </div>
+                    <div className="h-16 border-b-2 border-gray-400 mb-2"></div>
+                    <div className="text-xs text-gray-600 text-center">Signature</div>
+                    <div className="h-8 border-b border-gray-300 mt-4 mb-1"></div>
+                    <div className="text-xs text-gray-600 text-center">Date</div>
                   </div>
                 </div>
               </div>
 
               {/* Footer */}
-              <div className="footer">
-                <p>Thank you for shopping with High Purchase!</p>
+              <div className="mt-10 text-center text-xs text-gray-500 border-t border-gray-200 pt-5">
+                <p>Thank you for shopping with {waybill.businessName}!</p>
                 <p>For inquiries, please contact your sales representative.</p>
               </div>
             </div>

@@ -3,13 +3,15 @@
 import { revalidatePath } from "next/cache"
 import prisma from "../../lib/prisma"
 import { requireCollectorForShop, createAuditLog } from "../../lib/auth"
-import { PaymentPreference, PaymentMethod, PurchaseStatus } from "../generated/prisma/client"
+import { PaymentPreference, PaymentMethod, PurchaseStatus, Prisma, Role } from "../generated/prisma/client"
 
 export type ActionResult = {
   success: boolean
   error?: string
   data?: unknown
 }
+
+export type PurchaseTypeOption = "CASH" | "LAYAWAY" | "CREDIT"
 
 // ============================================
 // CUSTOMER INTERFACES
@@ -522,4 +524,531 @@ export async function getCollectorPaymentHistory(shopSlug: string): Promise<Pend
     customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
     customerId: p.purchase.customerId,
   }))
+}
+
+// ============================================
+// PRODUCTS (VIEW ONLY FOR COLLECTORS)
+// ============================================
+
+export interface ProductForCollector {
+  id: string
+  name: string
+  sku: string | null
+  description: string | null
+  price: number
+  cashPrice: number
+  layawayPrice: number
+  creditPrice: number
+  stockQuantity: number
+  category: string | null
+  imageUrl: string | null
+  isActive: boolean
+}
+
+export async function getProductsForCollector(shopSlug: string): Promise<ProductForCollector[]> {
+  const { shop } = await requireCollectorForShop(shopSlug)
+
+  const products = await prisma.product.findMany({
+    where: {
+      shopId: shop.id,
+      isActive: true,
+    },
+    include: {
+      category: true,
+    },
+    orderBy: { name: "asc" },
+  })
+
+  return products.map((p) => ({
+    id: p.id,
+    name: p.name,
+    sku: p.sku,
+    description: p.description,
+    price: Number(p.price),
+    cashPrice: Number(p.cashPrice),
+    layawayPrice: Number(p.layawayPrice),
+    creditPrice: Number(p.creditPrice),
+    stockQuantity: p.stockQuantity,
+    category: p.category?.name || null,
+    imageUrl: p.imageUrl,
+    isActive: p.isActive,
+  }))
+}
+
+// ============================================
+// CUSTOMERS FOR SALE (ALL SHOP CUSTOMERS)
+// ============================================
+
+export interface CustomerForCollectorSale {
+  id: string
+  firstName: string
+  lastName: string
+  phone: string
+  email: string | null
+}
+
+export async function getCustomersForCollectorSale(shopSlug: string): Promise<CustomerForCollectorSale[]> {
+  const { shop } = await requireCollectorForShop(shopSlug)
+
+  const customers = await prisma.customer.findMany({
+    where: {
+      shopId: shop.id,
+      isActive: true,
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      email: true,
+    },
+    orderBy: { firstName: "asc" },
+  })
+
+  return customers
+}
+
+// ============================================
+// CREATE SALE (FOR COLLECTORS)
+// ============================================
+
+export interface CollectorSalePayload {
+  customerId: string
+  productId: string
+  quantity: number
+  downPayment: number
+  purchaseType: PurchaseTypeOption
+  tenorDays: number
+}
+
+export async function createCollectorSale(
+  shopSlug: string,
+  payload: CollectorSalePayload
+): Promise<ActionResult> {
+  try {
+    const { user, shop, membership } = await requireCollectorForShop(shopSlug)
+
+    // Validate inputs
+    if (!payload.customerId) {
+      return { success: false, error: "Customer is required" }
+    }
+
+    if (!payload.productId) {
+      return { success: false, error: "Product is required" }
+    }
+
+    if (payload.quantity < 1) {
+      return { success: false, error: "Quantity must be at least 1" }
+    }
+
+    if (payload.downPayment < 0) {
+      return { success: false, error: "Down payment cannot be negative" }
+    }
+
+    if (payload.tenorDays < 1) {
+      return { success: false, error: "Tenor must be at least 1 day" }
+    }
+
+    // Verify customer belongs to shop
+    const customer = await prisma.customer.findFirst({
+      where: { id: payload.customerId, shopId: shop.id },
+    })
+
+    if (!customer) {
+      return { success: false, error: "Customer not found" }
+    }
+
+    // Verify product belongs to shop and has stock
+    const product = await prisma.product.findFirst({
+      where: { id: payload.productId, shopId: shop.id, isActive: true },
+    })
+
+    if (!product) {
+      return { success: false, error: "Product not found" }
+    }
+
+    if (product.stockQuantity < payload.quantity) {
+      return { success: false, error: `Insufficient stock. Only ${product.stockQuantity} available.` }
+    }
+
+    // Get shop policy for interest calculation
+    const policy = await prisma.shopPolicy.findUnique({
+      where: { shopId: shop.id },
+    })
+
+    if (!policy) {
+      return { success: false, error: "Shop policy not configured. Please contact your administrator." }
+    }
+
+    // Check tenor against policy
+    if (payload.tenorDays > policy.maxTenorDays) {
+      return { success: false, error: `Tenor cannot exceed ${policy.maxTenorDays} days` }
+    }
+
+    // Get the appropriate price based on purchase type
+    let unitPrice: number
+    switch (payload.purchaseType) {
+      case "CASH":
+        unitPrice = Number(product.cashPrice)
+        break
+      case "LAYAWAY":
+        unitPrice = Number(product.layawayPrice)
+        break
+      case "CREDIT":
+      default:
+        unitPrice = Number(product.creditPrice)
+        break
+    }
+
+    // Fallback to legacy price if tier price is 0
+    if (unitPrice === 0) {
+      unitPrice = Number(product.price)
+    }
+
+    const subtotal = unitPrice * payload.quantity
+    const interestRate = Number(policy.interestRate) / 100
+
+    // For CASH purchases, no interest
+    let interestAmount = 0
+    if (payload.purchaseType !== "CASH") {
+      if (policy.interestType === "FLAT") {
+        interestAmount = subtotal * interestRate
+      } else if (policy.interestType === "MONTHLY") {
+        const months = payload.tenorDays / 30
+        interestAmount = subtotal * interestRate * months
+      }
+    }
+
+    const totalAmount = subtotal + interestAmount
+    const downPayment = Math.min(payload.downPayment, totalAmount)
+    const outstandingBalance = totalAmount - downPayment
+
+    // Calculate due date
+    const dueDate = new Date()
+    dueDate.setDate(dueDate.getDate() + payload.tenorDays)
+
+    // Generate purchase number
+    const purchaseCount = await prisma.purchase.count({
+      where: { customerId: customer.id },
+    })
+    const purchaseNumber = `HP-${String(purchaseCount + 1).padStart(4, "0")}`
+
+    // Create purchase and update stock in a transaction
+    const purchase = await prisma.$transaction(async (tx) => {
+      // Decrement stock
+      await tx.product.update({
+        where: { id: product.id },
+        data: { stockQuantity: { decrement: payload.quantity } },
+      })
+
+      // Create purchase
+      const newPurchase = await tx.purchase.create({
+        data: {
+          purchaseNumber,
+          customerId: customer.id,
+          purchaseType: payload.purchaseType,
+          status: outstandingBalance === 0 ? "COMPLETED" : "ACTIVE",
+          subtotal: new Prisma.Decimal(subtotal),
+          interestAmount: new Prisma.Decimal(interestAmount),
+          totalAmount: new Prisma.Decimal(totalAmount),
+          amountPaid: new Prisma.Decimal(downPayment),
+          outstandingBalance: new Prisma.Decimal(outstandingBalance),
+          downPayment: new Prisma.Decimal(downPayment),
+          installments: payload.purchaseType === "CASH" ? 1 : Math.ceil(payload.tenorDays / 30),
+          startDate: new Date(),
+          dueDate,
+          interestType: policy.interestType,
+          interestRate: policy.interestRate,
+          notes: `${payload.purchaseType} sale by Collector ${user.name}`,
+          items: {
+            create: {
+              productId: product.id,
+              productName: product.name,
+              quantity: payload.quantity,
+              unitPrice: new Prisma.Decimal(unitPrice),
+              totalPrice: new Prisma.Decimal(subtotal),
+            },
+          },
+        },
+        include: {
+          items: {
+            include: { product: true },
+          },
+        },
+      })
+
+      // Create down payment record if > 0
+      if (downPayment > 0) {
+        await tx.payment.create({
+          data: {
+            purchaseId: newPurchase.id,
+            amount: new Prisma.Decimal(downPayment),
+            paymentMethod: "CASH",
+            status: "COMPLETED",
+            paidAt: new Date(),
+            collectorId: membership?.id || null,
+            notes: "Down payment at time of purchase (Collector sale)",
+          },
+        })
+      }
+
+      // Auto-assign the collector to the customer if not already assigned
+      if (!customer.assignedCollectorId && membership?.id) {
+        await tx.customer.update({
+          where: { id: customer.id },
+          data: { assignedCollectorId: membership.id },
+        })
+      }
+
+      return newPurchase
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "COLLECTOR_SALE_CREATED",
+      entityType: "Purchase",
+      entityId: purchase.id,
+      metadata: {
+        shopId: shop.id,
+        shopName: shop.name,
+        customerId: customer.id,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        productId: product.id,
+        productName: product.name,
+        quantity: payload.quantity,
+        totalAmount,
+        downPayment,
+        tenorDays: payload.tenorDays,
+        collectorId: membership?.id,
+      },
+    })
+
+    revalidatePath(`/collector/${shopSlug}/dashboard`)
+    revalidatePath(`/collector/${shopSlug}/new-sale`)
+    revalidatePath(`/collector/${shopSlug}/products`)
+    revalidatePath(`/shop-admin/${shopSlug}/dashboard`)
+    revalidatePath(`/shop-admin/${shopSlug}/products`)
+
+    return {
+      success: true,
+      data: {
+        purchaseId: purchase.id,
+        purchaseNumber,
+        totalAmount,
+        downPayment,
+        outstandingBalance,
+        dueDate: dueDate.toISOString(),
+      },
+    }
+  } catch (error) {
+    console.error("Error creating collector sale:", error)
+    return { success: false, error: "Failed to create sale" }
+  }
+}
+
+// ============================================
+// GET COLLECTORS FOR DROPDOWN
+// ============================================
+
+export interface CollectorOption {
+  id: string
+  name: string
+}
+
+export async function getCollectorsForDropdown(shopSlug: string): Promise<CollectorOption[]> {
+  const { shop } = await requireCollectorForShop(shopSlug)
+
+  const members = await prisma.shopMember.findMany({
+    where: {
+      shopId: shop.id,
+      role: Role.DEBT_COLLECTOR,
+    },
+    include: {
+      user: true,
+    },
+  })
+
+  return members.map((m) => ({
+    id: m.id,
+    name: m.user.name || m.user.email || "Unknown",
+  }))
+}
+
+// ============================================
+// QUICK CREATE CUSTOMER (FOR COLLECTORS)
+// ============================================
+
+export async function createQuickCustomerAsCollector(
+  shopSlug: string,
+  payload: {
+    firstName: string
+    lastName: string
+    phone: string
+    email?: string | null
+    idType?: string | null
+    idNumber?: string | null
+    address?: string | null
+    city?: string | null
+    region?: string | null
+    preferredPayment?: PaymentPreference
+    notes?: string | null
+  }
+): Promise<ActionResult> {
+  try {
+    const { user, shop, membership } = await requireCollectorForShop(shopSlug)
+
+    // Validate required fields
+    if (!payload.firstName || !payload.lastName || !payload.phone) {
+      return { success: false, error: "First name, last name, and phone are required" }
+    }
+
+    // Check for duplicate phone
+    const existing = await prisma.customer.findFirst({
+      where: { phone: payload.phone, shopId: shop.id },
+    })
+
+    if (existing) {
+      return { success: false, error: "A customer with this phone number already exists" }
+    }
+
+    const customer = await prisma.customer.create({
+      data: {
+        shopId: shop.id,
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        phone: payload.phone,
+        email: payload.email || null,
+        idType: payload.idType || null,
+        idNumber: payload.idNumber || null,
+        address: payload.address || null,
+        city: payload.city || null,
+        region: payload.region || null,
+        preferredPayment: payload.preferredPayment || "BOTH",
+        notes: payload.notes || null,
+        assignedCollectorId: membership?.id || null, // Auto-assign to this collector
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CUSTOMER_CREATED_BY_COLLECTOR",
+      entityType: "Customer",
+      entityId: customer.id,
+      metadata: {
+        shopId: shop.id,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+      },
+    })
+
+    revalidatePath(`/collector/${shopSlug}`)
+    return {
+      success: true,
+      data: {
+        id: customer.id,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        phone: customer.phone,
+      },
+    }
+  } catch (error) {
+    console.error("Create customer error:", error)
+    return { success: false, error: "Failed to create customer" }
+  }
+}
+
+// ============================================
+// BILL DATA FOR COLLECTOR
+// ============================================
+
+export interface CollectorBillData {
+  purchaseId: string
+  purchaseNumber: string
+  purchaseType: string
+  createdAt: Date
+  dueDate: Date | null
+  customer: {
+    name: string
+    phone: string
+    address: string | null
+    city: string | null
+    region: string | null
+  }
+  shop: {
+    name: string
+    phone: string | null
+    address: string | null
+  }
+  items: {
+    productName: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+  }[]
+  subtotal: number
+  interestAmount: number
+  totalAmount: number
+  downPayment: number
+  amountPaid: number
+  outstandingBalance: number
+  installments: number
+  interestRate: number
+  interestType: string
+  collectorName: string | null
+}
+
+export async function getCollectorBillData(shopSlug: string, purchaseId: string): Promise<CollectorBillData | null> {
+  const { user, shop } = await requireCollectorForShop(shopSlug)
+
+  const purchase = await prisma.purchase.findFirst({
+    where: {
+      id: purchaseId,
+      customer: { shopId: shop.id },
+    },
+    include: {
+      customer: true,
+      items: {
+        include: { product: true },
+      },
+    },
+  })
+
+  if (!purchase) {
+    return null
+  }
+
+  return {
+    purchaseId: purchase.id,
+    purchaseNumber: purchase.purchaseNumber,
+    purchaseType: purchase.purchaseType,
+    createdAt: purchase.createdAt,
+    dueDate: purchase.dueDate,
+    customer: {
+      name: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+      phone: purchase.customer.phone,
+      address: purchase.customer.address,
+      city: purchase.customer.city,
+      region: purchase.customer.region,
+    },
+    shop: {
+      name: shop.name,
+      phone: null,
+      address: null,
+    },
+    items: purchase.items.map((item) => ({
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      totalPrice: Number(item.totalPrice),
+    })),
+    subtotal: Number(purchase.subtotal),
+    interestAmount: Number(purchase.interestAmount),
+    totalAmount: Number(purchase.totalAmount),
+    downPayment: Number(purchase.downPayment),
+    amountPaid: Number(purchase.amountPaid),
+    outstandingBalance: Number(purchase.outstandingBalance),
+    installments: purchase.installments,
+    interestRate: Number(purchase.interestRate),
+    interestType: purchase.interestType,
+    collectorName: user.name,
+  }
 }

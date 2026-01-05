@@ -17,53 +17,15 @@ export default async function CollectorDashboardPage({ params }: CollectorDashbo
   const customersWithLoans = customers.filter((c) => c.totalOwed > 0)
 
   return (
-    <div className="min-h-screen bg-mesh">
-      {/* Background Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/20 rounded-full blur-[128px]" />
-        <div className="absolute top-1/3 -left-40 w-80 h-80 bg-teal-500/15 rounded-full blur-[100px]" />
-        <div className="absolute bottom-0 right-1/4 w-72 h-72 bg-cyan-500/10 rounded-full blur-[90px]" />
+    <div className="p-6">
+      {/* Page Header */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-white mb-2">Dashboard</h1>
+        <p className="text-slate-400">Welcome back, {dashboard.collectorName}</p>
       </div>
 
-      {/* Header */}
-      <header className="glass-header sticky top-0 z-50 border-b border-white/5">
-        <div className="w-full px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/15 border border-emerald-500/30 flex items-center justify-center">
-              <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">{dashboard.shopName}</h1>
-              <p className="text-sm text-slate-400">Collector: {dashboard.collectorName}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href={`/collector/${shopSlug}/customers`}
-              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-sm font-medium transition-all"
-            >
-              All Customers
-            </Link>
-            <form action="/api/auth/logout" method="POST">
-              <button
-                type="submit"
-                className="p-2 rounded-xl bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-all"
-                title="Sign out"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
-
-      <main className="relative z-10 w-full px-6 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           <div className="glass-card p-5 rounded-2xl">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/15 border border-emerald-500/30 flex items-center justify-center">
@@ -214,7 +176,6 @@ export default async function CollectorDashboardPage({ params }: CollectorDashbo
             )}
           </div>
         </div>
-      </main>
     </div>
   )
 }

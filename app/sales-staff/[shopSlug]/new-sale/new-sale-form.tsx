@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { ProductForSale, CustomerForSale, createSale, createQuickCustomer, PurchaseTypeOption, CollectorOption } from "../../actions"
 import { toast } from "sonner"
+import { BillModal } from "../components/bill-modal"
 
 interface NewSaleFormProps {
   shopSlug: string
@@ -44,6 +45,8 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [customers, setCustomers] = useState(initialCustomers)
+  const [showBillModal, setShowBillModal] = useState(false)
+  const [createdPurchaseId, setCreatedPurchaseId] = useState<string | null>(null)
 
   // Form state
   const [customerId, setCustomerId] = useState("")
@@ -109,7 +112,9 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
 
     if (result.success) {
       toast.success("Sale created successfully!")
-      router.push(`/sales-staff/${shopSlug}/dashboard`)
+      const data = result.data as { purchaseId: string }
+      setCreatedPurchaseId(data.purchaseId)
+      setShowBillModal(true)
     } else {
       toast.error(result.error || "Failed to create sale")
     }
@@ -751,6 +756,19 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
             </form>
           </div>
         </div>
+      )}
+
+      {/* Bill Modal */}
+      {showBillModal && createdPurchaseId && (
+        <BillModal
+          shopSlug={shopSlug}
+          purchaseId={createdPurchaseId}
+          onClose={() => {
+            setShowBillModal(false)
+            setCreatedPurchaseId(null)
+            router.push(`/sales-staff/${shopSlug}/dashboard`)
+          }}
+        />
       )}
     </>
   )

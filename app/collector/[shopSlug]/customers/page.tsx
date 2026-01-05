@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { requireCollectorForShop } from "@/lib/auth"
-import { getAssignedCustomers, getCollectorDashboard } from "../../actions"
+import { getAssignedCustomers } from "../../actions"
 import { CreateCustomerDialog } from "./create-customer-dialog"
 
 interface CollectorCustomersPageProps {
@@ -11,44 +11,24 @@ export default async function CollectorCustomersPage({ params }: CollectorCustom
   const { shopSlug } = await params
   await requireCollectorForShop(shopSlug)
 
-  const dashboard = await getCollectorDashboard(shopSlug)
   const customers = await getAssignedCustomers(shopSlug)
 
   // Sort by outstanding balance (highest first)
   const sortedCustomers = [...customers].sort((a, b) => b.totalOwed - a.totalOwed)
 
   return (
-    <div className="min-h-screen bg-mesh">
-      {/* Background Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/20 rounded-full blur-[128px]" />
-        <div className="absolute top-1/3 -left-40 w-80 h-80 bg-teal-500/15 rounded-full blur-[100px]" />
+    <div className="p-6">
+      {/* Page Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white mb-2">My Customers</h1>
+          <p className="text-slate-400">Manage and view your assigned customers</p>
+        </div>
+        <CreateCustomerDialog shopSlug={shopSlug} />
       </div>
 
-      {/* Header */}
-      <header className="glass-header sticky top-0 z-50 border-b border-white/5">
-        <div className="w-full px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href={`/collector/${shopSlug}/dashboard`}
-              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-            </Link>
-            <div>
-              <h1 className="text-xl font-bold text-white">My Customers</h1>
-              <p className="text-sm text-slate-400">{dashboard.shopName}</p>
-            </div>
-          </div>
-          <CreateCustomerDialog shopSlug={shopSlug} />
-        </div>
-      </header>
-
-      <main className="relative z-10 w-full px-6 py-8">
-        {/* Stats Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           <div className="glass-card p-4 rounded-xl">
             <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Total</p>
             <p className="text-2xl font-bold text-white">{customers.length}</p>
@@ -167,7 +147,6 @@ export default async function CollectorCustomersPage({ params }: CollectorCustom
             </div>
           )}
         </div>
-      </main>
     </div>
   )
 }

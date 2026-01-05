@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { requireCollectorForShop } from "@/lib/auth"
-import { getCollectorDashboard, getCollectorPendingPayments, getCollectorPaymentHistory } from "../../actions"
+import { getCollectorPendingPayments, getCollectorPaymentHistory } from "../../actions"
 
 interface PaymentsPageProps {
   params: Promise<{ shopSlug: string }>
@@ -10,8 +10,7 @@ export default async function CollectorPaymentsPage({ params }: PaymentsPageProp
   const { shopSlug } = await params
   await requireCollectorForShop(shopSlug)
 
-  const [dashboard, pendingPayments, paymentHistory] = await Promise.all([
-    getCollectorDashboard(shopSlug),
+  const [pendingPayments, paymentHistory] = await Promise.all([
     getCollectorPendingPayments(shopSlug),
     getCollectorPaymentHistory(shopSlug),
   ])
@@ -39,64 +38,15 @@ export default async function CollectorPaymentsPage({ params }: PaymentsPageProp
   }
 
   return (
-    <div className="min-h-screen bg-mesh">
-      {/* Background Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/20 rounded-full blur-[128px]" />
-        <div className="absolute top-1/3 -left-40 w-80 h-80 bg-teal-500/15 rounded-full blur-[100px]" />
+    <div className="p-6">
+      {/* Page Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-white mb-2">Payments</h1>
+        <p className="text-slate-400">View your collected payments and their status</p>
       </div>
 
-      {/* Header */}
-      <header className="glass-header sticky top-0 z-50 border-b border-white/5">
-        <div className="w-full px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/15 border border-emerald-500/30 flex items-center justify-center">
-              <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">{dashboard.shopName}</h1>
-              <p className="text-sm text-slate-400">Collector: {dashboard.collectorName}</p>
-            </div>
-          </div>
-          <nav className="flex items-center gap-2">
-            <Link
-              href={`/collector/${shopSlug}/dashboard`}
-              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-sm font-medium transition-all"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href={`/collector/${shopSlug}/customers`}
-              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-sm font-medium transition-all"
-            >
-              Customers
-            </Link>
-            <Link
-              href={`/collector/${shopSlug}/payments`}
-              className="px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 text-sm font-medium"
-            >
-              Payments
-            </Link>
-            <form action="/api/auth/logout" method="POST">
-              <button
-                type="submit"
-                className="p-2 rounded-xl bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-all"
-                title="Sign out"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-              </button>
-            </form>
-          </nav>
-        </div>
-      </header>
-
-      <main className="relative z-10 w-full px-6 py-8">
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="glass-card p-4 rounded-2xl">
             <p className="text-xs text-slate-400 uppercase mb-1">Pending Confirmation</p>
             <p className="text-2xl font-bold text-amber-400">{pendingPayments.length}</p>
@@ -237,7 +187,6 @@ export default async function CollectorPaymentsPage({ params }: PaymentsPageProp
             </div>
           )}
         </div>
-      </main>
     </div>
   )
 }

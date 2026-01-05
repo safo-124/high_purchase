@@ -1110,6 +1110,10 @@ export interface WaybillData {
   subtotal: number
   generatedAt: Date
   receivedBy: string | null
+  // Shop and staff info
+  shopName: string
+  businessName: string
+  generatedByName: string | null
 }
 
 export async function generateWaybill(
@@ -1201,6 +1205,7 @@ export async function getWaybill(shopSlug: string, purchaseId: string): Promise<
 
   const shop = await prisma.shop.findUnique({
     where: { shopSlug },
+    include: { business: true },
   })
 
   if (!shop) return null
@@ -1220,6 +1225,15 @@ export async function getWaybill(shopSlug: string, purchaseId: string): Promise<
 
   const waybill = purchase.waybill
 
+  // Get the staff who generated the waybill
+  let generatedByName: string | null = null
+  if (waybill.generatedById) {
+    const generatedBy = await prisma.user.findUnique({
+      where: { id: waybill.generatedById },
+    })
+    generatedByName = generatedBy?.name || null
+  }
+
   return {
     id: waybill.id,
     waybillNumber: waybill.waybillNumber,
@@ -1238,6 +1252,9 @@ export async function getWaybill(shopSlug: string, purchaseId: string): Promise<
     subtotal: Number(purchase.subtotal),
     generatedAt: waybill.generatedAt,
     receivedBy: waybill.receivedBy,
+    shopName: shop.name,
+    businessName: shop.business?.name || shop.name,
+    generatedByName,
   }
 }
 
@@ -1476,5 +1493,102 @@ export async function sendPaymentReminder(
   } catch (error) {
     console.error("Send reminder error:", error)
     return { success: false, error: "Failed to send reminder" }
+  }
+}
+
+// ============================================
+// BILL / RECEIPT DATA
+// ============================================
+
+export interface BillData {
+  purchaseId: string
+  purchaseNumber: string
+  purchaseType: string
+  createdAt: Date
+  dueDate: Date | null
+  customer: {
+    name: string
+    phone: string
+    address: string | null
+    city: string | null
+    region: string | null
+  }
+  shop: {
+    name: string
+    phone: string | null
+    address: string | null
+  }
+  items: {
+    productName: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+  }[]
+  subtotal: number
+  interestAmount: number
+  totalAmount: number
+  downPayment: number
+  amountPaid: number
+  outstandingBalance: number
+  installments: number
+  interestRate: number
+  interestType: string
+  salesStaff: string | null
+}
+
+export async function getBillData(shopSlug: string, purchaseId: string): Promise<BillData | null> {
+  const { user, shop } = await requireSalesStaffForShop(shopSlug)
+
+  const purchase = await prisma.purchase.findFirst({
+    where: {
+      id: purchaseId,
+      customer: { shopId: shop.id },
+    },
+    include: {
+      customer: true,
+      items: {
+        include: { product: true },
+      },
+    },
+  })
+
+  if (!purchase) {
+    return null
+  }
+
+  return {
+    purchaseId: purchase.id,
+    purchaseNumber: purchase.purchaseNumber,
+    purchaseType: purchase.purchaseType,
+    createdAt: purchase.createdAt,
+    dueDate: purchase.dueDate,
+    customer: {
+      name: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+      phone: purchase.customer.phone,
+      address: purchase.customer.address,
+      city: purchase.customer.city,
+      region: purchase.customer.region,
+    },
+    shop: {
+      name: shop.name,
+      phone: null,
+      address: null,
+    },
+    items: purchase.items.map((item) => ({
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      totalPrice: Number(item.totalPrice),
+    })),
+    subtotal: Number(purchase.subtotal),
+    interestAmount: Number(purchase.interestAmount),
+    totalAmount: Number(purchase.totalAmount),
+    downPayment: Number(purchase.downPayment),
+    amountPaid: Number(purchase.amountPaid),
+    outstandingBalance: Number(purchase.outstandingBalance),
+    installments: purchase.installments,
+    interestRate: Number(purchase.interestRate),
+    interestType: purchase.interestType,
+    salesStaff: user.name,
   }
 }
