@@ -35,6 +35,7 @@ export function PaymentsContent({
   const [rejectReason, setRejectReason] = useState("")
   const [dateStart, setDateStart] = useState(startDate)
   const [dateEnd, setDateEnd] = useState(endDate)
+  const [searchTerm, setSearchTerm] = useState("")
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-GH", {
@@ -116,9 +117,23 @@ export function PaymentsContent({
   }
 
   const filteredPayments = payments.filter((p) => {
-    if (activeTab === "pending") return !p.isConfirmed && !p.rejectedAt
-    if (activeTab === "confirmed") return p.isConfirmed
-    if (activeTab === "rejected") return p.rejectedAt
+    // First filter by status
+    let statusMatch = false
+    if (activeTab === "pending") statusMatch = !p.isConfirmed && !p.rejectedAt
+    else if (activeTab === "confirmed") statusMatch = p.isConfirmed
+    else if (activeTab === "rejected") statusMatch = !!p.rejectedAt
+    else statusMatch = true
+
+    if (!statusMatch) return false
+
+    // Then filter by search term (collector or customer name)
+    if (searchTerm.trim()) {
+      const search = searchTerm.toLowerCase().trim()
+      const collectorMatch = p.collectorName?.toLowerCase().includes(search) || false
+      const customerMatch = p.customerName.toLowerCase().includes(search)
+      return collectorMatch || customerMatch
+    }
+
     return true
   })
 
@@ -190,11 +205,38 @@ export function PaymentsContent({
       {/* Date Filter */}
       <div className="glass-card rounded-2xl p-4 mb-6">
         <div className="flex flex-wrap items-center gap-4">
+          {/* Search by Collector/Customer */}
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search collector or customer..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-slate-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 w-64"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-all"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          <div className="h-6 w-px bg-white/10 hidden md:block" />
+
+          {/* Date Filter */}
           <div className="flex items-center gap-2">
             <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            <span className="text-sm font-medium text-slate-300">Filter by Date:</span>
+            <span className="text-sm font-medium text-slate-300">Date:</span>
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -226,9 +268,11 @@ export function PaymentsContent({
             </button>
           )}
         </div>
-        {(dateStart || dateEnd) && (
+        {(dateStart || dateEnd || searchTerm) && (
           <p className="mt-2 text-xs text-slate-400">
-            Showing payments from {dateStart || "beginning"} to {dateEnd || "now"}
+            {searchTerm && <span>Searching for &quot;{searchTerm}&quot;</span>}
+            {searchTerm && (dateStart || dateEnd) && <span> • </span>}
+            {(dateStart || dateEnd) && <span>Date: {dateStart || "beginning"} to {dateEnd || "now"}</span>}
           </p>
         )}
       </div>
