@@ -21,9 +21,11 @@ export default async function BusinessStaffPage({ params }: Props) {
   return (
     <div className="p-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Staff Directory</h1>
-        <p className="text-slate-400">View all team members across your shops</p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">Staff Directory</h1>
+          <p className="text-slate-400">Manage all team members across your shops</p>
+        </div>
       </div>
 
       {/* Summary Stats */}
@@ -58,7 +60,8 @@ export default async function BusinessStaffPage({ params }: Props) {
       {/* Staff Table */}
       <StaffContent 
         staff={staff} 
-        shops={shops.map(s => ({ name: s.name, shopSlug: s.shopSlug }))} 
+        shops={shops.map(s => ({ id: s.id, name: s.name, shopSlug: s.shopSlug }))}
+        businessSlug={businessSlug}
       />
     </div>
   )

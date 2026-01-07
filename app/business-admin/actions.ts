@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import bcrypt from "bcrypt"
 import prisma from "../../lib/prisma"
 import { requireBusinessAdmin, createAuditLog } from "../../lib/auth"
+import { Role } from "../generated/prisma/client"
 
 // Validation regex
 const SLUG_REGEX = /^[a-z0-9-]+$/
@@ -683,4 +684,375 @@ export async function getBusinessProducts(businessSlug: string) {
     purchaseCount: product.purchaseItems.length,
     createdAt: product.createdAt,
   }))
+}
+
+/**
+ * Create a new staff member for a shop
+ */
+export async function createStaffMember(
+  businessSlug: string,
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const shopId = formData.get("shopId") as string
+    const name = formData.get("name") as string
+    const email = formData.get("email") as string
+    const password = formData.get("password") as string
+    const role = formData.get("role") as "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR"
+
+    // Validation
+    if (!shopId) {
+      return { success: false, error: "Shop is required" }
+    }
+
+    if (!name || name.trim().length === 0) {
+      return { success: false, error: "Name is required" }
+    }
+
+    if (!email || !EMAIL_REGEX.test(email)) {
+      return { success: false, error: "Valid email is required" }
+    }
+
+    if (!password || password.length < 6) {
+      return { success: false, error: "Password must be at least 6 characters" }
+    }
+
+    if (!role || !["SHOP_ADMIN", "SALES_STAFF", "DEBT_COLLECTOR"].includes(role)) {
+      return { success: false, error: "Valid role is required" }
+    }
+
+    // Verify shop belongs to this business
+    const shop = await prisma.shop.findFirst({
+      where: { id: shopId, businessId: business.id },
+    })
+
+    if (!shop) {
+      return { success: false, error: "Shop not found" }
+    }
+
+    // Check if email already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    })
+
+    if (existingUser) {
+      // Check if already a member of this shop
+      const existingMember = await prisma.shopMember.findFirst({
+        where: { userId: existingUser.id, shopId },
+      })
+
+      if (existingMember) {
+        return { success: false, error: "This user is already a member of this shop" }
+      }
+
+      // Add existing user to shop
+      await prisma.shopMember.create({
+        data: {
+          shopId,
+          userId: existingUser.id,
+          role,
+          isActive: true,
+        },
+      })
+
+      await createAuditLog({
+        actorUserId: user.id,
+        action: "CREATE",
+        entityType: "ShopMember",
+        entityId: existingUser.id,
+        metadata: { shopId, role, userId: existingUser.id },
+      })
+    } else {
+      // Create new user and add to shop
+      const hashedPassword = await bcrypt.hash(password, 10)
+
+      const newUser = await prisma.user.create({
+        data: {
+          email: email.toLowerCase(),
+          name: name.trim(),
+          passwordHash: hashedPassword,
+          role: (role === "SHOP_ADMIN" ? "SHOP_ADMIN" : role === "DEBT_COLLECTOR" ? "DEBT_COLLECTOR" : "SALES_STAFF") as Role,
+        },
+      })
+
+      await prisma.shopMember.create({
+        data: {
+          shopId,
+          userId: newUser.id,
+          role,
+          isActive: true,
+        },
+      })
+
+      await createAuditLog({
+        actorUserId: user.id,
+        action: "CREATE",
+        entityType: "ShopMember",
+        entityId: newUser.id,
+        metadata: { shopId, role, email, name },
+      })
+    }
+
+    revalidatePath(`/business-admin/${businessSlug}/staff`)
+    return { success: true }
+  } catch (error) {
+    console.error("Create staff error:", error)
+    return { success: false, error: "Failed to create staff member" }
+  }
+}
+
+/**
+ * Update a staff member
+ */
+export async function updateStaffMember(
+  businessSlug: string,
+  memberId: string,
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const name = formData.get("name") as string
+    const email = formData.get("email") as string
+    const password = formData.get("password") as string | null
+    const role = formData.get("role") as "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR"
+    const isActive = formData.get("isActive") === "true"
+    const shopId = formData.get("shopId") as string | null
+
+    // Validation
+    if (!name || name.trim().length === 0) {
+      return { success: false, error: "Name is required" }
+    }
+
+    if (!email || !EMAIL_REGEX.test(email)) {
+      return { success: false, error: "Valid email is required" }
+    }
+
+    if (!role || !["SHOP_ADMIN", "SALES_STAFF", "DEBT_COLLECTOR"].includes(role)) {
+      return { success: false, error: "Valid role is required" }
+    }
+
+    // Get the member and verify it belongs to this business
+    const member = await prisma.shopMember.findFirst({
+      where: {
+        id: memberId,
+        shop: { businessId: business.id },
+      },
+      include: { user: true, shop: true },
+    })
+
+    if (!member) {
+      return { success: false, error: "Staff member not found" }
+    }
+
+    // Check if email is being changed to an existing email
+    if (email.toLowerCase() !== member.user.email.toLowerCase()) {
+      const existingUser = await prisma.user.findUnique({
+        where: { email: email.toLowerCase() },
+      })
+
+      if (existingUser) {
+        return { success: false, error: "Email already in use by another user" }
+      }
+    }
+
+    // If shop is changing, verify new shop belongs to business
+    if (shopId && shopId !== member.shopId) {
+      const newShop = await prisma.shop.findFirst({
+        where: { id: shopId, businessId: business.id },
+      })
+
+      if (!newShop) {
+        return { success: false, error: "Shop not found" }
+      }
+    }
+
+    // Update user
+    const userData: { name: string; email: string; passwordHash?: string; role: Role } = {
+      name: name.trim(),
+      email: email.toLowerCase(),
+      role: (role === "SHOP_ADMIN" ? "SHOP_ADMIN" : role === "DEBT_COLLECTOR" ? "DEBT_COLLECTOR" : "SALES_STAFF") as Role,
+    }
+
+    if (password && password.length >= 6) {
+      userData.passwordHash = await bcrypt.hash(password, 10)
+    }
+
+    await prisma.user.update({
+      where: { id: member.userId },
+      data: userData,
+    })
+
+    // Update shop member
+    await prisma.shopMember.update({
+      where: { id: memberId },
+      data: {
+        role,
+        isActive,
+        ...(shopId && shopId !== member.shopId ? { shopId } : {}),
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "UPDATE",
+      entityType: "ShopMember",
+      entityId: memberId,
+      metadata: { oldRole: member.role, oldIsActive: member.isActive, role, isActive, name, email },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/staff`)
+    return { success: true }
+  } catch (error) {
+    console.error("Update staff error:", error)
+    return { success: false, error: "Failed to update staff member" }
+  }
+}
+
+/**
+ * Delete a staff member
+ */
+export async function deleteStaffMember(
+  businessSlug: string,
+  memberId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Get the member and verify it belongs to this business
+    const member = await prisma.shopMember.findFirst({
+      where: {
+        id: memberId,
+        shop: { businessId: business.id },
+      },
+      include: { user: true, shop: true },
+    })
+
+    if (!member) {
+      return { success: false, error: "Staff member not found" }
+    }
+
+    // Delete the shop member record
+    await prisma.shopMember.delete({
+      where: { id: memberId },
+    })
+
+    // Check if user has any other shop memberships
+    const otherMemberships = await prisma.shopMember.count({
+      where: { userId: member.userId },
+    })
+
+    // Check if user has any business memberships
+    const businessMemberships = await prisma.businessMember.count({
+      where: { userId: member.userId },
+    })
+
+    // If user has no other memberships and is not a super admin, we could optionally delete the user
+    // For now, we just delete the membership and leave the user account
+    // This allows them to be re-added later if needed
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "DELETE",
+      entityType: "ShopMember",
+      entityId: memberId,
+      metadata: {
+        userId: member.userId,
+        userEmail: member.user.email,
+        role: member.role,
+        shopId: member.shopId,
+        shopName: member.shop.name,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/staff`)
+    return { success: true }
+  } catch (error) {
+    console.error("Delete staff error:", error)
+    return { success: false, error: "Failed to delete staff member" }
+  }
+}
+
+/**
+ * Toggle staff member active status
+ */
+export async function toggleStaffActive(
+  businessSlug: string,
+  memberId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Get the member and verify it belongs to this business
+    const member = await prisma.shopMember.findFirst({
+      where: {
+        id: memberId,
+        shop: { businessId: business.id },
+      },
+    })
+
+    if (!member) {
+      return { success: false, error: "Staff member not found" }
+    }
+
+    const newStatus = !member.isActive
+
+    await prisma.shopMember.update({
+      where: { id: memberId },
+      data: { isActive: newStatus },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "UPDATE",
+      entityType: "ShopMember",
+      entityId: memberId,
+      metadata: { oldIsActive: member.isActive, isActive: newStatus },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/staff`)
+    return { success: true, data: { isActive: newStatus } }
+  } catch (error) {
+    console.error("Toggle staff active error:", error)
+    return { success: false, error: "Failed to update staff status" }
+  }
+}
+
+/**
+ * Get a single staff member details
+ */
+export async function getStaffMember(businessSlug: string, memberId: string) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const member = await prisma.shopMember.findFirst({
+    where: {
+      id: memberId,
+      shop: { businessId: business.id },
+    },
+    include: {
+      user: true,
+      shop: {
+        select: { id: true, name: true, shopSlug: true },
+      },
+    },
+  })
+
+  if (!member) {
+    return null
+  }
+
+  return {
+    id: member.id,
+    userId: member.userId,
+    userName: member.user.name,
+    userEmail: member.user.email,
+    role: member.role,
+    isActive: member.isActive,
+    shopId: member.shop.id,
+    shopName: member.shop.name,
+    shopSlug: member.shop.shopSlug,
+    createdAt: member.createdAt,
+  }
 }

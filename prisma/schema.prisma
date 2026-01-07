@@ -59,15 +59,17 @@ model User {
 
 // Business model - groups multiple shops under one owner
 model Business {
-  id           String           @id @default(cuid())
-  name         String
-  businessSlug String           @unique // lowercase, [a-z0-9-] only
-  country      String           @default("Ghana")
-  isActive     Boolean          @default(true)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  shops        Shop[]           @relation("BusinessShops")
-  members      BusinessMember[] @relation("BusinessMembers")
+  id            String           @id @default(cuid())
+  name          String
+  businessSlug  String           @unique // lowercase, [a-z0-9-] only
+  country       String           @default("Ghana")
+  isActive      Boolean          @default(true)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  shops         Shop[]           @relation("BusinessShops")
+  members       BusinessMember[] @relation("BusinessMembers")
+  emailSettings EmailSettings?   @relation("BusinessEmailSettings")
+  smsSettings   SmsSettings?     @relation("BusinessSmsSettings")
 }
 
 // Business membership - links users to businesses (BUSINESS_ADMIN role)
@@ -465,4 +467,142 @@ model Notification {
   @@index([customerId])
   @@index([isRead])
   @@index([createdAt])
+}
+
+// Email settings status
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+  BOUNCED
+}
+
+// Email Settings model - business-level email configuration
+model EmailSettings {
+  id            String   @id @default(cuid())
+  businessId    String   @unique
+  business      Business @relation("BusinessEmailSettings", fields: [businessId], references: [id], onDelete: Cascade)
+  // Sender info
+  fromEmail     String   // Email address to send from
+  fromName      String   // Display name for emails
+  replyToEmail  String?  // Optional reply-to address
+  // SMTP Configuration
+  smtpHost      String   // SMTP server hostname
+  smtpPort      Int      @default(587) // SMTP port (587 for TLS, 465 for SSL, 25 for unencrypted)
+  smtpUser      String   // SMTP username
+  smtpPassword  String   // SMTP password (encrypted)
+  smtpSecure    Boolean  @default(false) // true for SSL (port 465), false for TLS (port 587)
+  // Settings
+  isEnabled     Boolean  @default(true) // Enable/disable email sending
+  isVerified    Boolean  @default(false) // Has test email been sent successfully
+  // Metadata
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// Email Log model - track all sent emails
+model EmailLog {
+  id              String      @id @default(cuid())
+  businessId      String
+  shopId          String?     // Optional - which shop sent the email (null for business-level emails)
+  // Email details
+  subject         String
+  body            String      @db.Text
+  fromEmail       String      // Sender email
+  fromName        String      // Sender name
+  // Recipients
+  recipientEmails String[]    // Array of recipient emails
+  recipientCount  Int         // Number of recipients
+  // Status
+  status          EmailStatus @default(PENDING)
+  sentAt          DateTime?
+  errorMessage    String?     // Error details if failed
+  // Metadata
+  sentByUserId    String?     // User who initiated the email
+  emailType       String?     // e.g., "BULK", "INDIVIDUAL", "PAYMENT_REMINDER", "WELCOME"
+  metadata        Json?       // Additional data (customer IDs, etc.)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([businessId])
+  @@index([shopId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([sentByUserId])
+}
+
+// SMS Provider types
+enum SmsProvider {
+  CUSTOM_API   // Your own gateway (Android phone, GSM modem, etc.)
+  HUBTEL       // Hubtel SMS API
+  ARKESEL      // Arkesel SMS API
+  MNOTIFY      // mNotify SMS API
+}
+
+// SMS status
+enum SmsStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+// SMS Settings model - business-level SMS configuration
+model SmsSettings {
+  id              String      @id @default(cuid())
+  businessId      String      @unique
+  business        Business    @relation("BusinessSmsSettings", fields: [businessId], references: [id], onDelete: Cascade)
+  // Provider selection
+  provider        SmsProvider @default(CUSTOM_API)
+  // Sender ID (what recipients see as sender)
+  senderId        String?     // e.g., "MyShop" or phone number
+  // Custom API Configuration
+  apiEndpoint     String?     // e.g., https://your-gateway.com/send
+  apiKey          String?     // API key or auth token
+  apiSecret       String?     // Optional secret for some providers
+  httpMethod      String      @default("POST") // POST, GET
+  // Request format template (JSON with placeholders)
+  // Placeholders: {{phone}}, {{message}}, {{senderId}}
+  requestTemplate String?     @db.Text // e.g., {"to": "{{phone}}", "message": "{{message}}"}
+  // Headers template (JSON)
+  headersTemplate String?     @db.Text // e.g., {"Authorization": "Bearer {{apiKey}}"}
+  // Response parsing
+  successField    String?     // Field to check in response, e.g., "status"
+  successValue    String?     // Expected value for success, e.g., "sent"
+  // Settings
+  isEnabled       Boolean     @default(true)
+  isVerified      Boolean     @default(false)
+  // Metadata
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+// SMS Log model - track all sent SMS
+model SmsLog {
+  id              String    @id @default(cuid())
+  businessId      String
+  shopId          String?   // Optional - which shop sent the SMS
+  // SMS details
+  recipientPhone  String    // Phone number
+  message         String    @db.Text
+  senderId        String?   // Sender ID used
+  // Status
+  status          SmsStatus @default(PENDING)
+  sentAt          DateTime?
+  deliveredAt     DateTime?
+  errorMessage    String?   // Error details if failed
+  providerRef     String?   // Provider's message ID/reference
+  // Metadata
+  sentByUserId    String?   // User who initiated the SMS
+  smsType         String?   // e.g., "BULK", "PAYMENT_REMINDER", "WELCOME"
+  metadata        Json?     // Additional data
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([businessId])
+  @@index([shopId])
+  @@index([recipientPhone])
+  @@index([status])
+  @@index([createdAt])
+  @@index([sentByUserId])
 }
