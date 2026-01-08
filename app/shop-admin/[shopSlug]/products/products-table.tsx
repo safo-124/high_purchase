@@ -66,6 +66,9 @@ export function ProductsTable({ products, shopSlug, categories }: ProductsTableP
               <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
                 SKU
               </th>
+              <th className="text-right text-xs font-medium text-rose-400 uppercase tracking-wider px-6 py-4">
+                Cost
+              </th>
               <th className="text-right text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
                 <span className="text-green-400">Cash</span> / <span className="text-blue-400">Layaway</span> / <span className="text-amber-400">Credit</span>
               </th>
@@ -138,7 +141,12 @@ export function ProductsTable({ products, shopSlug, categories }: ProductsTableP
                   </span>
                 </td>
 
-                {/* Price */}
+                {/* Cost Price */}
+                <td className="px-6 py-4 text-right">
+                  <span className="text-sm font-medium text-rose-400">₵{(product.costPrice || 0).toLocaleString()}</span>
+                </td>
+
+                {/* Selling Prices */}
                 <td className="px-6 py-4 text-right">
                   <div className="flex flex-col items-end gap-0.5 text-xs">
                     <span className="text-green-400 font-medium">₵{(product.cashPrice || 0).toLocaleString()}</span>

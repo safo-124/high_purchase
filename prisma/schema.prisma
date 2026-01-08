@@ -177,6 +177,7 @@ model Product {
   description   String?
   sku           String?        // Stock keeping unit
   // Pricing tiers based on payment type
+  costPrice     Decimal        @default(0) @db.Decimal(12, 2) // Cost/purchase price (for profit calculation)
   cashPrice     Decimal        @default(0) @db.Decimal(12, 2) // Full payment upfront (best price)
   layawayPrice  Decimal        @default(0) @db.Decimal(12, 2) // Pay in installments BEFORE taking product
   creditPrice   Decimal        @default(0) @db.Decimal(12, 2) // Take product BEFORE paying (BNPL - highest price)

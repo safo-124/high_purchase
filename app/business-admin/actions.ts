@@ -669,22 +669,41 @@ export async function getBusinessProducts(businessSlug: string) {
     orderBy: { createdAt: "desc" },
   })
 
-  return products.map((product) => ({
-    id: product.id,
-    name: product.name,
-    sku: product.sku,
-    description: product.description,
-    category: product.category?.name || null,
-    cashPrice: Number(product.cashPrice),
-    hpPrice: Number(product.creditPrice),
-    stockQuantity: product.stockQuantity,
-    lowStockThreshold: product.lowStockThreshold,
-    isActive: product.isActive,
-    shopName: product.shop.name,
-    shopSlug: product.shop.shopSlug,
-    purchaseCount: product.purchaseItems.length,
-    createdAt: product.createdAt,
-  }))
+  return products.map((product) => {
+    const costPrice = Number(product.costPrice)
+    const cashPrice = Number(product.cashPrice)
+    const layawayPrice = Number(product.layawayPrice)
+    const creditPrice = Number(product.creditPrice)
+    
+    // Calculate profit margins for each price tier
+    const cashProfit = cashPrice - costPrice
+    const layawayProfit = layawayPrice - costPrice
+    const creditProfit = creditPrice - costPrice
+    
+    return {
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
+      description: product.description,
+      category: product.category?.name || null,
+      costPrice,
+      cashPrice,
+      layawayPrice,
+      creditPrice,
+      hpPrice: creditPrice, // Keep for backward compatibility
+      // Profit calculations (only for business admin)
+      cashProfit,
+      layawayProfit,
+      creditProfit,
+      stockQuantity: product.stockQuantity,
+      lowStockThreshold: product.lowStockThreshold,
+      isActive: product.isActive,
+      shopName: product.shop.name,
+      shopSlug: product.shop.shopSlug,
+      purchaseCount: product.purchaseItems.length,
+      createdAt: product.createdAt,
+    }
+  })
 }
 
 /**
@@ -1064,6 +1083,7 @@ export interface ProductPayload {
   name: string
   description?: string | null
   sku?: string | null
+  costPrice?: number
   cashPrice: number
   layawayPrice: number
   creditPrice: number
@@ -1147,10 +1167,12 @@ export async function updateBusinessProduct(
         ...(payload.name !== undefined && { name: payload.name.trim() }),
         ...(payload.description !== undefined && { description: payload.description?.trim() || null }),
         ...(payload.sku !== undefined && { sku: payload.sku?.trim() || null }),
+        ...(payload.costPrice !== undefined && { costPrice: new Prisma.Decimal(payload.costPrice) }),
         ...(payload.cashPrice !== undefined && { cashPrice: new Prisma.Decimal(payload.cashPrice) }),
         ...(payload.layawayPrice !== undefined && { layawayPrice: new Prisma.Decimal(payload.layawayPrice) }),
         ...(payload.creditPrice !== undefined && { creditPrice: new Prisma.Decimal(payload.creditPrice) }),
         ...(payload.stockQuantity !== undefined && { stockQuantity: payload.stockQuantity }),
+        ...(payload.lowStockThreshold !== undefined && { lowStockThreshold: payload.lowStockThreshold }),
         ...(payload.imageUrl !== undefined && { imageUrl: payload.imageUrl || null }),
         ...(payload.isActive !== undefined && { isActive: payload.isActive }),
         ...(payload.categoryId !== undefined && { categoryId: payload.categoryId || null }),
@@ -1337,5 +1359,908 @@ export async function getBusinessProduct(businessSlug: string, productId: string
     shopName: product.shop.name,
     shopSlug: product.shop.shopSlug,
     createdAt: product.createdAt,
+  }
+}
+
+// ============================================
+// PAYMENT CONFIRMATION (BUSINESS ADMIN)
+// ============================================
+
+export interface BusinessPaymentForAdmin {
+  id: string
+  amount: number
+  paymentMethod: string
+  status: string
+  reference: string | null
+  notes: string | null
+  paidAt: Date | null
+  createdAt: Date
+  purchaseId: string
+  purchaseNumber: string
+  customerName: string
+  customerId: string
+  collectorName: string | null
+  collectorId: string | null
+  isConfirmed: boolean
+  confirmedAt: Date | null
+  rejectedAt: Date | null
+  rejectionReason: string | null
+  shopName: string
+  shopSlug: string
+}
+
+/**
+ * Get all payments across the business with status filtering
+ */
+export async function getBusinessPaymentsWithStatus(
+  businessSlug: string,
+  filters?: {
+    status?: "pending" | "confirmed" | "rejected" | "all"
+    startDate?: Date
+    endDate?: Date
+  }
+): Promise<BusinessPaymentForAdmin[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const whereClause: Prisma.PaymentWhereInput = {
+    purchase: {
+      customer: {
+        shop: {
+          businessId: business.id,
+        },
+      },
+    },
+  }
+
+  // Apply status filter
+  if (filters?.status === "pending") {
+    whereClause.isConfirmed = false
+    whereClause.rejectedAt = null
+  } else if (filters?.status === "confirmed") {
+    whereClause.isConfirmed = true
+  } else if (filters?.status === "rejected") {
+    whereClause.rejectedAt = { not: null }
+  }
+
+  // Apply date filter
+  if (filters?.startDate || filters?.endDate) {
+    whereClause.createdAt = {}
+    if (filters.startDate) {
+      whereClause.createdAt.gte = filters.startDate
+    }
+    if (filters.endDate) {
+      const endOfDay = new Date(filters.endDate)
+      endOfDay.setHours(23, 59, 59, 999)
+      whereClause.createdAt.lte = endOfDay
+    }
+  }
+
+  const payments = await prisma.payment.findMany({
+    where: whereClause,
+    include: {
+      purchase: {
+        include: {
+          customer: {
+            include: {
+              shop: {
+                select: { name: true, shopSlug: true },
+              },
+            },
+          },
+        },
+      },
+      collector: {
+        include: {
+          user: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 500,
+  })
+
+  return payments.map((p) => ({
+    id: p.id,
+    amount: Number(p.amount),
+    paymentMethod: p.paymentMethod,
+    status: p.status,
+    reference: p.reference,
+    notes: p.notes,
+    paidAt: p.paidAt,
+    createdAt: p.createdAt,
+    purchaseId: p.purchaseId,
+    purchaseNumber: p.purchase.purchaseNumber,
+    customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
+    customerId: p.purchase.customerId,
+    collectorName: p.collector?.user?.name || null,
+    collectorId: p.collectorId,
+    isConfirmed: p.isConfirmed,
+    confirmedAt: p.confirmedAt,
+    rejectedAt: p.rejectedAt,
+    rejectionReason: p.rejectionReason,
+    shopName: p.purchase.customer.shop.name,
+    shopSlug: p.purchase.customer.shop.shopSlug,
+  }))
+}
+
+/**
+ * Get payment stats for business admin
+ */
+export async function getBusinessPaymentStats(
+  businessSlug: string,
+  startDate?: Date,
+  endDate?: Date
+) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const dateFilter: Prisma.PaymentWhereInput["createdAt"] = {}
+  if (startDate) {
+    dateFilter.gte = startDate
+  }
+  if (endDate) {
+    const endOfDay = new Date(endDate)
+    endOfDay.setHours(23, 59, 59, 999)
+    dateFilter.lte = endOfDay
+  }
+
+  const baseWhere: Prisma.PaymentWhereInput = {
+    purchase: { customer: { shop: { businessId: business.id } } },
+    ...(startDate || endDate ? { createdAt: dateFilter } : {}),
+  }
+
+  const [
+    pendingCount,
+    pendingTotal,
+    confirmedCount,
+    confirmedTotal,
+    rejectedCount,
+    rejectedTotal,
+  ] = await Promise.all([
+    prisma.payment.count({
+      where: { ...baseWhere, isConfirmed: false, rejectedAt: null },
+    }),
+    prisma.payment.aggregate({
+      where: { ...baseWhere, isConfirmed: false, rejectedAt: null },
+      _sum: { amount: true },
+    }),
+    prisma.payment.count({
+      where: { ...baseWhere, isConfirmed: true },
+    }),
+    prisma.payment.aggregate({
+      where: { ...baseWhere, isConfirmed: true },
+      _sum: { amount: true },
+    }),
+    prisma.payment.count({
+      where: { ...baseWhere, rejectedAt: { not: null } },
+    }),
+    prisma.payment.aggregate({
+      where: { ...baseWhere, rejectedAt: { not: null } },
+      _sum: { amount: true },
+    }),
+  ])
+
+  return {
+    pending: {
+      count: pendingCount,
+      total: pendingTotal._sum.amount ? Number(pendingTotal._sum.amount) : 0,
+    },
+    confirmed: {
+      count: confirmedCount,
+      total: confirmedTotal._sum.amount ? Number(confirmedTotal._sum.amount) : 0,
+    },
+    rejected: {
+      count: rejectedCount,
+      total: rejectedTotal._sum.amount ? Number(rejectedTotal._sum.amount) : 0,
+    },
+  }
+}
+
+/**
+ * Confirm a payment collected by a debt collector (Business Admin)
+ */
+export async function confirmBusinessPayment(
+  businessSlug: string,
+  paymentId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Find the payment
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        purchase: {
+          include: {
+            customer: {
+              include: {
+                shop: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!payment) {
+      return { success: false, error: "Payment not found" }
+    }
+
+    // Verify payment belongs to this business
+    if (payment.purchase.customer.shop.businessId !== business.id) {
+      return { success: false, error: "Payment not found in this business" }
+    }
+
+    if (payment.isConfirmed) {
+      return { success: false, error: "Payment already confirmed" }
+    }
+
+    if (payment.rejectedAt) {
+      return { success: false, error: "Cannot confirm a rejected payment" }
+    }
+
+    // Update the payment as confirmed
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        isConfirmed: true,
+        confirmedAt: new Date(),
+        status: "COMPLETED",
+      },
+    })
+
+    // Update purchase totals
+    const purchase = payment.purchase
+    const newAmountPaid = Number(purchase.amountPaid) + Number(payment.amount)
+    const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
+    const isCompleted = newOutstanding <= 0
+
+    await prisma.purchase.update({
+      where: { id: purchase.id },
+      data: {
+        amountPaid: newAmountPaid,
+        outstandingBalance: Math.max(0, newOutstanding),
+        status: isCompleted ? "COMPLETED" : purchase.status === "PENDING" ? "ACTIVE" : purchase.status,
+      },
+    })
+
+    // AUTO-GENERATE WAYBILL when purchase is fully paid
+    if (isCompleted) {
+      const existingWaybill = await prisma.waybill.findUnique({
+        where: { purchaseId: purchase.id },
+      })
+
+      if (!existingWaybill) {
+        const year = new Date().getFullYear()
+        const waybillCount = await prisma.waybill.count()
+        const waybillNumber = `WB-${year}-${String(waybillCount + 1).padStart(5, "0")}`
+
+        await prisma.waybill.create({
+          data: {
+            waybillNumber,
+            purchaseId: purchase.id,
+            recipientName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+            recipientPhone: purchase.customer.phone,
+            deliveryAddress: purchase.deliveryAddress || purchase.customer.address || "N/A",
+            deliveryCity: purchase.customer.city,
+            deliveryRegion: purchase.customer.region,
+            specialInstructions: `Payment completed. Ready for delivery.`,
+            generatedById: user.id,
+          },
+        })
+
+        await prisma.purchase.update({
+          where: { id: purchase.id },
+          data: { deliveryStatus: "SCHEDULED" },
+        })
+
+        await createAuditLog({
+          actorUserId: user.id,
+          action: "WAYBILL_AUTO_GENERATED",
+          entityType: "Waybill",
+          entityId: purchase.id,
+          metadata: {
+            waybillNumber,
+            purchaseId: purchase.id,
+            purchaseNumber: purchase.purchaseNumber,
+            reason: "Payment completed (Business Admin)",
+          },
+        })
+      }
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PAYMENT_CONFIRMED",
+      entityType: "Payment",
+      entityId: paymentId,
+      metadata: {
+        purchaseId: purchase.id,
+        customerId: purchase.customerId,
+        amount: Number(payment.amount),
+        confirmedByBusinessAdmin: true,
+        purchaseCompleted: isCompleted,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/payments`)
+    revalidatePath(`/shop-admin/${payment.purchase.customer.shop.shopSlug}/pending-payments`)
+    return { success: true, data: { purchaseCompleted: isCompleted } }
+  } catch (error) {
+    console.error("Confirm business payment error:", error)
+    return { success: false, error: "Failed to confirm payment" }
+  }
+}
+
+/**
+ * Reject a payment collected by a debt collector (Business Admin)
+ */
+export async function rejectBusinessPayment(
+  businessSlug: string,
+  paymentId: string,
+  reason: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Find the payment
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        purchase: {
+          include: {
+            customer: {
+              include: {
+                shop: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!payment) {
+      return { success: false, error: "Payment not found" }
+    }
+
+    // Verify payment belongs to this business
+    if (payment.purchase.customer.shop.businessId !== business.id) {
+      return { success: false, error: "Payment not found in this business" }
+    }
+
+    if (payment.isConfirmed) {
+      return { success: false, error: "Cannot reject a confirmed payment" }
+    }
+
+    if (payment.rejectedAt) {
+      return { success: false, error: "Payment already rejected" }
+    }
+
+    // Mark payment as rejected
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        rejectedAt: new Date(),
+        rejectionReason: reason,
+        status: "MISSED",
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PAYMENT_REJECTED",
+      entityType: "Payment",
+      entityId: paymentId,
+      metadata: {
+        purchaseId: payment.purchaseId,
+        customerId: payment.purchase.customerId,
+        amount: Number(payment.amount),
+        reason,
+        rejectedByBusinessAdmin: true,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/payments`)
+    revalidatePath(`/shop-admin/${payment.purchase.customer.shop.shopSlug}/pending-payments`)
+    return { success: true }
+  } catch (error) {
+    console.error("Reject business payment error:", error)
+    return { success: false, error: "Failed to reject payment" }
+  }
+}
+
+// ============================================
+// BUSINESS ADMIN SALES
+// ============================================
+
+export interface ProductForBusinessSale {
+  id: string
+  name: string
+  description: string | null
+  sku: string | null
+  price: number
+  cashPrice: number
+  layawayPrice: number
+  creditPrice: number
+  stockQuantity: number
+  lowStockThreshold: number
+  categoryName: string | null
+  categoryColor: string | null
+  imageUrl: string | null
+}
+
+export interface CustomerForBusinessSale {
+  id: string
+  firstName: string
+  lastName: string
+  phone: string
+  email: string | null
+}
+
+export interface CollectorForBusinessSale {
+  id: string
+  name: string
+  email: string | null
+}
+
+/**
+ * Get products for a specific shop within the business (for sale)
+ */
+export async function getShopProductsForSale(
+  businessSlug: string,
+  shopSlug: string
+): Promise<ProductForBusinessSale[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const shop = await prisma.shop.findFirst({
+    where: { shopSlug, businessId: business.id },
+  })
+
+  if (!shop) return []
+
+  const products = await prisma.product.findMany({
+    where: {
+      shopId: shop.id,
+      isActive: true,
+    },
+    include: {
+      category: {
+        select: { name: true, color: true },
+      },
+    },
+    orderBy: { name: "asc" },
+  })
+
+  return products.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    sku: p.sku,
+    price: Number(p.price),
+    cashPrice: Number(p.cashPrice),
+    layawayPrice: Number(p.layawayPrice),
+    creditPrice: Number(p.creditPrice),
+    stockQuantity: p.stockQuantity,
+    lowStockThreshold: p.lowStockThreshold,
+    categoryName: p.category?.name || null,
+    categoryColor: p.category?.color || null,
+    imageUrl: p.imageUrl,
+  }))
+}
+
+/**
+ * Get customers for a specific shop within the business (for sale)
+ */
+export async function getShopCustomersForSale(
+  businessSlug: string,
+  shopSlug: string
+): Promise<CustomerForBusinessSale[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const shop = await prisma.shop.findFirst({
+    where: { shopSlug, businessId: business.id },
+  })
+
+  if (!shop) return []
+
+  const customers = await prisma.customer.findMany({
+    where: {
+      shopId: shop.id,
+      isActive: true,
+    },
+    orderBy: { firstName: "asc" },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      email: true,
+    },
+  })
+
+  return customers
+}
+
+/**
+ * Get collectors for a specific shop within the business (for sale)
+ */
+export async function getShopCollectorsForSale(
+  businessSlug: string,
+  shopSlug: string
+): Promise<CollectorForBusinessSale[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const shop = await prisma.shop.findFirst({
+    where: { shopSlug, businessId: business.id },
+  })
+
+  if (!shop) return []
+
+  const collectors = await prisma.shopMember.findMany({
+    where: {
+      shopId: shop.id,
+      role: "DEBT_COLLECTOR",
+      isActive: true,
+    },
+    include: {
+      user: {
+        select: { name: true, email: true },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  })
+
+  return collectors.map((c) => ({
+    id: c.id,
+    name: c.user.name || "Unknown",
+    email: c.user.email,
+  }))
+}
+
+export type BusinessPurchaseType = "CASH" | "LAYAWAY" | "CREDIT"
+
+export interface BusinessSaleItem {
+  productId: string
+  productName: string
+  quantity: number
+  unitPrice: number
+}
+
+export interface BusinessSalePayload {
+  shopSlug: string
+  customerId: string
+  items: BusinessSaleItem[]
+  downPayment: number
+  tenorDays: number
+  purchaseType: BusinessPurchaseType
+}
+
+/**
+ * Create a sale as business admin
+ */
+export async function createBusinessSale(
+  businessSlug: string,
+  payload: BusinessSalePayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Get the shop
+    const shop = await prisma.shop.findFirst({
+      where: { shopSlug: payload.shopSlug, businessId: business.id },
+    })
+
+    if (!shop) {
+      return { success: false, error: "Shop not found" }
+    }
+
+    // Validate inputs
+    if (!payload.customerId) {
+      return { success: false, error: "Customer is required" }
+    }
+
+    if (!payload.items || payload.items.length === 0) {
+      return { success: false, error: "At least one product is required" }
+    }
+
+    if (payload.downPayment < 0) {
+      return { success: false, error: "Down payment cannot be negative" }
+    }
+
+    if (payload.tenorDays < 1) {
+      return { success: false, error: "Tenor must be at least 1 day" }
+    }
+
+    // Verify customer belongs to shop
+    const customer = await prisma.customer.findFirst({
+      where: { id: payload.customerId, shopId: shop.id },
+    })
+
+    if (!customer) {
+      return { success: false, error: "Customer not found" }
+    }
+
+    // Verify all products and their stock
+    const productIds = payload.items.map(item => item.productId)
+    const products = await prisma.product.findMany({
+      where: { 
+        id: { in: productIds }, 
+        shopId: shop.id, 
+        isActive: true 
+      },
+    })
+
+    if (products.length !== payload.items.length) {
+      return { success: false, error: "One or more products not found" }
+    }
+
+    // Check stock for each item
+    for (const item of payload.items) {
+      const product = products.find(p => p.id === item.productId)
+      if (!product) {
+        return { success: false, error: `Product not found: ${item.productId}` }
+      }
+      if (product.stockQuantity < item.quantity) {
+        return { success: false, error: `Insufficient stock for ${product.name}. Only ${product.stockQuantity} available.` }
+      }
+    }
+
+    // Get shop policy for interest calculation
+    const policy = await prisma.shopPolicy.findUnique({
+      where: { shopId: shop.id },
+    })
+
+    if (!policy) {
+      return { success: false, error: "Shop policy not configured. Please contact your administrator." }
+    }
+
+    // Check tenor against policy
+    if (payload.tenorDays > policy.maxTenorDays) {
+      return { success: false, error: `Tenor cannot exceed ${policy.maxTenorDays} days` }
+    }
+
+    // Calculate subtotal from all items
+    const subtotal = payload.items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0)
+    const interestRate = Number(policy.interestRate) / 100
+
+    // For CASH purchases, no interest
+    let interestAmount = 0
+    if (payload.purchaseType !== "CASH") {
+      if (policy.interestType === "FLAT") {
+        interestAmount = subtotal * interestRate
+      } else if (policy.interestType === "MONTHLY") {
+        const months = payload.tenorDays / 30
+        interestAmount = subtotal * interestRate * months
+      }
+    }
+
+    const totalAmount = subtotal + interestAmount
+    const downPayment = Math.min(payload.downPayment, totalAmount)
+    const outstandingBalance = totalAmount - downPayment
+
+    // Calculate due date
+    const dueDate = new Date()
+    dueDate.setDate(dueDate.getDate() + payload.tenorDays)
+
+    // Generate purchase number
+    const purchaseCount = await prisma.purchase.count({
+      where: { customerId: customer.id },
+    })
+    const purchaseNumber = `HP-${String(purchaseCount + 1).padStart(4, "0")}`
+
+    // Create purchase and update stock in a transaction
+    const purchase = await prisma.$transaction(async (tx) => {
+      // Decrement stock for all products
+      for (const item of payload.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stockQuantity: { decrement: item.quantity } },
+        })
+      }
+
+      // Create purchase with all items
+      const newPurchase = await tx.purchase.create({
+        data: {
+          purchaseNumber,
+          customerId: customer.id,
+          purchaseType: payload.purchaseType,
+          status: outstandingBalance === 0 ? "COMPLETED" : "ACTIVE",
+          subtotal: new Prisma.Decimal(subtotal),
+          interestAmount: new Prisma.Decimal(interestAmount),
+          totalAmount: new Prisma.Decimal(totalAmount),
+          amountPaid: new Prisma.Decimal(downPayment),
+          outstandingBalance: new Prisma.Decimal(outstandingBalance),
+          downPayment: new Prisma.Decimal(downPayment),
+          installments: payload.purchaseType === "CASH" ? 1 : Math.ceil(payload.tenorDays / 30),
+          startDate: new Date(),
+          dueDate,
+          interestType: policy.interestType,
+          interestRate: policy.interestRate,
+          notes: `${payload.purchaseType} sale by Business Admin: ${user.name}`,
+          items: {
+            create: payload.items.map(item => ({
+              productId: item.productId,
+              productName: item.productName,
+              quantity: item.quantity,
+              unitPrice: new Prisma.Decimal(item.unitPrice),
+              totalPrice: new Prisma.Decimal(item.unitPrice * item.quantity),
+            })),
+          },
+        },
+        include: {
+          items: {
+            include: { product: true },
+          },
+        },
+      })
+
+      // Create down payment record if > 0
+      if (downPayment > 0) {
+        await tx.payment.create({
+          data: {
+            purchaseId: newPurchase.id,
+            amount: new Prisma.Decimal(downPayment),
+            paymentMethod: "CASH",
+            status: "COMPLETED",
+            isConfirmed: true,
+            confirmedAt: new Date(),
+            paidAt: new Date(),
+            notes: "Down payment at time of purchase (Business Admin)",
+          },
+        })
+      }
+
+      return newPurchase
+    })
+
+    // Create audit log with all product info
+    const productNames = payload.items.map(item => item.productName).join(", ")
+    const totalQuantity = payload.items.reduce((sum, item) => sum + item.quantity, 0)
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "SALE_CREATED",
+      entityType: "Purchase",
+      entityId: purchase.id,
+      metadata: {
+        shopId: shop.id,
+        shopName: shop.name,
+        customerId: customer.id,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        productCount: payload.items.length,
+        productNames,
+        totalQuantity,
+        totalAmount,
+        downPayment,
+        tenorDays: payload.tenorDays,
+        createdByBusinessAdmin: true,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/purchases`)
+    revalidatePath(`/business-admin/${businessSlug}/customers`)
+    revalidatePath(`/business-admin/${businessSlug}/products`)
+    revalidatePath(`/shop-admin/${payload.shopSlug}/dashboard`)
+    revalidatePath(`/shop-admin/${payload.shopSlug}/products`)
+
+    return {
+      success: true,
+      data: {
+        purchaseId: purchase.id,
+        purchaseNumber,
+        totalAmount,
+        downPayment,
+        outstandingBalance,
+        dueDate: dueDate.toISOString(),
+      },
+    }
+  } catch (error) {
+    console.error("Error creating business sale:", error)
+    return { success: false, error: "Failed to create sale" }
+  }
+}
+
+/**
+ * Create a customer as business admin
+ */
+export interface BusinessQuickCustomerPayload {
+  shopSlug: string
+  firstName: string
+  lastName: string
+  phone: string
+  email?: string | null
+  idType?: string | null
+  idNumber?: string | null
+  address?: string | null
+  city?: string | null
+  region?: string | null
+  preferredPayment?: "ONLINE" | "DEBT_COLLECTOR" | "BOTH"
+  assignedCollectorId?: string | null
+  notes?: string | null
+}
+
+export async function createBusinessCustomer(
+  businessSlug: string,
+  payload: BusinessQuickCustomerPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Get the shop
+    const shop = await prisma.shop.findFirst({
+      where: { shopSlug: payload.shopSlug, businessId: business.id },
+    })
+
+    if (!shop) {
+      return { success: false, error: "Shop not found" }
+    }
+
+    // Validate required fields
+    if (!payload.firstName?.trim()) {
+      return { success: false, error: "First name is required" }
+    }
+    if (!payload.lastName?.trim()) {
+      return { success: false, error: "Last name is required" }
+    }
+    if (!payload.phone?.trim()) {
+      return { success: false, error: "Phone number is required" }
+    }
+
+    // Check if phone already exists in this shop
+    const existingCustomer = await prisma.customer.findFirst({
+      where: { phone: payload.phone, shopId: shop.id },
+    })
+
+    if (existingCustomer) {
+      return { success: false, error: "A customer with this phone number already exists" }
+    }
+
+    // Create the customer
+    const customer = await prisma.customer.create({
+      data: {
+        shopId: shop.id,
+        firstName: payload.firstName.trim(),
+        lastName: payload.lastName.trim(),
+        phone: payload.phone.trim(),
+        email: payload.email || null,
+        idType: payload.idType || null,
+        idNumber: payload.idNumber || null,
+        address: payload.address || null,
+        city: payload.city || null,
+        region: payload.region || null,
+        preferredPayment: payload.preferredPayment || "BOTH",
+        assignedCollectorId: payload.assignedCollectorId || null,
+        notes: payload.notes || null,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CUSTOMER_CREATED",
+      entityType: "Customer",
+      entityId: customer.id,
+      metadata: {
+        shopId: shop.id,
+        shopName: shop.name,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        phone: customer.phone,
+        createdByBusinessAdmin: true,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/customers`)
+    revalidatePath(`/business-admin/${businessSlug}/new-sale`)
+
+    return {
+      success: true,
+      data: {
+        id: customer.id,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        phone: customer.phone,
+      },
+    }
+  } catch (error) {
+    console.error("Error creating customer:", error)
+    return { success: false, error: "Failed to create customer" }
   }
 }

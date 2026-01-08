@@ -177,11 +177,13 @@ export interface ProductPayload {
   description?: string | null
   sku?: string | null
   // Pricing tiers
+  costPrice?: number     // Cost/purchase price (for profit calculation)
   cashPrice: number      // Full payment upfront (best price)
   layawayPrice: number   // Pay in bits before taking product
   creditPrice: number    // Take product before paying (BNPL)
   price?: number         // Default display price (usually cashPrice)
   stockQuantity?: number
+  lowStockThreshold?: number
   imageUrl?: string | null
   isActive?: boolean
   categoryId?: string | null
@@ -193,6 +195,7 @@ export interface ProductData {
   name: string
   description: string | null
   sku: string | null
+  costPrice: number
   cashPrice: number
   layawayPrice: number
   creditPrice: number
@@ -229,6 +232,7 @@ export async function getProducts(shopSlug: string): Promise<ProductData[]> {
     name: p.name,
     description: p.description,
     sku: p.sku,
+    costPrice: Number(p.costPrice),
     cashPrice: Number(p.cashPrice),
     layawayPrice: Number(p.layawayPrice),
     creditPrice: Number(p.creditPrice),
@@ -291,11 +295,13 @@ export async function createProduct(
         name: payload.name.trim(),
         description: payload.description?.trim() || null,
         sku: payload.sku?.trim() || null,
+        costPrice: new Prisma.Decimal(payload.costPrice ?? 0),
         cashPrice: new Prisma.Decimal(payload.cashPrice),
         layawayPrice: new Prisma.Decimal(payload.layawayPrice),
         creditPrice: new Prisma.Decimal(payload.creditPrice),
         price: new Prisma.Decimal(payload.price ?? payload.cashPrice), // Default to cash price
         stockQuantity: payload.stockQuantity ?? 0,
+        lowStockThreshold: payload.lowStockThreshold ?? 5,
         imageUrl: payload.imageUrl || null,
         isActive: payload.isActive ?? true,
         categoryId: payload.categoryId || null,
@@ -403,11 +409,13 @@ export async function updateProduct(
         ...(payload.name !== undefined && { name: payload.name.trim() }),
         ...(payload.description !== undefined && { description: payload.description?.trim() || null }),
         ...(payload.sku !== undefined && { sku: payload.sku?.trim() || null }),
+        ...(payload.costPrice !== undefined && { costPrice: new Prisma.Decimal(payload.costPrice) }),
         ...(payload.cashPrice !== undefined && { cashPrice: new Prisma.Decimal(payload.cashPrice) }),
         ...(payload.layawayPrice !== undefined && { layawayPrice: new Prisma.Decimal(payload.layawayPrice) }),
         ...(payload.creditPrice !== undefined && { creditPrice: new Prisma.Decimal(payload.creditPrice) }),
         ...(payload.price !== undefined && { price: new Prisma.Decimal(payload.price) }),
         ...(payload.stockQuantity !== undefined && { stockQuantity: payload.stockQuantity }),
+        ...(payload.lowStockThreshold !== undefined && { lowStockThreshold: payload.lowStockThreshold }),
         ...(payload.imageUrl !== undefined && { imageUrl: payload.imageUrl || null }),
         ...(payload.isActive !== undefined && { isActive: payload.isActive }),
         ...(payload.categoryId !== undefined && { categoryId: payload.categoryId || null }),

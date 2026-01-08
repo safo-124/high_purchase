@@ -1,10 +1,21 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ProductForSale, CustomerForSale, createSale, createQuickCustomer, PurchaseTypeOption, CollectorOption } from "../../actions"
 import { toast } from "sonner"
 import { BillModal } from "../components/bill-modal"
+import { ShoppingCart, Plus, Trash2, Package } from "lucide-react"
+
+interface CartItem {
+  productId: string
+  productName: string
+  quantity: number
+  unitPrice: number
+  totalPrice: number
+  categoryName: string | null
+  stockQuantity: number
+}
 
 interface NewSaleFormProps {
   shopSlug: string
@@ -50,7 +61,8 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
 
   // Form state
   const [customerId, setCustomerId] = useState("")
-  const [productId, setProductId] = useState("")
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [selectedProductId, setSelectedProductId] = useState("")
   const [quantity, setQuantity] = useState(1)
   const [downPayment, setDownPayment] = useState("")
   const [tenorDays, setTenorDays] = useState(30)
@@ -75,36 +87,110 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
   const [newAssignedCollectorId, setNewAssignedCollectorId] = useState("")
   const [newNotes, setNewNotes] = useState("")
 
-  const selectedProduct = products.find((p) => p.id === productId)
+  const selectedProduct = products.find((p) => p.id === selectedProductId)
   const selectedCustomer = customers.find((c) => c.id === customerId)
 
   // Get the appropriate price based on purchase type
-  const getUnitPrice = () => {
-    if (!selectedProduct) return 0
+  const getProductPrice = useCallback((product: ProductForSale): number => {
     switch (purchaseType) {
       case "CASH":
-        return selectedProduct.cashPrice || selectedProduct.price
+        return product.cashPrice || product.price
       case "LAYAWAY":
-        return selectedProduct.layawayPrice || selectedProduct.price
+        return product.layawayPrice || product.price
       case "CREDIT":
       default:
-        return selectedProduct.creditPrice || selectedProduct.price
+        return product.creditPrice || product.price
     }
-  }
+  }, [purchaseType])
 
-  const unitPrice = getUnitPrice()
-  const subtotal = unitPrice * quantity
+  // Recalculate cart prices when payment type changes
+  useEffect(() => {
+    if (cart.length > 0) {
+      setCart(prevCart => prevCart.map(item => {
+        const product = products.find(p => p.id === item.productId)
+        if (!product) return item
+        const unitPrice = getProductPrice(product)
+        return {
+          ...item,
+          unitPrice,
+          totalPrice: unitPrice * item.quantity
+        }
+      }))
+    }
+  }, [purchaseType, products, getProductPrice])
+
+  // Cart calculations
+  const subtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0)
   const downPaymentNum = parseFloat(downPayment) || 0
   const remaining = Math.max(0, subtotal - downPaymentNum)
 
+  // Add to cart handler
+  const handleAddToCart = () => {
+    if (!selectedProductId) return
+    
+    const product = products.find(p => p.id === selectedProductId)
+    if (!product) return
+
+    const unitPrice = getProductPrice(product)
+
+    // Check existing cart quantity
+    const existingItem = cart.find(item => item.productId === selectedProductId)
+    const currentCartQty = existingItem?.quantity || 0
+    const newTotalQty = currentCartQty + quantity
+
+    // Validate stock
+    if (newTotalQty > product.stockQuantity) {
+      toast.error(`Only ${product.stockQuantity} units available in stock`)
+      return
+    }
+
+    // Check if already in cart
+    const existingIndex = cart.findIndex(item => item.productId === selectedProductId)
+    
+    if (existingIndex >= 0) {
+      const newCart = [...cart]
+      newCart[existingIndex].quantity += quantity
+      newCart[existingIndex].totalPrice = newCart[existingIndex].quantity * newCart[existingIndex].unitPrice
+      setCart(newCart)
+    } else {
+      setCart([...cart, {
+        productId: product.id,
+        productName: product.name,
+        quantity,
+        unitPrice,
+        totalPrice: unitPrice * quantity,
+        categoryName: product.categoryName || null,
+        stockQuantity: product.stockQuantity,
+      }])
+    }
+
+    setSelectedProductId("")
+    setQuantity(1)
+    toast.success(`${product.name} added to cart`)
+  }
+
+  const handleRemoveFromCart = (productId: string) => {
+    setCart(cart.filter(item => item.productId !== productId))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (cart.length === 0) {
+      toast.error("Please add at least one product to the cart")
+      return
+    }
+    
     setIsLoading(true)
 
     const result = await createSale(shopSlug, {
       customerId,
-      productId,
-      quantity,
+      items: cart.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
       downPayment: downPaymentNum,
       purchaseType,
       tenorDays,
@@ -115,6 +201,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
       const data = result.data as { purchaseId: string }
       setCreatedPurchaseId(data.purchaseId)
       setShowBillModal(true)
+      setCart([])
     } else {
       toast.error(result.error || "Failed to create sale")
     }
@@ -234,58 +321,12 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
         {/* Product Selection */}
         <div className="glass-card rounded-2xl p-6">
           <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
-            Product
+            <Package className="w-5 h-5 text-purple-400" />
+            Add Products
           </h2>
           
           <div className="space-y-4">
-            <select
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              required
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
-            >
-              <option value="" className="bg-slate-900">Select a product...</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id} className="bg-slate-900">
-                  {p.name} — GHS {p.price.toLocaleString()} ({p.stockQuantity} in stock)
-                </option>
-              ))}
-            </select>
-
-            {selectedProduct && (
-              <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <p className="text-sm text-white font-medium">{selectedProduct.name}</p>
-                    {selectedProduct.categoryName && (
-                      <p className="text-xs text-slate-400">{selectedProduct.categoryName}</p>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-400">{selectedProduct.stockQuantity} available</p>
-                </div>
-                
-                {/* Price tiers display */}
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div className="text-center p-2 rounded-lg bg-green-500/10 border border-green-500/20">
-                    <p className="text-green-400 font-medium">Cash</p>
-                    <p className="text-white">₵{(selectedProduct.cashPrice || selectedProduct.price).toLocaleString()}</p>
-                  </div>
-                  <div className="text-center p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                    <p className="text-blue-400 font-medium">Layaway</p>
-                    <p className="text-white">₵{(selectedProduct.layawayPrice || selectedProduct.price).toLocaleString()}</p>
-                  </div>
-                  <div className="text-center p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                    <p className="text-amber-400 font-medium">Credit</p>
-                    <p className="text-white">₵{(selectedProduct.creditPrice || selectedProduct.price).toLocaleString()}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Purchase Type Selection */}
+            {/* Payment Type Selection - First so price calculations are correct */}
             <div>
               <label className="text-sm font-medium text-slate-200 mb-2 block">Payment Type</label>
               <div className="grid grid-cols-3 gap-3">
@@ -337,21 +378,114 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
               </div>
             </div>
 
-            {/* Quantity */}
-            <div>
-              <label className="text-sm font-medium text-slate-200 mb-2 block">Quantity</label>
-              <input
-                type="number"
-                min={1}
-                max={selectedProduct?.stockQuantity || 999}
-                value={quantity}
-                onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                required
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
-              />
+            {/* Product and Quantity Selection */}
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <select
+                  value={selectedProductId}
+                  onChange={(e) => setSelectedProductId(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                >
+                  <option value="" className="bg-slate-900">Select a product...</option>
+                  {products.filter(p => p.stockQuantity > 0).map((p) => (
+                    <option key={p.id} value={p.id} className="bg-slate-900">
+                      {p.name} — ₵{getProductPrice(p).toLocaleString()} ({p.stockQuantity} in stock)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-24">
+                <input
+                  type="number"
+                  min={1}
+                  max={selectedProduct?.stockQuantity || 999}
+                  value={quantity}
+                  onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                  placeholder="Qty"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all text-center"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                disabled={!selectedProductId}
+                className="px-4 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-medium transition-all flex items-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Add
+              </button>
             </div>
+
+            {/* Selected product info */}
+            {selectedProduct && (
+              <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-sm text-white font-medium">{selectedProduct.name}</p>
+                    {selectedProduct.categoryName && (
+                      <p className="text-xs text-slate-400">{selectedProduct.categoryName}</p>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400">{selectedProduct.stockQuantity} available</p>
+                </div>
+                
+                {/* Price tiers display */}
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className={`text-center p-2 rounded-lg ${purchaseType === "CASH" ? "bg-green-500/20 border-2 border-green-500/50" : "bg-green-500/10 border border-green-500/20"}`}>
+                    <p className="text-green-400 font-medium">Cash</p>
+                    <p className="text-white">₵{(selectedProduct.cashPrice || selectedProduct.price).toLocaleString()}</p>
+                  </div>
+                  <div className={`text-center p-2 rounded-lg ${purchaseType === "LAYAWAY" ? "bg-blue-500/20 border-2 border-blue-500/50" : "bg-blue-500/10 border border-blue-500/20"}`}>
+                    <p className="text-blue-400 font-medium">Layaway</p>
+                    <p className="text-white">₵{(selectedProduct.layawayPrice || selectedProduct.price).toLocaleString()}</p>
+                  </div>
+                  <div className={`text-center p-2 rounded-lg ${purchaseType === "CREDIT" ? "bg-amber-500/20 border-2 border-amber-500/50" : "bg-amber-500/10 border border-amber-500/20"}`}>
+                    <p className="text-amber-400 font-medium">Credit</p>
+                    <p className="text-white">₵{(selectedProduct.creditPrice || selectedProduct.price).toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Shopping Cart */}
+        {cart.length > 0 && (
+          <div className="glass-card rounded-2xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 text-indigo-400" />
+              Cart ({cart.length} {cart.length === 1 ? 'item' : 'items'})
+            </h2>
+            
+            <div className="space-y-3">
+              {cart.map((item) => (
+                <div key={item.productId} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
+                  <div className="flex-1">
+                    <p className="text-sm text-white font-medium">{item.productName}</p>
+                    {item.categoryName && (
+                      <p className="text-xs text-slate-400">{item.categoryName}</p>
+                    )}
+                    <p className="text-xs text-slate-300 mt-1">
+                      {item.quantity} × ₵{item.unitPrice.toLocaleString()} = <span className="text-indigo-400 font-medium">₵{item.totalPrice.toLocaleString()}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFromCart(item.productId)}
+                    className="p-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              
+              <div className="border-t border-white/10 pt-3 mt-3 flex justify-between font-semibold">
+                <span className="text-white">Subtotal</span>
+                <span className="text-indigo-400">₵{subtotal.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Payment Terms */}
         <div className="glass-card rounded-2xl p-6">
@@ -400,7 +534,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
         </div>
 
         {/* Summary */}
-        {selectedProduct && (
+        {cart.length > 0 && (
           <div className="glass-card rounded-2xl p-6 bg-gradient-to-br from-indigo-500/10 to-purple-500/5 border border-indigo-500/20">
             <h2 className="text-lg font-semibold text-white mb-4">Order Summary</h2>
             <div className="space-y-2 text-sm">
@@ -414,14 +548,20 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
                    purchaseType === "LAYAWAY" ? "📅 Layaway" : "💳 Credit (BNPL)"}
                 </span>
               </div>
-              <div className="flex justify-between text-slate-300">
-                <span>{selectedProduct.name} × {quantity}</span>
-                <span>GHS {subtotal.toLocaleString()}</span>
+              {cart.map((item) => (
+                <div key={item.productId} className="flex justify-between text-slate-300">
+                  <span>{item.productName} × {item.quantity}</span>
+                  <span>₵{item.totalPrice.toLocaleString()}</span>
+                </div>
+              ))}
+              <div className="flex justify-between text-slate-300 font-medium border-t border-white/10 pt-2">
+                <span>Subtotal ({cart.reduce((sum, item) => sum + item.quantity, 0)} items)</span>
+                <span>₵{subtotal.toLocaleString()}</span>
               </div>
               {purchaseType !== "CASH" && (
                 <div className="flex justify-between text-slate-300">
                   <span>Down Payment</span>
-                  <span className="text-green-400">- GHS {downPaymentNum.toLocaleString()}</span>
+                  <span className="text-green-400">- ₵{downPaymentNum.toLocaleString()}</span>
                 </div>
               )}
               <div className="border-t border-white/10 pt-2 mt-2 flex justify-between font-semibold">
@@ -429,7 +569,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
                   {purchaseType === "CASH" ? "Total Due" : "Amount to Finance"}
                 </span>
                 <span className="text-indigo-400">
-                  GHS {purchaseType === "CASH" ? subtotal.toLocaleString() : remaining.toLocaleString()}
+                  ₵{purchaseType === "CASH" ? subtotal.toLocaleString() : remaining.toLocaleString()}
                 </span>
               </div>
               {purchaseType !== "CASH" && (
@@ -449,7 +589,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
         {/* Submit */}
         <button
           type="submit"
-          disabled={isLoading || !customerId || !productId}
+          disabled={isLoading || !customerId || cart.length === 0}
           className="w-full px-6 py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold text-lg shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
         >
           {isLoading ? (

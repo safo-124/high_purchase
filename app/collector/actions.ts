@@ -612,10 +612,16 @@ export async function getCustomersForCollectorSale(shopSlug: string): Promise<Cu
 // CREATE SALE (FOR COLLECTORS)
 // ============================================
 
+export interface CollectorSaleItem {
+  productId: string
+  productName: string
+  quantity: number
+  unitPrice: number
+}
+
 export interface CollectorSalePayload {
   customerId: string
-  productId: string
-  quantity: number
+  items: CollectorSaleItem[]
   downPayment: number
   purchaseType: PurchaseTypeOption
   tenorDays: number
@@ -633,12 +639,8 @@ export async function createCollectorSale(
       return { success: false, error: "Customer is required" }
     }
 
-    if (!payload.productId) {
-      return { success: false, error: "Product is required" }
-    }
-
-    if (payload.quantity < 1) {
-      return { success: false, error: "Quantity must be at least 1" }
+    if (!payload.items || payload.items.length === 0) {
+      return { success: false, error: "At least one product is required" }
     }
 
     if (payload.downPayment < 0) {
@@ -658,17 +660,29 @@ export async function createCollectorSale(
       return { success: false, error: "Customer not found" }
     }
 
-    // Verify product belongs to shop and has stock
-    const product = await prisma.product.findFirst({
-      where: { id: payload.productId, shopId: shop.id, isActive: true },
+    // Verify all products and their stock
+    const productIds = payload.items.map(item => item.productId)
+    const products = await prisma.product.findMany({
+      where: { 
+        id: { in: productIds }, 
+        shopId: shop.id, 
+        isActive: true 
+      },
     })
 
-    if (!product) {
-      return { success: false, error: "Product not found" }
+    if (products.length !== payload.items.length) {
+      return { success: false, error: "One or more products not found" }
     }
 
-    if (product.stockQuantity < payload.quantity) {
-      return { success: false, error: `Insufficient stock. Only ${product.stockQuantity} available.` }
+    // Check stock for each item
+    for (const item of payload.items) {
+      const product = products.find(p => p.id === item.productId)
+      if (!product) {
+        return { success: false, error: `Product not found: ${item.productId}` }
+      }
+      if (product.stockQuantity < item.quantity) {
+        return { success: false, error: `Insufficient stock for ${product.name}. Only ${product.stockQuantity} available.` }
+      }
     }
 
     // Get shop policy for interest calculation
@@ -685,27 +699,8 @@ export async function createCollectorSale(
       return { success: false, error: `Tenor cannot exceed ${policy.maxTenorDays} days` }
     }
 
-    // Get the appropriate price based on purchase type
-    let unitPrice: number
-    switch (payload.purchaseType) {
-      case "CASH":
-        unitPrice = Number(product.cashPrice)
-        break
-      case "LAYAWAY":
-        unitPrice = Number(product.layawayPrice)
-        break
-      case "CREDIT":
-      default:
-        unitPrice = Number(product.creditPrice)
-        break
-    }
-
-    // Fallback to legacy price if tier price is 0
-    if (unitPrice === 0) {
-      unitPrice = Number(product.price)
-    }
-
-    const subtotal = unitPrice * payload.quantity
+    // Calculate subtotal from all items
+    const subtotal = payload.items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0)
     const interestRate = Number(policy.interestRate) / 100
 
     // For CASH purchases, no interest
@@ -735,13 +730,15 @@ export async function createCollectorSale(
 
     // Create purchase and update stock in a transaction
     const purchase = await prisma.$transaction(async (tx) => {
-      // Decrement stock
-      await tx.product.update({
-        where: { id: product.id },
-        data: { stockQuantity: { decrement: payload.quantity } },
-      })
+      // Decrement stock for all products
+      for (const item of payload.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stockQuantity: { decrement: item.quantity } },
+        })
+      }
 
-      // Create purchase
+      // Create purchase with all items
       const newPurchase = await tx.purchase.create({
         data: {
           purchaseNumber,
@@ -761,13 +758,13 @@ export async function createCollectorSale(
           interestRate: policy.interestRate,
           notes: `${payload.purchaseType} sale by Collector ${user.name}`,
           items: {
-            create: {
-              productId: product.id,
-              productName: product.name,
-              quantity: payload.quantity,
-              unitPrice: new Prisma.Decimal(unitPrice),
-              totalPrice: new Prisma.Decimal(subtotal),
-            },
+            create: payload.items.map(item => ({
+              productId: item.productId,
+              productName: item.productName,
+              quantity: item.quantity,
+              unitPrice: new Prisma.Decimal(item.unitPrice),
+              totalPrice: new Prisma.Decimal(item.unitPrice * item.quantity),
+            })),
           },
         },
         include: {
@@ -803,6 +800,10 @@ export async function createCollectorSale(
       return newPurchase
     })
 
+    // Create audit log with all product info
+    const productNames = payload.items.map(item => item.productName).join(", ")
+    const totalQuantity = payload.items.reduce((sum, item) => sum + item.quantity, 0)
+
     await createAuditLog({
       actorUserId: user.id,
       action: "COLLECTOR_SALE_CREATED",
@@ -813,9 +814,9 @@ export async function createCollectorSale(
         shopName: shop.name,
         customerId: customer.id,
         customerName: `${customer.firstName} ${customer.lastName}`,
-        productId: product.id,
-        productName: product.name,
-        quantity: payload.quantity,
+        productCount: payload.items.length,
+        productNames,
+        totalQuantity,
         totalAmount,
         downPayment,
         tenorDays: payload.tenorDays,

@@ -15,8 +15,15 @@ interface Product {
   sku: string | null
   description: string | null
   category: string | null
+  costPrice: number
   cashPrice: number
+  layawayPrice: number
+  creditPrice: number
   hpPrice: number
+  // Profit calculations
+  cashProfit: number
+  layawayProfit: number
+  creditProfit: number
   stockQuantity: number
   lowStockThreshold: number
   isActive: boolean
@@ -61,6 +68,7 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
     name: "",
     description: "",
     sku: "",
+    costPrice: "0",
     cashPrice: "0",
     layawayPrice: "0",
     creditPrice: "0",
@@ -111,9 +119,10 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
       name: product.name,
       description: product.description || "",
       sku: product.sku || "",
+      costPrice: product.costPrice.toString(),
       cashPrice: product.cashPrice.toString(),
-      layawayPrice: product.hpPrice.toString(),
-      creditPrice: product.hpPrice.toString(),
+      layawayPrice: product.layawayPrice.toString(),
+      creditPrice: product.creditPrice.toString(),
       stockQuantity: product.stockQuantity.toString(),
       lowStockThreshold: product.lowStockThreshold.toString(),
       isActive: product.isActive,
@@ -160,6 +169,7 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
         name: formData.name.trim(),
         description: formData.description.trim() || null,
         sku: formData.sku.trim() || null,
+        costPrice: parseFloat(formData.costPrice) || 0,
         cashPrice: parseFloat(formData.cashPrice) || 0,
         layawayPrice: parseFloat(formData.layawayPrice) || 0,
         creditPrice: parseFloat(formData.creditPrice) || 0,
@@ -334,8 +344,9 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Product</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Category</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Shop</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Cash Price</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">HP Price</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-rose-400 uppercase tracking-wider">Cost</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Selling</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-emerald-400 uppercase tracking-wider">Profit</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Stock</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-4 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">Actions</th>
@@ -376,10 +387,27 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm text-slate-300">₵{product.cashPrice.toLocaleString()}</p>
+                      <p className="text-sm font-medium text-rose-400">₵{product.costPrice.toLocaleString()}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm font-medium text-cyan-400">₵{product.hpPrice.toLocaleString()}</p>
+                      <div className="flex flex-col gap-0.5 text-xs">
+                        <span className="text-green-400">Cash: ₵{product.cashPrice.toLocaleString()}</span>
+                        <span className="text-blue-400">Layaway: ₵{product.layawayPrice.toLocaleString()}</span>
+                        <span className="text-amber-400">Credit: ₵{product.creditPrice.toLocaleString()}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-0.5 text-xs">
+                        <span className={product.cashProfit >= 0 ? "text-emerald-400" : "text-red-400"}>
+                          Cash: ₵{product.cashProfit.toLocaleString()}
+                        </span>
+                        <span className={product.layawayProfit >= 0 ? "text-emerald-400" : "text-red-400"}>
+                          Layaway: ₵{product.layawayProfit.toLocaleString()}
+                        </span>
+                        <span className={product.creditProfit >= 0 ? "text-emerald-400" : "text-red-400"}>
+                          Credit: ₵{product.creditProfit.toLocaleString()}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <button
@@ -482,6 +510,35 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
                   onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
                 />
+              </div>
+
+              {/* Cost Price */}
+              <div>
+                <label className="text-sm text-rose-400 mb-2 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Cost Price (₵)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.costPrice}
+                  onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
+                  className="w-full px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 focus:outline-none focus:border-rose-500/50"
+                />
+                <p className="text-xs text-slate-500 mt-1">Purchase/cost price for profit calculation</p>
+              </div>
+
+              {/* Selling Prices */}
+              <div className="space-y-2">
+                <label className="text-sm text-slate-400 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Selling Prices (₵)
+                </label>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
