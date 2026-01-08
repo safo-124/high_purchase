@@ -10,6 +10,7 @@ interface Product {
   sku: string | null
   price: number
   stockQuantity: number
+  lowStockThreshold: number
   categoryName: string | null
   categoryColor: string | null
 }
@@ -192,7 +193,7 @@ export function ProductsContent({ products, shopSlug }: ProductsContentProps) {
               <div className={`absolute top-4 right-4 px-2 py-1 rounded-full text-xs font-medium ${
                 product.stockQuantity === 0
                   ? "bg-red-500/10 text-red-400 border border-red-500/20"
-                  : product.stockQuantity <= 5
+                  : product.stockQuantity <= product.lowStockThreshold
                   ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                   : "bg-green-500/10 text-green-400 border border-green-500/20"
               }`}>

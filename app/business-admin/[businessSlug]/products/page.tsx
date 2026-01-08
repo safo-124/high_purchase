@@ -16,7 +16,7 @@ export default async function BusinessProductsPage({ params }: Props) {
   const totalProducts = products.length
   const activeProducts = products.filter(p => p.isActive).length
   const totalStock = products.reduce((sum, p) => sum + p.stockQuantity, 0)
-  const lowStock = products.filter(p => p.stockQuantity > 0 && p.stockQuantity <= 5).length
+  const lowStock = products.filter(p => p.stockQuantity > 0 && p.stockQuantity <= p.lowStockThreshold).length
   const outOfStock = products.filter(p => p.stockQuantity === 0).length
   
   // Get unique categories
@@ -67,8 +67,9 @@ export default async function BusinessProductsPage({ params }: Props) {
       {/* Products Table */}
       <ProductsContent 
         products={products} 
-        shops={shops.map(s => ({ name: s.name, shopSlug: s.shopSlug }))}
+        shops={shops.map(s => ({ id: s.id, name: s.name, shopSlug: s.shopSlug }))}
         categories={categories as string[]}
+        businessSlug={businessSlug}
       />
     </div>
   )

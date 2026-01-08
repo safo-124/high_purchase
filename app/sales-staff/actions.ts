@@ -76,6 +76,7 @@ export interface ProductForSale {
   layawayPrice: number
   creditPrice: number
   stockQuantity: number
+  lowStockThreshold: number
   categoryName: string | null
   categoryColor: string | null
   imageUrl: string | null
@@ -113,6 +114,7 @@ export async function getProductsForSale(shopSlug: string): Promise<ProductForSa
     layawayPrice: Number(p.layawayPrice),
     creditPrice: Number(p.creditPrice),
     stockQuantity: p.stockQuantity,
+    lowStockThreshold: p.lowStockThreshold,
     categoryName: p.category?.name || null,
     categoryColor: p.category?.color || null,
     imageUrl: p.imageUrl,

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import bcrypt from "bcrypt"
 import prisma from "../../lib/prisma"
 import { requireBusinessAdmin, createAuditLog } from "../../lib/auth"
-import { Role } from "../generated/prisma/client"
+import { Role, Prisma } from "../generated/prisma/client"
 
 // Validation regex
 const SLUG_REGEX = /^[a-z0-9-]+$/
@@ -1054,5 +1054,287 @@ export async function getStaffMember(businessSlug: string, memberId: string) {
     shopName: member.shop.name,
     shopSlug: member.shop.shopSlug,
     createdAt: member.createdAt,
+  }
+}
+
+// ===== PRODUCT MANAGEMENT =====
+
+export interface ProductPayload {
+  name: string
+  description?: string | null
+  sku?: string | null
+  cashPrice: number
+  layawayPrice: number
+  creditPrice: number
+  stockQuantity: number
+  lowStockThreshold?: number
+  imageUrl?: string | null
+  isActive?: boolean
+  categoryId?: string | null
+}
+
+/**
+ * Update a product (business admin - full access)
+ */
+export async function updateBusinessProduct(
+  businessSlug: string,
+  productId: string,
+  payload: Partial<ProductPayload>
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Get product and verify it belongs to a shop in this business
+    const product = await prisma.product.findFirst({
+      where: {
+        id: productId,
+        shop: { businessId: business.id },
+      },
+      include: { shop: true },
+    })
+
+    if (!product) {
+      return { success: false, error: "Product not found" }
+    }
+
+    // Validation
+    if (payload.name !== undefined && payload.name.trim().length === 0) {
+      return { success: false, error: "Product name cannot be empty" }
+    }
+
+    // Price validations
+    if (payload.cashPrice !== undefined && payload.cashPrice < 0) {
+      return { success: false, error: "Cash price must be 0 or greater" }
+    }
+    if (payload.layawayPrice !== undefined && payload.layawayPrice < 0) {
+      return { success: false, error: "Layaway price must be 0 or greater" }
+    }
+    if (payload.creditPrice !== undefined && payload.creditPrice < 0) {
+      return { success: false, error: "Credit price must be 0 or greater" }
+    }
+
+    // Get effective prices for validation
+    const cashPrice = payload.cashPrice ?? Number(product.cashPrice)
+    const layawayPrice = payload.layawayPrice ?? Number(product.layawayPrice)
+    const creditPrice = payload.creditPrice ?? Number(product.creditPrice)
+
+    // Validate pricing logic: Cash <= Layaway <= Credit
+    if (cashPrice > layawayPrice) {
+      return { success: false, error: "Cash price should not exceed layaway price" }
+    }
+    if (layawayPrice > creditPrice) {
+      return { success: false, error: "Layaway price should not exceed credit price" }
+    }
+
+    // Check for duplicate SKU if changing
+    if (payload.sku && payload.sku !== product.sku) {
+      const existingSku = await prisma.product.findFirst({
+        where: {
+          shopId: product.shopId,
+          sku: payload.sku.trim(),
+          id: { not: productId },
+        },
+      })
+      if (existingSku) {
+        return { success: false, error: "A product with this SKU already exists in this shop" }
+      }
+    }
+
+    const updatedProduct = await prisma.product.update({
+      where: { id: productId },
+      data: {
+        ...(payload.name !== undefined && { name: payload.name.trim() }),
+        ...(payload.description !== undefined && { description: payload.description?.trim() || null }),
+        ...(payload.sku !== undefined && { sku: payload.sku?.trim() || null }),
+        ...(payload.cashPrice !== undefined && { cashPrice: new Prisma.Decimal(payload.cashPrice) }),
+        ...(payload.layawayPrice !== undefined && { layawayPrice: new Prisma.Decimal(payload.layawayPrice) }),
+        ...(payload.creditPrice !== undefined && { creditPrice: new Prisma.Decimal(payload.creditPrice) }),
+        ...(payload.stockQuantity !== undefined && { stockQuantity: payload.stockQuantity }),
+        ...(payload.imageUrl !== undefined && { imageUrl: payload.imageUrl || null }),
+        ...(payload.isActive !== undefined && { isActive: payload.isActive }),
+        ...(payload.categoryId !== undefined && { categoryId: payload.categoryId || null }),
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PRODUCT_UPDATED",
+      entityType: "Product",
+      entityId: updatedProduct.id,
+      metadata: {
+        businessSlug,
+        shopId: product.shopId,
+        shopName: product.shop.name,
+        productName: updatedProduct.name,
+        changes: payload,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/products`)
+
+    return { success: true, data: { id: updatedProduct.id, name: updatedProduct.name } }
+  } catch (error) {
+    console.error("Error updating product:", error)
+    return { success: false, error: "Failed to update product" }
+  }
+}
+
+/**
+ * Delete a product (business admin only)
+ */
+export async function deleteBusinessProduct(
+  businessSlug: string,
+  productId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Get product and verify it belongs to a shop in this business
+    const product = await prisma.product.findFirst({
+      where: {
+        id: productId,
+        shop: { businessId: business.id },
+      },
+      include: { shop: true },
+    })
+
+    if (!product) {
+      return { success: false, error: "Product not found" }
+    }
+
+    // Check if product has any active purchases
+    const activePurchases = await prisma.purchase.count({
+      where: {
+        items: {
+          some: { productId },
+        },
+        status: { in: ["ACTIVE", "OVERDUE"] },
+      },
+    })
+
+    if (activePurchases > 0) {
+      return { 
+        success: false, 
+        error: `Cannot delete product with ${activePurchases} active purchase(s). Complete or cancel them first.` 
+      }
+    }
+
+    await prisma.product.delete({
+      where: { id: productId },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PRODUCT_DELETED",
+      entityType: "Product",
+      entityId: productId,
+      metadata: {
+        businessSlug,
+        shopId: product.shopId,
+        shopName: product.shop.name,
+        productName: product.name,
+        productSku: product.sku,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/products`)
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting product:", error)
+    return { success: false, error: "Failed to delete product" }
+  }
+}
+
+/**
+ * Toggle product active status (business admin)
+ */
+export async function toggleBusinessProductStatus(
+  businessSlug: string,
+  productId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const product = await prisma.product.findFirst({
+      where: {
+        id: productId,
+        shop: { businessId: business.id },
+      },
+      include: { shop: true },
+    })
+
+    if (!product) {
+      return { success: false, error: "Product not found" }
+    }
+
+    const newStatus = !product.isActive
+
+    await prisma.product.update({
+      where: { id: productId },
+      data: { isActive: newStatus },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PRODUCT_STATUS_CHANGED",
+      entityType: "Product",
+      entityId: productId,
+      metadata: {
+        businessSlug,
+        productName: product.name,
+        oldStatus: product.isActive,
+        newStatus,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/products`)
+
+    return { success: true, data: { isActive: newStatus } }
+  } catch (error) {
+    console.error("Error toggling product status:", error)
+    return { success: false, error: "Failed to update product status" }
+  }
+}
+
+/**
+ * Get a single product details (business admin)
+ */
+export async function getBusinessProduct(businessSlug: string, productId: string) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const product = await prisma.product.findFirst({
+    where: {
+      id: productId,
+      shop: { businessId: business.id },
+    },
+    include: {
+      shop: { select: { id: true, name: true, shopSlug: true } },
+      category: { select: { id: true, name: true, color: true } },
+    },
+  })
+
+  if (!product) {
+    return null
+  }
+
+  return {
+    id: product.id,
+    name: product.name,
+    description: product.description,
+    sku: product.sku,
+    cashPrice: Number(product.cashPrice),
+    layawayPrice: Number(product.layawayPrice),
+    creditPrice: Number(product.creditPrice),
+    stockQuantity: product.stockQuantity,
+    imageUrl: product.imageUrl,
+    isActive: product.isActive,
+    categoryId: product.categoryId,
+    categoryName: product.category?.name,
+    categoryColor: product.category?.color,
+    shopId: product.shop.id,
+    shopName: product.shop.name,
+    shopSlug: product.shop.shopSlug,
+    createdAt: product.createdAt,
   }
 }

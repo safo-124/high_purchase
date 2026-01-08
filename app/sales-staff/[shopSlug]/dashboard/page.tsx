@@ -141,7 +141,7 @@ export default async function SalesStaffDashboard({ params }: SalesStaffDashboar
                       <p className="text-xs text-slate-400">GHS {product.price.toLocaleString()}</p>
                     </div>
                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                      product.stockQuantity <= 5 
+                      product.stockQuantity <= product.lowStockThreshold 
                         ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                         : "bg-green-500/10 text-green-400 border border-green-500/20"
                     }`}>
