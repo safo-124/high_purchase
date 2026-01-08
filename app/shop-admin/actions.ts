@@ -198,6 +198,7 @@ export interface ProductData {
   creditPrice: number
   price: number
   stockQuantity: number
+  lowStockThreshold: number
   imageUrl: string | null
   isActive: boolean
   categoryId: string | null
@@ -233,6 +234,7 @@ export async function getProducts(shopSlug: string): Promise<ProductData[]> {
     creditPrice: Number(p.creditPrice),
     price: Number(p.price),
     stockQuantity: p.stockQuantity,
+    lowStockThreshold: p.lowStockThreshold,
     imageUrl: p.imageUrl,
     isActive: p.isActive,
     categoryId: p.categoryId,

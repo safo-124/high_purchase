@@ -678,6 +678,7 @@ export async function getBusinessProducts(businessSlug: string) {
     cashPrice: Number(product.cashPrice),
     hpPrice: Number(product.creditPrice),
     stockQuantity: product.stockQuantity,
+    lowStockThreshold: product.lowStockThreshold,
     isActive: product.isActive,
     shopName: product.shop.name,
     shopSlug: product.shop.shopSlug,
