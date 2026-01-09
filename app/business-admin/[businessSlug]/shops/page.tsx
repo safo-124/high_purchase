@@ -54,7 +54,7 @@ export default async function BusinessShopsPage({ params }: Props) {
       </div>
 
       {/* Shops Table with Search/Filter */}
-      <ShopsContent shops={shops} />
+      <ShopsContent shops={shops} businessSlug={businessSlug} />
     </div>
   )
 }

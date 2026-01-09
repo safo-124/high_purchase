@@ -164,7 +164,7 @@ export function BusinessAdminSidebar({
   const handleSignOut = async () => {
     setIsSigningOut(true)
     try {
-      const response = await fetch("/api/auth/signout", { method: "POST" })
+      const response = await fetch("/api/auth/logout", { method: "POST" })
       if (response.ok) {
         window.location.href = "/login"
       }

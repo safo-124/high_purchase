@@ -150,6 +150,184 @@ export async function upsertBusinessPolicy(
   }
 }
 
+// Shop Detail Overview Types
+export interface ShopDetailOverview {
+  id: string
+  name: string
+  shopSlug: string
+  isActive: boolean
+  createdAt: Date
+  // Products & Inventory
+  totalProducts: number
+  totalStockUnits: number
+  lowStockProducts: number
+  // Staff
+  staffCount: number
+  collectorCount: number
+  // Sales & Revenue
+  totalSales: number
+  totalCollected: number
+  totalOutstanding: number
+  activePurchases: number
+  completedPurchases: number
+  overduePurchases: number
+  // Profit Calculations
+  estimatedProfitCash: number      // Potential profit if all stock sold at cash price
+  estimatedProfitLayaway: number   // Potential profit if all stock sold at layaway price
+  estimatedProfitCredit: number    // Potential profit if all stock sold at credit price
+  actualProfit: number             // Actual profit from completed sales
+  totalCostOfGoodsSold: number     // Total cost of items sold
+  // Customer Stats
+  totalCustomers: number
+  activeCustomers: number
+}
+
+/**
+ * Get detailed shop overview for business admin
+ */
+export async function getShopDetailOverview(
+  businessSlug: string,
+  shopSlug: string
+): Promise<ShopDetailOverview | null> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const shop = await prisma.shop.findFirst({
+    where: { shopSlug, businessId: business.id },
+    include: {
+      products: {
+        where: { isActive: true },
+        select: {
+          id: true,
+          stockQuantity: true,
+          lowStockThreshold: true,
+          costPrice: true,
+          cashPrice: true,
+          layawayPrice: true,
+          creditPrice: true,
+        },
+      },
+      members: {
+        where: { isActive: true },
+        select: { role: true },
+      },
+      customers: {
+        where: { isActive: true },
+        select: {
+          id: true,
+          purchases: {
+            select: {
+              id: true,
+              status: true,
+              totalAmount: true,
+              amountPaid: true,
+              outstandingBalance: true,
+              purchaseType: true,
+              items: {
+                select: {
+                  quantity: true,
+                  unitPrice: true,
+                  product: {
+                    select: { costPrice: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  if (!shop) return null
+
+  // Products & Inventory calculations
+  const totalProducts = shop.products.length
+  const totalStockUnits = shop.products.reduce((sum, p) => sum + p.stockQuantity, 0)
+  const lowStockProducts = shop.products.filter(p => p.stockQuantity <= p.lowStockThreshold).length
+
+  // Staff counts
+  const staffCount = shop.members.filter(m => m.role === "SALES_STAFF" || m.role === "SHOP_ADMIN").length
+  const collectorCount = shop.members.filter(m => m.role === "DEBT_COLLECTOR").length
+
+  // Calculate estimated profit from current inventory
+  let estimatedProfitCash = 0
+  let estimatedProfitLayaway = 0
+  let estimatedProfitCredit = 0
+
+  for (const product of shop.products) {
+    const costPrice = Number(product.costPrice)
+    const cashPrice = Number(product.cashPrice)
+    const layawayPrice = Number(product.layawayPrice)
+    const creditPrice = Number(product.creditPrice)
+    const stock = product.stockQuantity
+
+    estimatedProfitCash += (cashPrice - costPrice) * stock
+    estimatedProfitLayaway += (layawayPrice - costPrice) * stock
+    estimatedProfitCredit += (creditPrice - costPrice) * stock
+  }
+
+  // Flatten all purchases from customers
+  const allPurchases = shop.customers.flatMap(c => c.purchases)
+
+  // Sales & Revenue calculations
+  const totalSales = allPurchases.reduce((sum, p) => sum + Number(p.totalAmount), 0)
+  const totalCollected = allPurchases.reduce((sum, p) => sum + Number(p.amountPaid), 0)
+  const totalOutstanding = allPurchases.reduce((sum, p) => sum + Number(p.outstandingBalance), 0)
+  
+  const activePurchases = allPurchases.filter(p => p.status === "ACTIVE" || p.status === "PENDING").length
+  const completedPurchases = allPurchases.filter(p => p.status === "COMPLETED").length
+  const overduePurchases = allPurchases.filter(p => p.status === "OVERDUE" || p.status === "DEFAULTED").length
+
+  // Actual profit calculation (from completed sales only)
+  let actualProfit = 0
+  let totalCostOfGoodsSold = 0
+
+  for (const purchase of allPurchases.filter(p => p.status === "COMPLETED")) {
+    const revenue = Number(purchase.totalAmount)
+    let costOfGoods = 0
+    
+    for (const item of purchase.items) {
+      const costPrice = item.product?.costPrice ? Number(item.product.costPrice) : 0
+      costOfGoods += costPrice * item.quantity
+    }
+    
+    totalCostOfGoodsSold += costOfGoods
+    actualProfit += revenue - costOfGoods
+  }
+
+  // Customer stats
+  const totalCustomers = shop.customers.length
+  const activeCustomers = shop.customers.filter(c => 
+    c.purchases.some(p => p.status === "ACTIVE" || p.status === "PENDING")
+  ).length
+
+  return {
+    id: shop.id,
+    name: shop.name,
+    shopSlug: shop.shopSlug,
+    isActive: shop.isActive,
+    createdAt: shop.createdAt,
+    totalProducts,
+    totalStockUnits,
+    lowStockProducts,
+    staffCount,
+    collectorCount,
+    totalSales,
+    totalCollected,
+    totalOutstanding,
+    activePurchases,
+    completedPurchases,
+    overduePurchases,
+    estimatedProfitCash,
+    estimatedProfitLayaway,
+    estimatedProfitCredit,
+    actualProfit,
+    totalCostOfGoodsSold,
+    totalCustomers,
+    activeCustomers,
+  }
+}
+
 /**
  * Get all shops for a business
  */
