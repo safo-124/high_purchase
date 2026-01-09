@@ -50,7 +50,12 @@ export function PurchasesSection({ purchases, shopSlug }: PurchasesSectionProps)
     })
 
     if (result.success) {
-      toast.success("Payment recorded successfully")
+      const data = result.data as { awaitingConfirmation?: boolean } | undefined
+      if (data?.awaitingConfirmation) {
+        toast.success("Payment recorded - awaiting confirmation")
+      } else {
+        toast.success("Payment recorded and confirmed")
+      }
       setPaymentModal({ open: false, purchase: null })
       setPaymentAmount("")
       setPaymentReference("")

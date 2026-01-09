@@ -4,6 +4,7 @@ import Link from "next/link"
 import { LogoutButton } from "../logout-button"
 import { CreateBusinessDialog } from "./create-business-dialog"
 import { BusinessActions } from "./business-actions"
+import { AddAdminDialog } from "./add-admin-dialog"
 
 export default async function BusinessesPage() {
   const user = await requireSuperAdmin()
@@ -224,9 +225,23 @@ export default async function BusinessesPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <div>
-                          <p className="text-sm text-white">{business.adminName || "—"}</p>
-                          <p className="text-xs text-slate-500">{business.adminEmail || "No admin"}</p>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1">
+                            {business.admins.length > 0 ? (
+                              <div>
+                                <p className="text-sm text-white">{business.admins[0].name || "—"}</p>
+                                <p className="text-xs text-slate-500">
+                                  {business.admins[0].email}
+                                  {business.admins.length > 1 && (
+                                    <span className="ml-1 text-purple-400">+{business.admins.length - 1} more</span>
+                                  )}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-500">No admin</p>
+                            )}
+                          </div>
+                          <AddAdminDialog business={business} />
                         </div>
                       </td>
                       <td className="px-6 py-4">

@@ -23,6 +23,12 @@ export interface BusinessData {
   isActive: boolean
   createdAt: Date
   shopCount: number
+  admins: Array<{
+    id: string
+    name: string | null
+    email: string
+  }>
+  // For backwards compatibility
   adminName: string | null
   adminEmail: string | null
 }
@@ -41,7 +47,6 @@ export async function getBusinesses(): Promise<BusinessData[]> {
       members: {
         where: { role: "BUSINESS_ADMIN", isActive: true },
         include: { user: true },
-        take: 1,
       },
     },
     orderBy: { createdAt: "desc" },
@@ -55,6 +60,11 @@ export async function getBusinesses(): Promise<BusinessData[]> {
     isActive: b.isActive,
     createdAt: b.createdAt,
     shopCount: b._count.shops,
+    admins: b.members.map((m) => ({
+      id: m.user.id,
+      name: m.user.name,
+      email: m.user.email,
+    })),
     adminName: b.members[0]?.user.name || null,
     adminEmail: b.members[0]?.user.email || null,
   }))
@@ -177,6 +187,169 @@ export async function createBusiness(formData: FormData): Promise<ActionResult> 
   } catch (error) {
     console.error("Error creating business:", error)
     return { success: false, error: "Failed to create business" }
+  }
+}
+
+/**
+ * Add an additional business admin to an existing business
+ */
+export async function addBusinessAdmin(formData: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireSuperAdmin()
+
+    const businessId = formData.get("businessId") as string
+    const adminName = formData.get("adminName") as string
+    const adminEmail = formData.get("adminEmail") as string
+    const adminPassword = formData.get("adminPassword") as string
+
+    // Validation
+    if (!businessId) {
+      return { success: false, error: "Business ID is required" }
+    }
+
+    const business = await prisma.business.findUnique({
+      where: { id: businessId },
+    })
+
+    if (!business) {
+      return { success: false, error: "Business not found" }
+    }
+
+    if (!adminName || adminName.trim().length === 0) {
+      return { success: false, error: "Admin name is required" }
+    }
+    if (!adminEmail || !EMAIL_REGEX.test(adminEmail)) {
+      return { success: false, error: "Valid admin email is required" }
+    }
+    if (!adminPassword || adminPassword.length < 8) {
+      return { success: false, error: "Password must be at least 8 characters" }
+    }
+
+    // Check if email already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: adminEmail.toLowerCase().trim() },
+    })
+    if (existingUser) {
+      return { success: false, error: "A user with this email already exists" }
+    }
+
+    // Create business admin user
+    const passwordHash = await bcrypt.hash(adminPassword, 12)
+    
+    const newAdmin = await prisma.user.create({
+      data: {
+        email: adminEmail.toLowerCase().trim(),
+        name: adminName.trim(),
+        passwordHash,
+        role: "BUSINESS_ADMIN",
+        businessMemberships: {
+          create: {
+            businessId: business.id,
+            role: "BUSINESS_ADMIN",
+            isActive: true,
+          },
+        },
+      },
+    })
+
+    // Audit log
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "BUSINESS_ADMIN_ADDED",
+      entityType: "Business",
+      entityId: business.id,
+      metadata: {
+        businessName: business.name,
+        businessSlug: business.businessSlug,
+        newAdminEmail: newAdmin.email,
+        newAdminName: newAdmin.name,
+      },
+    })
+
+    revalidatePath("/super-admin/businesses")
+    revalidatePath("/super-admin")
+
+    return { 
+      success: true, 
+      data: { 
+        admin: { 
+          id: newAdmin.id,
+          email: newAdmin.email, 
+          name: newAdmin.name 
+        }
+      } 
+    }
+  } catch (error) {
+    console.error("Error adding business admin:", error)
+    return { success: false, error: "Failed to add business admin" }
+  }
+}
+
+/**
+ * Remove a business admin from a business
+ */
+export async function removeBusinessAdmin(
+  businessId: string,
+  adminUserId: string
+): Promise<ActionResult> {
+  try {
+    const user = await requireSuperAdmin()
+
+    const business = await prisma.business.findUnique({
+      where: { id: businessId },
+      include: {
+        members: {
+          where: { role: "BUSINESS_ADMIN", isActive: true },
+        },
+      },
+    })
+
+    if (!business) {
+      return { success: false, error: "Business not found" }
+    }
+
+    // Check there's at least one other admin remaining
+    if (business.members.length <= 1) {
+      return { success: false, error: "Cannot remove the last business admin. Add another admin first." }
+    }
+
+    const membership = business.members.find((m) => m.userId === adminUserId)
+    if (!membership) {
+      return { success: false, error: "Admin not found for this business" }
+    }
+
+    // Get admin info for audit log
+    const adminUser = await prisma.user.findUnique({
+      where: { id: adminUserId },
+    })
+
+    // Deactivate the membership (soft delete)
+    await prisma.businessMember.update({
+      where: { id: membership.id },
+      data: { isActive: false },
+    })
+
+    // Audit log
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "BUSINESS_ADMIN_REMOVED",
+      entityType: "Business",
+      entityId: business.id,
+      metadata: {
+        businessName: business.name,
+        businessSlug: business.businessSlug,
+        removedAdminEmail: adminUser?.email,
+        removedAdminName: adminUser?.name,
+      },
+    })
+
+    revalidatePath("/super-admin/businesses")
+    revalidatePath("/super-admin")
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error removing business admin:", error)
+    return { success: false, error: "Failed to remove business admin" }
   }
 }
 

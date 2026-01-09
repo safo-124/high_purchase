@@ -1764,17 +1764,18 @@ export interface PaymentPayload {
   collectorId?: string
   reference?: string
   notes?: string
+  autoConfirm?: boolean // If true, payment is immediately confirmed. Default false for pending workflow.
 }
 
 /**
- * Record a payment for a purchase
+ * Record a payment for a purchase (creates pending payment for confirmation workflow)
  */
 export async function recordPayment(
   shopSlug: string,
   payload: PaymentPayload
 ): Promise<ActionResult> {
   try {
-    const { user, shop } = await requireShopAdminForShop(shopSlug)
+    const { user, shop, membership } = await requireShopAdminForShop(shopSlug)
 
     // Get purchase and verify it belongs to this shop's customer
     const purchase = await prisma.purchase.findFirst({
@@ -1789,67 +1790,76 @@ export async function recordPayment(
       return { success: false, error: "Purchase not found" }
     }
 
+    if (purchase.status === "COMPLETED") {
+      return { success: false, error: "This purchase is already fully paid" }
+    }
+
     if (payload.amount <= 0) {
       return { success: false, error: "Payment amount must be greater than 0" }
     }
 
-    const newAmountPaid = Number(purchase.amountPaid) + payload.amount
-    const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
+    const autoConfirm = payload.autoConfirm ?? false
 
-    // Determine new status
-    let newStatus: PurchaseStatus = "ACTIVE"
-    if (newOutstanding <= 0) {
-      newStatus = "COMPLETED"
-    }
-
-    // Create payment record
+    // Create payment record - pending by default unless autoConfirm is true
     const payment = await prisma.payment.create({
       data: {
         purchaseId: purchase.id,
         amount: payload.amount,
         paymentMethod: payload.paymentMethod,
-        status: "COMPLETED",
+        status: autoConfirm ? "COMPLETED" : "PENDING",
         collectorId: payload.collectorId || null,
         paidAt: new Date(),
         reference: payload.reference,
-        notes: payload.notes,
+        notes: `${payload.notes || ""} [Recorded by Shop Admin: ${user.name}]`.trim(),
+        isConfirmed: autoConfirm,
+        confirmedAt: autoConfirm ? new Date() : null,
+        confirmedById: autoConfirm ? membership?.id : null,
       },
     })
 
-    // Update purchase totals
-    await prisma.purchase.update({
-      where: { id: purchase.id },
-      data: {
-        amountPaid: newAmountPaid,
-        outstandingBalance: Math.max(0, newOutstanding),
-        status: newStatus,
-      },
-    })
+    // Only update purchase totals if auto-confirming
+    if (autoConfirm) {
+      const newAmountPaid = Number(purchase.amountPaid) + payload.amount
+      const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
+      let newStatus: PurchaseStatus = "ACTIVE"
+      if (newOutstanding <= 0) {
+        newStatus = "COMPLETED"
+      }
+
+      await prisma.purchase.update({
+        where: { id: purchase.id },
+        data: {
+          amountPaid: newAmountPaid,
+          outstandingBalance: Math.max(0, newOutstanding),
+          status: newStatus,
+        },
+      })
+    }
 
     await createAuditLog({
       actorUserId: user.id,
-      action: "PAYMENT_RECORDED",
+      action: autoConfirm ? "PAYMENT_RECORDED_AND_CONFIRMED" : "PAYMENT_RECORDED_PENDING",
       entityType: "Payment",
       entityId: payment.id,
       metadata: {
         purchaseId: purchase.id,
         purchaseNumber: purchase.purchaseNumber,
         amount: payload.amount,
-        newOutstanding: Math.max(0, newOutstanding),
         customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+        recordedBy: user.name,
+        awaitingConfirmation: !autoConfirm,
       },
     })
 
     revalidatePath(`/shop-admin/${shopSlug}/customers`)
     revalidatePath(`/shop-admin/${shopSlug}/purchases`)
+    revalidatePath(`/shop-admin/${shopSlug}/pending-payments`)
 
     return {
       success: true,
       data: {
         paymentId: payment.id,
-        newAmountPaid,
-        newOutstanding: Math.max(0, newOutstanding),
-        isFullyPaid: newOutstanding <= 0,
+        awaitingConfirmation: !autoConfirm,
       },
     }
   } catch (error) {
@@ -2335,10 +2345,12 @@ export interface PendingPaymentForAdmin {
   customerId: string
   collectorName: string
   collectorId: string
+  recordedBy: string // Extracted from notes: "[Recorded by: Name]"
 }
 
 /**
- * Get all pending payments awaiting confirmation from collectors
+ * Get all pending payments awaiting confirmation
+ * Includes payments from collectors, shop admins, and business admins
  */
 export async function getPendingCollectorPayments(shopSlug: string): Promise<PendingPaymentForAdmin[]> {
   const { shop } = await requireShopAdminForShop(shopSlug)
@@ -2347,7 +2359,6 @@ export async function getPendingCollectorPayments(shopSlug: string): Promise<Pen
     where: {
       isConfirmed: false,
       rejectedAt: null,
-      collectorId: { not: null }, // Only collector-collected payments
       purchase: {
         customer: {
           shopId: shop.id,
@@ -2369,6 +2380,14 @@ export async function getPendingCollectorPayments(shopSlug: string): Promise<Pen
     orderBy: { createdAt: "desc" },
   })
 
+  // Helper to extract "Recorded by" from notes
+  const extractRecordedBy = (notes: string | null): string => {
+    if (!notes) return "Collector"
+    const match = notes.match(/\[Recorded by (?:Shop Admin|Business Admin|Collector): ([^\]]+)\]/)
+    if (match) return match[1]
+    return "Collector"
+  }
+
   return payments.map((p) => ({
     id: p.id,
     amount: Number(p.amount),
@@ -2381,8 +2400,9 @@ export async function getPendingCollectorPayments(shopSlug: string): Promise<Pen
     purchaseNumber: p.purchase.purchaseNumber,
     customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
     customerId: p.purchase.customerId,
-    collectorName: p.collector?.user?.name || "Unknown",
+    collectorName: p.collector?.user?.name || extractRecordedBy(p.notes),
     collectorId: p.collectorId || "",
+    recordedBy: extractRecordedBy(p.notes),
   }))
 }
 
@@ -2437,6 +2457,9 @@ export async function confirmPayment(
         confirmedAt: new Date(),
         confirmedById: shopMember?.id || null,
         status: "COMPLETED",
+        notes: payment.notes 
+          ? `${payment.notes} | Confirmed by: ${user.name}` 
+          : `Confirmed by: ${user.name}`,
       },
     })
 
@@ -2513,6 +2536,7 @@ export async function confirmPayment(
         customerId: purchase.customerId,
         amount: Number(payment.amount),
         confirmedById: shopMember?.id,
+        confirmedByName: user.name,
         purchaseCompleted: isCompleted,
       },
     })

@@ -93,7 +93,7 @@ export function PendingPaymentsTable({ payments, shopSlug }: PendingPaymentsTabl
           <thead>
             <tr className="border-b border-white/10">
               <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Date Collected</th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Collector</th>
+              <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Recorded By</th>
               <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Customer</th>
               <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Purchase</th>
               <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Method</th>
@@ -109,7 +109,10 @@ export function PendingPaymentsTable({ payments, shopSlug }: PendingPaymentsTabl
                   {formatDate(payment.paidAt)}
                 </td>
                 <td className="py-4 px-4">
-                  <span className="text-sm text-slate-300">{payment.collectorName}</span>
+                  <span className="text-sm text-slate-300">{payment.recordedBy}</span>
+                  {payment.collectorId && (
+                    <span className="block text-xs text-slate-500">via Collector</span>
+                  )}
                 </td>
                 <td className="py-4 px-4">
                   <Link 
@@ -178,7 +181,7 @@ export function PendingPaymentsTable({ payments, shopSlug }: PendingPaymentsTabl
           <div className="glass-card rounded-2xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold text-white mb-2">Reject Payment</h3>
             <p className="text-sm text-slate-400 mb-4">
-              You are about to reject a payment of <span className="text-white font-medium">{formatCurrency(selectedPayment.amount)}</span> collected by <span className="text-white">{selectedPayment.collectorName}</span>.
+              You are about to reject a payment of <span className="text-white font-medium">{formatCurrency(selectedPayment.amount)}</span> recorded by <span className="text-white">{selectedPayment.recordedBy}</span>.
             </p>
 
             <div className="mb-4">

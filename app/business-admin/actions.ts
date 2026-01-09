@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import bcrypt from "bcrypt"
 import prisma from "../../lib/prisma"
 import { requireBusinessAdmin, createAuditLog } from "../../lib/auth"
-import { Role, Prisma } from "../generated/prisma/client"
+import { Role, Prisma, PurchaseStatus } from "../generated/prisma/client"
 
 // Validation regex
 const SLUG_REGEX = /^[a-z0-9-]+$/
@@ -1383,10 +1383,12 @@ export interface BusinessPaymentForAdmin {
   collectorId: string | null
   isConfirmed: boolean
   confirmedAt: Date | null
+  confirmedBy: string | null
   rejectedAt: Date | null
   rejectionReason: string | null
   shopName: string
   shopSlug: string
+  recordedBy: string
 }
 
 /**
@@ -1459,28 +1461,47 @@ export async function getBusinessPaymentsWithStatus(
     take: 500,
   })
 
-  return payments.map((p) => ({
-    id: p.id,
-    amount: Number(p.amount),
-    paymentMethod: p.paymentMethod,
-    status: p.status,
-    reference: p.reference,
-    notes: p.notes,
-    paidAt: p.paidAt,
-    createdAt: p.createdAt,
-    purchaseId: p.purchaseId,
-    purchaseNumber: p.purchase.purchaseNumber,
-    customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
-    customerId: p.purchase.customerId,
-    collectorName: p.collector?.user?.name || null,
-    collectorId: p.collectorId,
-    isConfirmed: p.isConfirmed,
-    confirmedAt: p.confirmedAt,
-    rejectedAt: p.rejectedAt,
-    rejectionReason: p.rejectionReason,
-    shopName: p.purchase.customer.shop.name,
-    shopSlug: p.purchase.customer.shop.shopSlug,
-  }))
+  // Helper to extract info from notes
+  const extractFromNotes = (notes: string | null, pattern: RegExp): string | null => {
+    if (!notes) return null
+    const match = notes.match(pattern)
+    return match ? match[1] : null
+  }
+
+  return payments.map((p) => {
+    // Extract "Recorded by" from notes
+    const recordedByMatch = p.notes?.match(/\[Recorded by (?:Shop Admin|Business Admin|Collector): ([^\]]+)\]/)
+    const recordedBy = recordedByMatch ? recordedByMatch[1] : (p.collector?.user?.name || "Unknown")
+    
+    // Extract "Confirmed by" from notes  
+    const confirmedByMatch = p.notes?.match(/Confirmed by: ([^|]+)/)
+    const confirmedBy = confirmedByMatch ? confirmedByMatch[1].trim() : null
+
+    return {
+      id: p.id,
+      amount: Number(p.amount),
+      paymentMethod: p.paymentMethod,
+      status: p.status,
+      reference: p.reference,
+      notes: p.notes,
+      paidAt: p.paidAt,
+      createdAt: p.createdAt,
+      purchaseId: p.purchaseId,
+      purchaseNumber: p.purchase.purchaseNumber,
+      customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
+      customerId: p.purchase.customerId,
+      collectorName: p.collector?.user?.name || null,
+      collectorId: p.collectorId,
+      isConfirmed: p.isConfirmed,
+      confirmedAt: p.confirmedAt,
+      confirmedBy,
+      rejectedAt: p.rejectedAt,
+      rejectionReason: p.rejectionReason,
+      shopName: p.purchase.customer.shop.name,
+      shopSlug: p.purchase.customer.shop.shopSlug,
+      recordedBy,
+    }
+  })
 }
 
 /**
@@ -1605,6 +1626,9 @@ export async function confirmBusinessPayment(
         isConfirmed: true,
         confirmedAt: new Date(),
         status: "COMPLETED",
+        notes: payment.notes 
+          ? `${payment.notes} | Confirmed by: ${user.name}` 
+          : `Confirmed by: ${user.name}`,
       },
     })
 
@@ -1678,6 +1702,7 @@ export async function confirmBusinessPayment(
         customerId: purchase.customerId,
         amount: Number(payment.amount),
         confirmedByBusinessAdmin: true,
+        confirmedByName: user.name,
         purchaseCompleted: isCompleted,
       },
     })
@@ -2264,3 +2289,194 @@ export async function createBusinessCustomer(
     return { success: false, error: "Failed to create customer" }
   }
 }
+
+/**
+ * Record a payment as a Business Admin
+ * Payments are pending by default and need confirmation
+ */
+interface BusinessPaymentPayload {
+  purchaseId: string
+  amount: number
+  paymentMethod: "CASH" | "BANK_TRANSFER" | "MOBILE_MONEY" | "CARD"
+  reference?: string
+  notes?: string
+  collectorId?: string
+  autoConfirm?: boolean
+}
+
+export async function recordPaymentAsBusinessAdmin(
+  businessSlug: string,
+  payload: BusinessPaymentPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Find the purchase and verify it belongs to this business
+    const purchase = await prisma.purchase.findUnique({
+      where: { id: payload.purchaseId },
+      include: {
+        customer: {
+          include: {
+            shop: true,
+          },
+        },
+      },
+    })
+
+    if (!purchase) {
+      return { success: false, error: "Purchase not found" }
+    }
+
+    if (purchase.customer.shop.businessId !== business.id) {
+      return { success: false, error: "Purchase not found in this business" }
+    }
+
+    if (purchase.status === "COMPLETED") {
+      return { success: false, error: "This purchase is already fully paid" }
+    }
+
+    if (payload.amount <= 0) {
+      return { success: false, error: "Payment amount must be greater than 0" }
+    }
+
+    const autoConfirm = payload.autoConfirm ?? false
+
+    // Create payment record - pending by default
+    const payment = await prisma.payment.create({
+      data: {
+        purchaseId: purchase.id,
+        amount: payload.amount,
+        paymentMethod: payload.paymentMethod,
+        status: autoConfirm ? "COMPLETED" : "PENDING",
+        collectorId: payload.collectorId || null,
+        paidAt: new Date(),
+        reference: payload.reference,
+        notes: `${payload.notes || ""} [Recorded by Business Admin: ${user.name}]`.trim(),
+        isConfirmed: autoConfirm,
+        confirmedAt: autoConfirm ? new Date() : null,
+      },
+    })
+
+    // Only update purchase totals if auto-confirming
+    if (autoConfirm) {
+      const newAmountPaid = Number(purchase.amountPaid) + payload.amount
+      const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
+      let newStatus: PurchaseStatus = purchase.status
+      if (newOutstanding <= 0) {
+        newStatus = PurchaseStatus.COMPLETED
+      } else if (purchase.status === PurchaseStatus.PENDING) {
+        newStatus = PurchaseStatus.ACTIVE
+      }
+
+      await prisma.purchase.update({
+        where: { id: purchase.id },
+        data: {
+          amountPaid: newAmountPaid,
+          outstandingBalance: Math.max(0, newOutstanding),
+          status: newStatus,
+        },
+      })
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: autoConfirm ? "PAYMENT_RECORDED_AND_CONFIRMED" : "PAYMENT_RECORDED_PENDING",
+      entityType: "Payment",
+      entityId: payment.id,
+      metadata: {
+        purchaseId: purchase.id,
+        purchaseNumber: purchase.purchaseNumber,
+        amount: payload.amount,
+        customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+        shopName: purchase.customer.shop.name,
+        recordedBy: user.name,
+        recordedByBusinessAdmin: true,
+        awaitingConfirmation: !autoConfirm,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/payments`)
+    revalidatePath(`/business-admin/${businessSlug}/customers`)
+    revalidatePath(`/shop-admin/${purchase.customer.shop.shopSlug}/pending-payments`)
+    revalidatePath(`/shop-admin/${purchase.customer.shop.shopSlug}/customers`)
+
+    return {
+      success: true,
+      data: {
+        paymentId: payment.id,
+        awaitingConfirmation: !autoConfirm,
+      },
+    }
+  } catch (error) {
+    console.error("Error recording payment as business admin:", error)
+    return { success: false, error: "Failed to record payment" }
+  }
+}
+
+/**
+ * Get purchases for a specific customer (for payment recording)
+ */
+export async function getBusinessCustomerPurchases(
+  businessSlug: string,
+  customerId: string
+) {
+  try {
+    const { business } = await requireBusinessAdmin(businessSlug)
+
+    // Verify customer belongs to this business
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      include: {
+        shop: true,
+      },
+    })
+
+    if (!customer || customer.shop.businessId !== business.id) {
+      return { success: false, error: "Customer not found in this business" }
+    }
+
+    const purchases = await prisma.purchase.findMany({
+      where: {
+        customerId,
+        status: { in: ["ACTIVE", "OVERDUE"] },
+        outstandingBalance: { gt: 0 },
+      },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+        payments: {
+          orderBy: { createdAt: "desc" },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    })
+
+    return {
+      success: true,
+      data: purchases.map((p) => ({
+        id: p.id,
+        purchaseNumber: p.purchaseNumber,
+        totalAmount: Number(p.totalAmount),
+        amountPaid: Number(p.amountPaid),
+        outstandingBalance: Number(p.outstandingBalance),
+        status: p.status,
+        items: p.items.map((item) => ({
+          productName: item.product?.name || "Unknown Product",
+          quantity: item.quantity,
+        })),
+        recentPayments: p.payments.slice(0, 3).map((pay) => ({
+          amount: Number(pay.amount),
+          paidAt: pay.paidAt,
+          isConfirmed: pay.isConfirmed,
+        })),
+      })),
+    }
+  } catch (error) {
+    console.error("Error fetching customer purchases:", error)
+    return { success: false, error: "Failed to fetch purchases" }
+  }
+}
+

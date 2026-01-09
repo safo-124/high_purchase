@@ -348,7 +348,7 @@ export function PaymentsContent({
               <thead>
                 <tr className="border-b border-white/10">
                   <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Date</th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Collector</th>
+                  <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Recorded By</th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Customer</th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Shop</th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Purchase</th>
@@ -358,7 +358,7 @@ export function PaymentsContent({
                     <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Reason</th>
                   )}
                   {activeTab === "confirmed" && (
-                    <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Confirmed At</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Confirmed By</th>
                   )}
                   {activeTab === "pending" && (
                     <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">Actions</th>
@@ -372,7 +372,10 @@ export function PaymentsContent({
                       {formatDate(payment.paidAt || payment.createdAt)}
                     </td>
                     <td className="py-4 px-4">
-                      <span className="text-sm text-slate-300">{payment.collectorName || "Direct"}</span>
+                      <span className="text-sm text-slate-300">{payment.recordedBy}</span>
+                      {payment.collectorId && (
+                        <span className="block text-xs text-slate-500">via Collector</span>
+                      )}
                     </td>
                     <td className="py-4 px-4">
                       <span className="text-sm text-white font-medium">{payment.customerName}</span>
@@ -404,8 +407,11 @@ export function PaymentsContent({
                       </td>
                     )}
                     {activeTab === "confirmed" && (
-                      <td className="py-4 px-4 text-sm text-green-400">
-                        {formatDate(payment.confirmedAt)}
+                      <td className="py-4 px-4">
+                        <span className="text-sm text-green-400">{payment.confirmedBy || "System"}</span>
+                        {payment.confirmedAt && (
+                          <span className="block text-xs text-slate-500">{formatDate(payment.confirmedAt)}</span>
+                        )}
                       </td>
                     )}
                     {activeTab === "pending" && (

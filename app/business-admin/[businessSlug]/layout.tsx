@@ -58,7 +58,7 @@ export default async function BusinessAdminLayout({ children, params }: LayoutPr
       />
 
       {/* Main Content Area */}
-      <main className="ml-64 min-h-screen relative z-10">
+      <main className="lg:ml-64 min-h-screen relative z-10 pt-16 lg:pt-0 pb-16 lg:pb-0">
         {children}
       </main>
     </div>
