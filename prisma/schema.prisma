@@ -70,6 +70,22 @@ model Business {
   members       BusinessMember[] @relation("BusinessMembers")
   emailSettings EmailSettings?   @relation("BusinessEmailSettings")
   smsSettings   SmsSettings?     @relation("BusinessSmsSettings")
+  policy        BusinessPolicy?  @relation("BusinessPolicy")
+}
+
+// Business BNPL Policy - 1:1 with Business (applies to all shops under this business)
+model BusinessPolicy {
+  id           String       @id @default(cuid())
+  businessId   String       @unique
+  business     Business     @relation("BusinessPolicy", fields: [businessId], references: [id], onDelete: Cascade)
+  interestType InterestType @default(FLAT)
+  interestRate Decimal      @default(0.00) @db.Decimal(5, 2) // 0.00 to 100.00%
+  graceDays    Int          @default(3) // Days before interest/late fees kick in
+  maxTenorDays Int          @default(60) // Maximum repayment period
+  lateFeeFixed Decimal?     @db.Decimal(10, 2) // Fixed late fee amount (nullable)
+  lateFeeRate  Decimal?     @db.Decimal(5, 2) // Late fee as percentage (nullable)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 }
 
 // Business membership - links users to businesses (BUSINESS_ADMIN role)

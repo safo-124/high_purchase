@@ -39,6 +39,117 @@ export interface ShopWithMetrics extends ShopData {
   collectorCount: number
 }
 
+// Business Policy Types
+export interface BusinessPolicyData {
+  id: string
+  interestType: "FLAT" | "MONTHLY"
+  interestRate: number
+  graceDays: number
+  maxTenorDays: number
+  lateFeeFixed: number | null
+  lateFeeRate: number | null
+}
+
+export interface BusinessPolicyPayload {
+  interestType: "FLAT" | "MONTHLY"
+  interestRate: number
+  graceDays: number
+  maxTenorDays: number
+  lateFeeFixed?: number
+  lateFeeRate?: number
+}
+
+/**
+ * Get business policy
+ */
+export async function getBusinessPolicy(businessSlug: string): Promise<BusinessPolicyData | null> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const policy = await prisma.businessPolicy.findUnique({
+    where: { businessId: business.id },
+  })
+
+  if (!policy) return null
+
+  return {
+    id: policy.id,
+    interestType: policy.interestType,
+    interestRate: Number(policy.interestRate),
+    graceDays: policy.graceDays,
+    maxTenorDays: policy.maxTenorDays,
+    lateFeeFixed: policy.lateFeeFixed ? Number(policy.lateFeeFixed) : null,
+    lateFeeRate: policy.lateFeeRate ? Number(policy.lateFeeRate) : null,
+  }
+}
+
+/**
+ * Create or update business policy
+ */
+export async function upsertBusinessPolicy(
+  businessSlug: string,
+  payload: BusinessPolicyPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Validation
+    if (payload.interestRate < 0 || payload.interestRate > 100) {
+      return { success: false, error: "Interest rate must be between 0 and 100" }
+    }
+    if (payload.graceDays < 0) {
+      return { success: false, error: "Grace days cannot be negative" }
+    }
+    if (payload.maxTenorDays < 1) {
+      return { success: false, error: "Maximum tenor must be at least 1 day" }
+    }
+
+    const existingPolicy = await prisma.businessPolicy.findUnique({
+      where: { businessId: business.id },
+    })
+
+    const policy = await prisma.businessPolicy.upsert({
+      where: { businessId: business.id },
+      create: {
+        businessId: business.id,
+        interestType: payload.interestType,
+        interestRate: payload.interestRate,
+        graceDays: payload.graceDays,
+        maxTenorDays: payload.maxTenorDays,
+        lateFeeFixed: payload.lateFeeFixed,
+        lateFeeRate: payload.lateFeeRate,
+      },
+      update: {
+        interestType: payload.interestType,
+        interestRate: payload.interestRate,
+        graceDays: payload.graceDays,
+        maxTenorDays: payload.maxTenorDays,
+        lateFeeFixed: payload.lateFeeFixed,
+        lateFeeRate: payload.lateFeeRate,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: existingPolicy ? "BUSINESS_POLICY_UPDATED" : "BUSINESS_POLICY_CREATED",
+      entityType: "BusinessPolicy",
+      entityId: policy.id,
+      metadata: {
+        businessId: business.id,
+        businessName: business.name,
+        interestType: payload.interestType,
+        interestRate: payload.interestRate,
+        maxTenorDays: payload.maxTenorDays,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/policy`)
+    return { success: true, data: policy }
+  } catch (error) {
+    console.error("Upsert business policy error:", error)
+    return { success: false, error: "Failed to update policy" }
+  }
+}
+
 /**
  * Get all shops for a business
  */
@@ -1597,6 +1708,7 @@ export async function confirmBusinessPayment(
                 shop: true,
               },
             },
+            items: true, // Include items for stock deduction on completion
           },
         },
       },
@@ -1647,8 +1759,24 @@ export async function confirmBusinessPayment(
       },
     })
 
-    // AUTO-GENERATE WAYBILL when purchase is fully paid
+    // AUTO-GENERATE WAYBILL and DEDUCT STOCK when purchase is fully paid
     if (isCompleted) {
+      // Deduct stock for each item (only for non-CASH purchases, CASH already deducted at sale)
+      if (purchase.purchaseType !== "CASH") {
+        for (const item of purchase.items) {
+          if (item.productId) {
+            await prisma.product.update({
+              where: { id: item.productId },
+              data: {
+                stockQuantity: {
+                  decrement: item.quantity,
+                },
+              },
+            })
+          }
+        }
+      }
+
       const existingWaybill = await prisma.waybill.findUnique({
         where: { purchaseId: purchase.id },
       })
@@ -2029,27 +2157,28 @@ export async function createBusinessSale(
       }
     }
 
-    // Get shop policy for interest calculation
-    const policy = await prisma.shopPolicy.findUnique({
-      where: { shopId: shop.id },
+    // Get business policy for interest calculation (only required for non-CASH purchases)
+    const policy = await prisma.businessPolicy.findUnique({
+      where: { businessId: business.id },
     })
 
-    if (!policy) {
-      return { success: false, error: "Shop policy not configured. Please contact your administrator." }
+    // CASH sales don't require policy
+    if (payload.purchaseType !== "CASH" && !policy) {
+      return { success: false, error: "Business policy not configured. Please configure the BNPL policy first." }
     }
 
-    // Check tenor against policy
-    if (payload.tenorDays > policy.maxTenorDays) {
+    // Check tenor against policy (only for non-CASH)
+    if (payload.purchaseType !== "CASH" && policy && payload.tenorDays > policy.maxTenorDays) {
       return { success: false, error: `Tenor cannot exceed ${policy.maxTenorDays} days` }
     }
 
     // Calculate subtotal from all items
     const subtotal = payload.items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0)
-    const interestRate = Number(policy.interestRate) / 100
+    const interestRate = policy ? Number(policy.interestRate) / 100 : 0
 
     // For CASH purchases, no interest
     let interestAmount = 0
-    if (payload.purchaseType !== "CASH") {
+    if (payload.purchaseType !== "CASH" && policy) {
       if (policy.interestType === "FLAT") {
         interestAmount = subtotal * interestRate
       } else if (policy.interestType === "MONTHLY") {
@@ -2074,12 +2203,15 @@ export async function createBusinessSale(
 
     // Create purchase and update stock in a transaction
     const purchase = await prisma.$transaction(async (tx) => {
-      // Decrement stock for all products
-      for (const item of payload.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stockQuantity: { decrement: item.quantity } },
-        })
+      // Only deduct stock for CASH sales (immediate delivery)
+      // For CREDIT/LAYAWAY, stock is deducted when payment is completed
+      if (payload.purchaseType === "CASH") {
+        for (const item of payload.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stockQuantity: { decrement: item.quantity } },
+          })
+        }
       }
 
       // Create purchase with all items
@@ -2098,8 +2230,8 @@ export async function createBusinessSale(
           installments: payload.purchaseType === "CASH" ? 1 : Math.ceil(payload.tenorDays / 30),
           startDate: new Date(),
           dueDate,
-          interestType: policy.interestType,
-          interestRate: policy.interestRate,
+          interestType: policy?.interestType || "FLAT",
+          interestRate: policy?.interestRate || 0,
           notes: `${payload.purchaseType} sale by Business Admin: ${user.name}`,
           items: {
             create: payload.items.map(item => ({
@@ -2160,6 +2292,32 @@ export async function createBusinessSale(
         createdByBusinessAdmin: true,
       },
     })
+
+    // AUTO-GENERATE WAYBILL for CASH sales (they are completed immediately)
+    if (payload.purchaseType === "CASH" && outstandingBalance === 0) {
+      const year = new Date().getFullYear()
+      const waybillCount = await prisma.waybill.count()
+      const waybillNumber = `WB-${year}-${String(waybillCount + 1).padStart(5, "0")}`
+
+      await prisma.waybill.create({
+        data: {
+          waybillNumber,
+          purchaseId: purchase.id,
+          recipientName: `${customer.firstName} ${customer.lastName}`,
+          recipientPhone: customer.phone,
+          deliveryAddress: customer.address || "N/A",
+          deliveryCity: customer.city,
+          deliveryRegion: customer.region,
+          specialInstructions: `Cash sale by Business Admin - Ready for delivery`,
+          generatedById: user.id,
+        },
+      })
+
+      await prisma.purchase.update({
+        where: { id: purchase.id },
+        data: { deliveryStatus: "SCHEDULED" },
+      })
+    }
 
     revalidatePath(`/business-admin/${businessSlug}/purchases`)
     revalidatePath(`/business-admin/${businessSlug}/customers`)

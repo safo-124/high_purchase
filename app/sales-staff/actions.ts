@@ -374,27 +374,32 @@ export async function createSale(
       }
     }
 
-    // Get shop policy for interest calculation
-    const policy = await prisma.shopPolicy.findUnique({
-      where: { shopId: shop.id },
+    // Get business policy for interest calculation (only required for non-CASH purchases)
+    const policy = await prisma.businessPolicy.findFirst({
+      where: { 
+        business: { 
+          shops: { some: { id: shop.id } } 
+        } 
+      },
     })
 
-    if (!policy) {
-      return { success: false, error: "Shop policy not configured. Please contact your administrator." }
+    // CASH sales don't require policy
+    if (payload.purchaseType !== "CASH" && !policy) {
+      return { success: false, error: "Business policy not configured. Please contact your administrator." }
     }
 
-    // Check tenor against policy
-    if (payload.tenorDays > policy.maxTenorDays) {
+    // Check tenor against policy (only for non-CASH)
+    if (payload.purchaseType !== "CASH" && policy && payload.tenorDays > policy.maxTenorDays) {
       return { success: false, error: `Tenor cannot exceed ${policy.maxTenorDays} days` }
     }
 
     // Calculate subtotal from all items
     const subtotal = payload.items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0)
-    const interestRate = Number(policy.interestRate) / 100
+    const interestRate = policy ? Number(policy.interestRate) / 100 : 0
 
     // For CASH purchases, no interest
     let interestAmount = 0
-    if (payload.purchaseType !== "CASH") {
+    if (payload.purchaseType !== "CASH" && policy) {
       if (policy.interestType === "FLAT") {
         interestAmount = subtotal * interestRate
       } else if (policy.interestType === "MONTHLY") {
@@ -419,12 +424,15 @@ export async function createSale(
 
     // Create purchase and update stock in a transaction
     const purchase = await prisma.$transaction(async (tx) => {
-      // Decrement stock for all products
-      for (const item of payload.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stockQuantity: { decrement: item.quantity } },
-        })
+      // Only deduct stock for CASH sales (immediate delivery)
+      // For CREDIT/LAYAWAY, stock is deducted when payment is completed
+      if (payload.purchaseType === "CASH") {
+        for (const item of payload.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stockQuantity: { decrement: item.quantity } },
+          })
+        }
       }
 
       // Create purchase with all items
@@ -443,8 +451,8 @@ export async function createSale(
           installments: payload.purchaseType === "CASH" ? 1 : Math.ceil(payload.tenorDays / 30), // Monthly installments
           startDate: new Date(),
           dueDate,
-          interestType: policy.interestType,
-          interestRate: policy.interestRate,
+          interestType: policy?.interestType || "FLAT",
+          interestRate: policy?.interestRate || 0,
           notes: `${payload.purchaseType} sale by ${user.name}`,
           items: {
             create: payload.items.map(item => ({
@@ -502,6 +510,32 @@ export async function createSale(
         tenorDays: payload.tenorDays,
       },
     })
+
+    // AUTO-GENERATE WAYBILL for CASH sales (they are completed immediately)
+    if (payload.purchaseType === "CASH" && outstandingBalance === 0) {
+      const year = new Date().getFullYear()
+      const waybillCount = await prisma.waybill.count()
+      const waybillNumber = `WB-${year}-${String(waybillCount + 1).padStart(5, "0")}`
+
+      await prisma.waybill.create({
+        data: {
+          waybillNumber,
+          purchaseId: purchase.id,
+          recipientName: `${customer.firstName} ${customer.lastName}`,
+          recipientPhone: customer.phone,
+          deliveryAddress: customer.address || "N/A",
+          deliveryCity: customer.city,
+          deliveryRegion: customer.region,
+          specialInstructions: `Cash sale - Ready for delivery`,
+          generatedById: user.id,
+        },
+      })
+
+      await prisma.purchase.update({
+        where: { id: purchase.id },
+        data: { deliveryStatus: "SCHEDULED" },
+      })
+    }
 
     revalidatePath(`/sales-staff/${shopSlug}/dashboard`)
     revalidatePath(`/sales-staff/${shopSlug}/new-sale`)

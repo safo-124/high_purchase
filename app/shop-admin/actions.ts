@@ -1618,10 +1618,18 @@ export async function createPurchase(
       return { success: false, error: "At least one item is required" }
     }
 
-    // Get shop policy for interest calculation
-    const policy = await prisma.shopPolicy.findUnique({
-      where: { shopId: shop.id },
+    // Get business policy for interest calculation
+    const policy = await prisma.businessPolicy.findFirst({
+      where: { 
+        business: { 
+          shops: { some: { id: shop.id } } 
+        } 
+      },
     })
+
+    if (!policy) {
+      return { success: false, error: "Business policy not configured. Please contact your administrator." }
+    }
 
     // Calculate subtotal
     const subtotal = payload.items.reduce(
@@ -1702,17 +1710,8 @@ export async function createPurchase(
       },
     })
 
-    // Deduct stock for each item
-    for (const item of payload.items) {
-      await prisma.product.update({
-        where: { id: item.productId },
-        data: {
-          stockQuantity: {
-            decrement: item.quantity,
-          },
-        },
-      })
-    }
+    // Stock deduction is deferred until payment is completed
+    // This ensures stock is only deducted when customer fully pays (waybill + delivery)
 
     // If down payment was made, record it as a payment
     if (downPayment > 0) {
@@ -2424,6 +2423,7 @@ export async function confirmPayment(
         purchase: {
           include: {
             customer: true,
+            items: true, // Include items for stock deduction on completion
           },
         },
       },
@@ -2478,8 +2478,24 @@ export async function confirmPayment(
       },
     })
 
-    // AUTO-GENERATE WAYBILL when purchase is fully paid
+    // AUTO-GENERATE WAYBILL and DEDUCT STOCK when purchase is fully paid
     if (isCompleted) {
+      // Deduct stock for each item (only for non-CASH purchases, CASH already deducted at sale)
+      if (purchase.purchaseType !== "CASH") {
+        for (const item of purchase.items) {
+          if (item.productId) {
+            await prisma.product.update({
+              where: { id: item.productId },
+              data: {
+                stockQuantity: {
+                  decrement: item.quantity,
+                },
+              },
+            })
+          }
+        }
+      }
+
       // Check if waybill already exists
       const existingWaybill = await prisma.waybill.findUnique({
         where: { purchaseId: purchase.id },
