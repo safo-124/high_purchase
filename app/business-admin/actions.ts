@@ -949,7 +949,10 @@ export async function getBusinessProducts(businessSlug: string) {
         select: { name: true, shopSlug: true },
       },
       category: {
-        select: { name: true },
+        select: { id: true, name: true },
+      },
+      brand: {
+        select: { id: true, name: true },
       },
       purchaseItems: {
         select: { id: true },
@@ -974,7 +977,10 @@ export async function getBusinessProducts(businessSlug: string) {
       name: product.name,
       sku: product.sku,
       description: product.description,
+      categoryId: product.categoryId,
       category: product.category?.name || null,
+      brandId: product.brandId,
+      brand: product.brand?.name || null,
       costPrice,
       cashPrice,
       layawayPrice,
@@ -1366,6 +1372,388 @@ export async function getStaffMember(businessSlug: string, memberId: string) {
   }
 }
 
+// ===== CATEGORY MANAGEMENT =====
+
+export interface CategoryPayload {
+  name: string
+  description?: string | null
+  color?: string | null
+  isActive?: boolean
+}
+
+/**
+ * Get all categories for the business
+ */
+export async function getBusinessCategories(businessSlug: string) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const categories = await prisma.category.findMany({
+    where: { businessId: business.id },
+    include: {
+      _count: { select: { products: true } },
+    },
+    orderBy: { name: "asc" },
+  })
+
+  return categories.map((cat) => ({
+    id: cat.id,
+    name: cat.name,
+    description: cat.description,
+    color: cat.color,
+    isActive: cat.isActive,
+    productCount: cat._count.products,
+    createdAt: cat.createdAt,
+  }))
+}
+
+/**
+ * Create a new category
+ */
+export async function createBusinessCategory(
+  businessSlug: string,
+  payload: CategoryPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    if (!payload.name || payload.name.trim().length === 0) {
+      return { success: false, error: "Category name is required" }
+    }
+
+    // Check for duplicate name
+    const existing = await prisma.category.findFirst({
+      where: {
+        businessId: business.id,
+        name: { equals: payload.name.trim(), mode: "insensitive" },
+      },
+    })
+
+    if (existing) {
+      return { success: false, error: "A category with this name already exists" }
+    }
+
+    const category = await prisma.category.create({
+      data: {
+        businessId: business.id,
+        name: payload.name.trim(),
+        description: payload.description?.trim() || null,
+        color: payload.color || "#6366f1",
+        isActive: payload.isActive ?? true,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CATEGORY_CREATED",
+      entityType: "Category",
+      entityId: category.id,
+      metadata: { categoryName: category.name, businessId: business.id },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/categories`)
+    revalidatePath(`/business-admin/${businessSlug}/products`)
+
+    return { success: true, data: { id: category.id, name: category.name } }
+  } catch (error) {
+    console.error("Error creating category:", error)
+    return { success: false, error: "Failed to create category" }
+  }
+}
+
+/**
+ * Update a category
+ */
+export async function updateBusinessCategory(
+  businessSlug: string,
+  categoryId: string,
+  payload: Partial<CategoryPayload>
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const category = await prisma.category.findFirst({
+      where: { id: categoryId, businessId: business.id },
+    })
+
+    if (!category) {
+      return { success: false, error: "Category not found" }
+    }
+
+    // Check for duplicate name if changing
+    if (payload.name && payload.name.trim() !== category.name) {
+      const existing = await prisma.category.findFirst({
+        where: {
+          businessId: business.id,
+          name: { equals: payload.name.trim(), mode: "insensitive" },
+          id: { not: categoryId },
+        },
+      })
+      if (existing) {
+        return { success: false, error: "A category with this name already exists" }
+      }
+    }
+
+    const updated = await prisma.category.update({
+      where: { id: categoryId },
+      data: {
+        name: payload.name?.trim() ?? category.name,
+        description: payload.description !== undefined ? payload.description?.trim() || null : category.description,
+        color: payload.color ?? category.color,
+        isActive: payload.isActive ?? category.isActive,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CATEGORY_UPDATED",
+      entityType: "Category",
+      entityId: category.id,
+      metadata: { categoryName: updated.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/categories`)
+    revalidatePath(`/business-admin/${businessSlug}/products`)
+
+    return { success: true, data: { id: updated.id, name: updated.name } }
+  } catch (error) {
+    console.error("Error updating category:", error)
+    return { success: false, error: "Failed to update category" }
+  }
+}
+
+/**
+ * Delete a category
+ */
+export async function deleteBusinessCategory(
+  businessSlug: string,
+  categoryId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const category = await prisma.category.findFirst({
+      where: { id: categoryId, businessId: business.id },
+      include: { _count: { select: { products: true } } },
+    })
+
+    if (!category) {
+      return { success: false, error: "Category not found" }
+    }
+
+    if (category._count.products > 0) {
+      return { success: false, error: `Cannot delete category with ${category._count.products} products. Remove products first or reassign them.` }
+    }
+
+    await prisma.category.delete({ where: { id: categoryId } })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CATEGORY_DELETED",
+      entityType: "Category",
+      entityId: categoryId,
+      metadata: { categoryName: category.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/categories`)
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting category:", error)
+    return { success: false, error: "Failed to delete category" }
+  }
+}
+
+// ===== BRAND MANAGEMENT =====
+
+export interface BrandPayload {
+  name: string
+  description?: string | null
+  logoUrl?: string | null
+  isActive?: boolean
+}
+
+/**
+ * Get all brands for the business
+ */
+export async function getBusinessBrands(businessSlug: string) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const brands = await prisma.brand.findMany({
+    where: { businessId: business.id },
+    include: {
+      _count: { select: { products: true } },
+    },
+    orderBy: { name: "asc" },
+  })
+
+  return brands.map((brand) => ({
+    id: brand.id,
+    name: brand.name,
+    description: brand.description,
+    logoUrl: brand.logoUrl,
+    isActive: brand.isActive,
+    productCount: brand._count.products,
+    createdAt: brand.createdAt,
+  }))
+}
+
+/**
+ * Create a new brand
+ */
+export async function createBusinessBrand(
+  businessSlug: string,
+  payload: BrandPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    if (!payload.name || payload.name.trim().length === 0) {
+      return { success: false, error: "Brand name is required" }
+    }
+
+    // Check for duplicate name
+    const existing = await prisma.brand.findFirst({
+      where: {
+        businessId: business.id,
+        name: { equals: payload.name.trim(), mode: "insensitive" },
+      },
+    })
+
+    if (existing) {
+      return { success: false, error: "A brand with this name already exists" }
+    }
+
+    const brand = await prisma.brand.create({
+      data: {
+        businessId: business.id,
+        name: payload.name.trim(),
+        description: payload.description?.trim() || null,
+        logoUrl: payload.logoUrl || null,
+        isActive: payload.isActive ?? true,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "BRAND_CREATED",
+      entityType: "Brand",
+      entityId: brand.id,
+      metadata: { brandName: brand.name, businessId: business.id },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/brands`)
+    revalidatePath(`/business-admin/${businessSlug}/products`)
+
+    return { success: true, data: { id: brand.id, name: brand.name } }
+  } catch (error) {
+    console.error("Error creating brand:", error)
+    return { success: false, error: "Failed to create brand" }
+  }
+}
+
+/**
+ * Update a brand
+ */
+export async function updateBusinessBrand(
+  businessSlug: string,
+  brandId: string,
+  payload: Partial<BrandPayload>
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const brand = await prisma.brand.findFirst({
+      where: { id: brandId, businessId: business.id },
+    })
+
+    if (!brand) {
+      return { success: false, error: "Brand not found" }
+    }
+
+    // Check for duplicate name if changing
+    if (payload.name && payload.name.trim() !== brand.name) {
+      const existing = await prisma.brand.findFirst({
+        where: {
+          businessId: business.id,
+          name: { equals: payload.name.trim(), mode: "insensitive" },
+          id: { not: brandId },
+        },
+      })
+      if (existing) {
+        return { success: false, error: "A brand with this name already exists" }
+      }
+    }
+
+    const updated = await prisma.brand.update({
+      where: { id: brandId },
+      data: {
+        name: payload.name?.trim() ?? brand.name,
+        description: payload.description !== undefined ? payload.description?.trim() || null : brand.description,
+        logoUrl: payload.logoUrl !== undefined ? payload.logoUrl || null : brand.logoUrl,
+        isActive: payload.isActive ?? brand.isActive,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "BRAND_UPDATED",
+      entityType: "Brand",
+      entityId: brand.id,
+      metadata: { brandName: updated.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/brands`)
+    revalidatePath(`/business-admin/${businessSlug}/products`)
+
+    return { success: true, data: { id: updated.id, name: updated.name } }
+  } catch (error) {
+    console.error("Error updating brand:", error)
+    return { success: false, error: "Failed to update brand" }
+  }
+}
+
+/**
+ * Delete a brand
+ */
+export async function deleteBusinessBrand(
+  businessSlug: string,
+  brandId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const brand = await prisma.brand.findFirst({
+      where: { id: brandId, businessId: business.id },
+      include: { _count: { select: { products: true } } },
+    })
+
+    if (!brand) {
+      return { success: false, error: "Brand not found" }
+    }
+
+    if (brand._count.products > 0) {
+      return { success: false, error: `Cannot delete brand with ${brand._count.products} products. Remove products first or reassign them.` }
+    }
+
+    await prisma.brand.delete({ where: { id: brandId } })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "BRAND_DELETED",
+      entityType: "Brand",
+      entityId: brandId,
+      metadata: { brandName: brand.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/brands`)
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting brand:", error)
+    return { success: false, error: "Failed to delete brand" }
+  }
+}
+
 // ===== PRODUCT MANAGEMENT =====
 
 export interface ProductPayload {
@@ -1381,6 +1769,113 @@ export interface ProductPayload {
   imageUrl?: string | null
   isActive?: boolean
   categoryId?: string | null
+  brandId?: string | null
+}
+
+/**
+ * Create a new product (business admin - for any shop in business)
+ */
+export async function createBusinessProduct(
+  businessSlug: string,
+  shopSlug: string,
+  payload: ProductPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Verify the shop belongs to this business
+    const shop = await prisma.shop.findFirst({
+      where: {
+        shopSlug,
+        businessId: business.id,
+      },
+    })
+
+    if (!shop) {
+      return { success: false, error: "Shop not found or not part of this business" }
+    }
+
+    // Validation
+    if (!payload.name || payload.name.trim().length === 0) {
+      return { success: false, error: "Product name is required" }
+    }
+
+    if (payload.cashPrice < 0 || payload.layawayPrice < 0 || payload.creditPrice < 0) {
+      return { success: false, error: "Prices must be 0 or greater" }
+    }
+
+    // Validate pricing logic: Cash <= Layaway <= Credit
+    if (payload.cashPrice > payload.layawayPrice) {
+      return { success: false, error: "Cash price should not exceed layaway price" }
+    }
+    if (payload.layawayPrice > payload.creditPrice) {
+      return { success: false, error: "Layaway price should not exceed credit price" }
+    }
+
+    // Check for duplicate SKU if provided
+    if (payload.sku) {
+      const existingSku = await prisma.product.findFirst({
+        where: {
+          shopId: shop.id,
+          sku: payload.sku.trim(),
+        },
+      })
+      if (existingSku) {
+        return { success: false, error: "A product with this SKU already exists in this shop" }
+      }
+    }
+
+    const product = await prisma.product.create({
+      data: {
+        shopId: shop.id,
+        name: payload.name.trim(),
+        description: payload.description?.trim() || null,
+        sku: payload.sku?.trim() || null,
+        costPrice: new Prisma.Decimal(payload.costPrice ?? 0),
+        cashPrice: new Prisma.Decimal(payload.cashPrice),
+        layawayPrice: new Prisma.Decimal(payload.layawayPrice),
+        creditPrice: new Prisma.Decimal(payload.creditPrice),
+        price: new Prisma.Decimal(payload.cashPrice), // Default to cash price
+        stockQuantity: payload.stockQuantity ?? 0,
+        lowStockThreshold: payload.lowStockThreshold ?? 5,
+        imageUrl: payload.imageUrl || null,
+        isActive: payload.isActive ?? true,
+        categoryId: payload.categoryId || null,
+        brandId: payload.brandId || null,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PRODUCT_CREATED",
+      entityType: "Product",
+      entityId: product.id,
+      metadata: {
+        shopId: shop.id,
+        shopName: shop.name,
+        productName: product.name,
+        productSku: product.sku,
+        cashPrice: Number(product.cashPrice),
+        layawayPrice: Number(product.layawayPrice),
+        creditPrice: Number(product.creditPrice),
+        createdByBusinessAdmin: true,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/products`)
+
+    return {
+      success: true,
+      data: {
+        id: product.id,
+        name: product.name,
+        shopName: shop.name,
+      },
+    }
+  } catch (error) {
+    console.error("Error creating product:", error)
+    return { success: false, error: "Failed to create product" }
+  }
 }
 
 /**
@@ -1465,6 +1960,7 @@ export async function updateBusinessProduct(
         ...(payload.imageUrl !== undefined && { imageUrl: payload.imageUrl || null }),
         ...(payload.isActive !== undefined && { isActive: payload.isActive }),
         ...(payload.categoryId !== undefined && { categoryId: payload.categoryId || null }),
+        ...(payload.brandId !== undefined && { brandId: payload.brandId || null }),
       },
     })
 

@@ -1,4 +1,4 @@
-import { getBusinessProducts, getBusinessShops } from "../../actions"
+import { getBusinessProducts, getBusinessShops, getBusinessCategories, getBusinessBrands } from "../../actions"
 import { ProductsContent } from "./products-content"
 
 interface Props {
@@ -7,9 +7,11 @@ interface Props {
 
 export default async function BusinessProductsPage({ params }: Props) {
   const { businessSlug } = await params
-  const [products, shops] = await Promise.all([
+  const [products, shops, categoriesData, brandsData] = await Promise.all([
     getBusinessProducts(businessSlug),
     getBusinessShops(businessSlug),
+    getBusinessCategories(businessSlug),
+    getBusinessBrands(businessSlug),
   ])
 
   // Calculate totals
@@ -19,8 +21,8 @@ export default async function BusinessProductsPage({ params }: Props) {
   const lowStock = products.filter(p => p.stockQuantity > 0 && p.stockQuantity <= p.lowStockThreshold).length
   const outOfStock = products.filter(p => p.stockQuantity === 0).length
   
-  // Get unique categories
-  const categories = [...new Set(products.map(p => p.category).filter(Boolean))]
+  // Get unique category names for filter (from products)
+  const categoryNames = [...new Set(products.map(p => p.category).filter(Boolean))]
 
   return (
     <div className="p-8">
@@ -54,7 +56,7 @@ export default async function BusinessProductsPage({ params }: Props) {
         </div>
         <div className="glass-card p-4">
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Categories</p>
-          <p className="text-2xl font-bold text-purple-400">{categories.length}</p>
+          <p className="text-2xl font-bold text-purple-400">{categoriesData.length}</p>
           <p className="text-xs text-slate-500 mt-1">Product types</p>
         </div>
         <div className="glass-card p-4">
@@ -68,7 +70,9 @@ export default async function BusinessProductsPage({ params }: Props) {
       <ProductsContent 
         products={products} 
         shops={shops.map(s => ({ id: s.id, name: s.name, shopSlug: s.shopSlug }))}
-        categories={categories as string[]}
+        categories={categoriesData.filter(c => c.isActive).map(c => ({ id: c.id, name: c.name }))}
+        brands={brandsData.filter(b => b.isActive).map(b => ({ id: b.id, name: b.name }))}
+        categoryNames={categoryNames as string[]}
         businessSlug={businessSlug}
       />
     </div>

@@ -1940,13 +1940,15 @@ export interface CategoryData {
 }
 
 /**
- * Get all categories for a shop
+ * Get all categories for a shop (from business level)
+ * Categories are now managed at the business level, so we fetch categories
+ * from the shop's parent business
  */
 export async function getShopCategories(shopSlug: string): Promise<CategoryData[]> {
   const { shop } = await requireShopAdminForShop(shopSlug)
 
   const categories = await prisma.category.findMany({
-    where: { shopId: shop.id },
+    where: { businessId: shop.businessId },
     include: {
       _count: {
         select: { products: true },
@@ -1964,184 +1966,6 @@ export async function getShopCategories(shopSlug: string): Promise<CategoryData[
     isActive: c.isActive,
     createdAt: c.createdAt,
   }))
-}
-
-/**
- * Create a new category
- */
-export async function createCategory(
-  shopSlug: string,
-  payload: CategoryPayload
-): Promise<ActionResult> {
-  try {
-    const { user, shop } = await requireShopAdminForShop(shopSlug)
-
-    // Validation
-    if (!payload.name || payload.name.trim().length === 0) {
-      return { success: false, error: "Category name is required" }
-    }
-
-    if (payload.name.length > 50) {
-      return { success: false, error: "Category name must be 50 characters or less" }
-    }
-
-    // Check for duplicate name
-    const existing = await prisma.category.findUnique({
-      where: {
-        shopId_name: {
-          shopId: shop.id,
-          name: payload.name.trim(),
-        },
-      },
-    })
-
-    if (existing) {
-      return { success: false, error: "A category with this name already exists" }
-    }
-
-    const category = await prisma.category.create({
-      data: {
-        shopId: shop.id,
-        name: payload.name.trim(),
-        description: payload.description?.trim() || null,
-        color: payload.color || "#6366f1",
-      },
-    })
-
-    await createAuditLog({
-      actorUserId: user.id,
-      action: "CATEGORY_CREATED",
-      entityType: "Category",
-      entityId: category.id,
-      metadata: {
-        shopId: shop.id,
-        categoryName: category.name,
-      },
-    })
-
-    revalidatePath(`/shop-admin/${shop.shopSlug}/products`)
-
-    return { success: true, data: category }
-  } catch (error) {
-    console.error("Create category error:", error)
-    return { success: false, error: "Failed to create category" }
-  }
-}
-
-/**
- * Update a category
- */
-export async function updateCategory(
-  shopSlug: string,
-  categoryId: string,
-  payload: CategoryPayload
-): Promise<ActionResult> {
-  try {
-    const { user, shop } = await requireShopAdminForShop(shopSlug)
-
-    // Validation
-    if (!payload.name || payload.name.trim().length === 0) {
-      return { success: false, error: "Category name is required" }
-    }
-
-    // Check category exists and belongs to this shop
-    const existing = await prisma.category.findUnique({
-      where: { id: categoryId },
-    })
-
-    if (!existing || existing.shopId !== shop.id) {
-      return { success: false, error: "Category not found" }
-    }
-
-    // Check for duplicate name (excluding current category)
-    const duplicate = await prisma.category.findFirst({
-      where: {
-        shopId: shop.id,
-        name: payload.name.trim(),
-        id: { not: categoryId },
-      },
-    })
-
-    if (duplicate) {
-      return { success: false, error: "A category with this name already exists" }
-    }
-
-    const category = await prisma.category.update({
-      where: { id: categoryId },
-      data: {
-        name: payload.name.trim(),
-        description: payload.description?.trim() || null,
-        color: payload.color || existing.color,
-      },
-    })
-
-    await createAuditLog({
-      actorUserId: user.id,
-      action: "CATEGORY_UPDATED",
-      entityType: "Category",
-      entityId: category.id,
-      metadata: {
-        shopId: shop.id,
-        previousName: existing.name,
-        newName: category.name,
-      },
-    })
-
-    revalidatePath(`/shop-admin/${shop.shopSlug}/products`)
-
-    return { success: true, data: category }
-  } catch (error) {
-    console.error("Update category error:", error)
-    return { success: false, error: "Failed to update category" }
-  }
-}
-
-/**
- * Delete a category (sets products to uncategorized)
- */
-export async function deleteCategory(
-  shopSlug: string,
-  categoryId: string
-): Promise<ActionResult> {
-  try {
-    const { user, shop } = await requireShopAdminForShop(shopSlug)
-
-    // Check category exists and belongs to this shop
-    const existing = await prisma.category.findUnique({
-      where: { id: categoryId },
-      include: {
-        _count: { select: { products: true } },
-      },
-    })
-
-    if (!existing || existing.shopId !== shop.id) {
-      return { success: false, error: "Category not found" }
-    }
-
-    // Products will have categoryId set to null due to onDelete: SetNull
-    await prisma.category.delete({
-      where: { id: categoryId },
-    })
-
-    await createAuditLog({
-      actorUserId: user.id,
-      action: "CATEGORY_DELETED",
-      entityType: "Category",
-      entityId: categoryId,
-      metadata: {
-        shopId: shop.id,
-        categoryName: existing.name,
-        productsAffected: existing._count.products,
-      },
-    })
-
-    revalidatePath(`/shop-admin/${shop.shopSlug}/products`)
-
-    return { success: true }
-  } catch (error) {
-    console.error("Delete category error:", error)
-    return { success: false, error: "Failed to delete category" }
-  }
 }
 
 // ============================================

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
+  createBusinessProduct,
   updateBusinessProduct,
   deleteBusinessProduct,
   toggleBusinessProductStatus,
@@ -14,7 +15,10 @@ interface Product {
   name: string
   sku: string | null
   description: string | null
+  categoryId: string | null
   category: string | null
+  brandId: string | null
+  brand: string | null
   costPrice: number
   cashPrice: number
   layawayPrice: number
@@ -39,16 +43,28 @@ interface Shop {
   shopSlug: string
 }
 
+interface Category {
+  id: string
+  name: string
+}
+
+interface Brand {
+  id: string
+  name: string
+}
+
 interface ProductsContentProps {
   products: Product[]
   shops: Shop[]
-  categories: string[]
+  categories: Category[]
+  brands: Brand[]
+  categoryNames: string[]
   businessSlug: string
 }
 
-type ModalMode = "edit" | "delete" | "stock" | null
+type ModalMode = "create" | "edit" | "delete" | "stock" | null
 
-export function ProductsContent({ products, shops, categories, businessSlug }: ProductsContentProps) {
+export function ProductsContent({ products, shops, categories, brands, categoryNames, businessSlug }: ProductsContentProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   
@@ -63,11 +79,14 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
-  // Edit form data
+  // Create/Edit form data
+  const [selectedShopSlug, setSelectedShopSlug] = useState<string>("")
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     sku: "",
+    categoryId: "",
+    brandId: "",
     costPrice: "0",
     cashPrice: "0",
     layawayPrice: "0",
@@ -113,12 +132,36 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
     }
   })
 
+  const openCreateModal = () => {
+    setSelectedProduct(null)
+    setSelectedShopSlug(shops.length > 0 ? shops[0].shopSlug : "")
+    setFormData({
+      name: "",
+      description: "",
+      sku: "",
+      categoryId: "",
+      brandId: "",
+      costPrice: "0",
+      cashPrice: "0",
+      layawayPrice: "0",
+      creditPrice: "0",
+      stockQuantity: "0",
+      lowStockThreshold: "5",
+      isActive: true,
+    })
+    setFormError(null)
+    setModalMode("create")
+  }
+
   const openEditModal = (product: Product) => {
     setSelectedProduct(product)
+    setSelectedShopSlug(product.shopSlug)
     setFormData({
       name: product.name,
       description: product.description || "",
       sku: product.sku || "",
+      categoryId: product.categoryId || "",
+      brandId: product.brandId || "",
       costPrice: product.costPrice.toString(),
       cashPrice: product.cashPrice.toString(),
       layawayPrice: product.layawayPrice.toString(),
@@ -169,6 +212,8 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
         name: formData.name.trim(),
         description: formData.description.trim() || null,
         sku: formData.sku.trim() || null,
+        categoryId: formData.categoryId || null,
+        brandId: formData.brandId || null,
         costPrice: parseFloat(formData.costPrice) || 0,
         cashPrice: parseFloat(formData.cashPrice) || 0,
         layawayPrice: parseFloat(formData.layawayPrice) || 0,
@@ -184,6 +229,41 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
         router.refresh()
       } else {
         setFormError(result.error || "Failed to update product")
+      }
+    })
+  }
+
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedShopSlug) {
+      setFormError("Please select a shop")
+      return
+    }
+    setFormError(null)
+
+    startTransition(async () => {
+      const result = await createBusinessProduct(businessSlug, selectedShopSlug, {
+        name: formData.name.trim(),
+        description: formData.description.trim() || null,
+        sku: formData.sku.trim() || null,
+        categoryId: formData.categoryId || null,
+        brandId: formData.brandId || null,
+        costPrice: parseFloat(formData.costPrice) || 0,
+        cashPrice: parseFloat(formData.cashPrice) || 0,
+        layawayPrice: parseFloat(formData.layawayPrice) || 0,
+        creditPrice: parseFloat(formData.creditPrice) || 0,
+        stockQuantity: parseInt(formData.stockQuantity) || 0,
+        lowStockThreshold: parseInt(formData.lowStockThreshold) || 5,
+        isActive: formData.isActive,
+      })
+
+      if (result.success) {
+        const data = result.data as { name: string; shopName: string }
+        toast.success(`Product "${data.name}" created in ${data.shopName}`)
+        closeModal()
+        router.refresh()
+      } else {
+        setFormError(result.error || "Failed to create product")
       }
     })
   }
@@ -244,6 +324,23 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
   return (
     <>
       <div className="glass-card overflow-hidden">
+        {/* Header with Create Button */}
+        <div className="p-6 border-b border-white/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Products Inventory</h2>
+            <p className="text-sm text-slate-400">Manage products across all your shops</p>
+          </div>
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-medium rounded-xl hover:shadow-lg hover:shadow-cyan-500/20 transition-all"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Create Product
+          </button>
+        </div>
+
         {/* Search & Filters */}
         <div className="p-6 border-b border-white/5">
           <div className="flex flex-col lg:flex-row gap-4">
@@ -287,7 +384,7 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
               className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-cyan-500/50"
             >
               <option value="all">All Categories</option>
-              {categories.map((category) => (
+              {categoryNames.map((category) => (
                 <option key={category} value={category}>
                   {category}
                 </option>
@@ -467,6 +564,233 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
         )}
       </div>
 
+      {/* Create Product Modal */}
+      {modalMode === "create" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
+          <div className="relative w-full max-w-lg glass-card p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold text-white mb-6">Create New Product</h3>
+
+            {formError && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+                {formError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateSubmit} className="space-y-4">
+              {/* Shop Selection */}
+              <div>
+                <label className="block text-sm text-slate-400 mb-2">Select Shop *</label>
+                <select
+                  value={selectedShopSlug}
+                  onChange={(e) => setSelectedShopSlug(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                  required
+                >
+                  <option value="">Choose a shop...</option>
+                  {shops.map((shop) => (
+                    <option key={shop.shopSlug} value={shop.shopSlug}>
+                      {shop.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-2">Product Name *</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-2">Description</label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  rows={2}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50 resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-2">SKU</label>
+                <input
+                  type="text"
+                  value={formData.sku}
+                  onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                />
+              </div>
+
+              {/* Category & Brand */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-2">Category</label>
+                  <select
+                    value={formData.categoryId}
+                    onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                  >
+                    <option value="">No category</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-2">Brand</label>
+                  <select
+                    value={formData.brandId}
+                    onChange={(e) => setFormData({ ...formData, brandId: e.target.value })}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                  >
+                    <option value="">No brand</option>
+                    {brands.map((brand) => (
+                      <option key={brand.id} value={brand.id}>
+                        {brand.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Cost Price */}
+              <div>
+                <label className="text-sm text-rose-400 mb-2 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Cost Price (₵)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.costPrice}
+                  onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
+                  className="w-full px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 focus:outline-none focus:border-rose-500/50"
+                />
+                <p className="text-xs text-slate-500 mt-1">Purchase/cost price for profit calculation</p>
+              </div>
+
+              {/* Selling Prices */}
+              <div className="space-y-2">
+                <label className="text-sm text-slate-400 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Selling Prices (₵)
+                </label>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-2">Cash Price</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.cashPrice}
+                    onChange={(e) => setFormData({ ...formData, cashPrice: e.target.value })}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-2">Layaway Price</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.layawayPrice}
+                    onChange={(e) => setFormData({ ...formData, layawayPrice: e.target.value })}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-2">Credit Price</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.creditPrice}
+                    onChange={(e) => setFormData({ ...formData, creditPrice: e.target.value })}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-2">Initial Stock Quantity</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.stockQuantity}
+                  onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-amber-400 mb-2 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  Low Stock Alert Threshold
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.lowStockThreshold}
+                  onChange={(e) => setFormData({ ...formData, lowStockThreshold: e.target.value })}
+                  className="w-full px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 focus:outline-none focus:border-amber-500/50"
+                />
+                <p className="text-xs text-slate-500 mt-1">Alert when stock falls to or below this level</p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="createIsActive"
+                  checked={formData.isActive}
+                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  className="w-4 h-4 rounded border-white/20 bg-white/5 text-cyan-500 focus:ring-cyan-500"
+                />
+                <label htmlFor="createIsActive" className="text-sm text-slate-300">
+                  Product is active and available for sale
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-slate-300 hover:bg-white/10 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-medium hover:shadow-lg hover:shadow-cyan-500/20 transition-all disabled:opacity-50"
+                >
+                  {isPending ? "Creating..." : "Create Product"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Edit Modal */}
       {modalMode === "edit" && selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -510,6 +834,40 @@ export function ProductsContent({ products, shops, categories, businessSlug }: P
                   onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
                 />
+              </div>
+
+              {/* Category & Brand */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-2">Category</label>
+                  <select
+                    value={formData.categoryId}
+                    onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                  >
+                    <option value="">No category</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-2">Brand</label>
+                  <select
+                    value={formData.brandId}
+                    onChange={(e) => setFormData({ ...formData, brandId: e.target.value })}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                  >
+                    <option value="">No brand</option>
+                    {brands.map((brand) => (
+                      <option key={brand.id} value={brand.id}>
+                        {brand.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Cost Price */}

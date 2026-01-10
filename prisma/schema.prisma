@@ -71,6 +71,8 @@ model Business {
   emailSettings EmailSettings?   @relation("BusinessEmailSettings")
   smsSettings   SmsSettings?     @relation("BusinessSmsSettings")
   policy        BusinessPolicy?  @relation("BusinessPolicy")
+  categories    Category[]       @relation("BusinessCategories")
+  brands        Brand[]          @relation("BusinessBrands")
 }
 
 // Business BNPL Policy - 1:1 with Business (applies to all shops under this business)
@@ -120,17 +122,16 @@ model Shop {
   policy     ShopPolicy?  @relation("ShopPolicy")
   products   Product[]    @relation("ShopProducts")
   customers  Customer[]   @relation("ShopCustomers")
-  categories Category[]   @relation("ShopCategories")
   messages   Message[]    @relation("ShopMessages")
 
   @@index([businessId])
 }
 
-// Product Category model
+// Product Category model (business-level)
 model Category {
   id          String    @id @default(cuid())
-  shopId      String
-  shop        Shop      @relation("ShopCategories", fields: [shopId], references: [id], onDelete: Cascade)
+  businessId  String
+  business    Business  @relation("BusinessCategories", fields: [businessId], references: [id], onDelete: Cascade)
   name        String
   description String?
   color       String?   @default("#6366f1") // Category color for UI
@@ -139,8 +140,26 @@ model Category {
   updatedAt   DateTime  @updatedAt
   products    Product[] @relation("CategoryProducts")
 
-  @@unique([shopId, name]) // Category name unique per shop
-  @@index([shopId])
+  @@unique([businessId, name]) // Category name unique per business
+  @@index([businessId])
+  @@index([isActive])
+}
+
+// Product Brand model (business-level)
+model Brand {
+  id          String    @id @default(cuid())
+  businessId  String
+  business    Business  @relation("BusinessBrands", fields: [businessId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  logoUrl     String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[] @relation("BrandProducts")
+
+  @@unique([businessId, name]) // Brand name unique per business
+  @@index([businessId])
   @@index([isActive])
 }
 
@@ -189,6 +208,8 @@ model Product {
   shop          Shop           @relation("ShopProducts", fields: [shopId], references: [id], onDelete: Cascade)
   categoryId    String?
   category      Category?      @relation("CategoryProducts", fields: [categoryId], references: [id], onDelete: SetNull)
+  brandId       String?
+  brand         Brand?         @relation("BrandProducts", fields: [brandId], references: [id], onDelete: SetNull)
   name          String
   description   String?
   sku           String?        // Stock keeping unit
@@ -209,6 +230,7 @@ model Product {
   @@unique([shopId, sku]) // SKU unique per shop
   @@index([shopId])
   @@index([categoryId])
+  @@index([brandId])
   @@index([isActive])
 }
 
