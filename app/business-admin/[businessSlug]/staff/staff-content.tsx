@@ -8,6 +8,7 @@ import {
   deleteStaffMember,
   toggleStaffActive,
 } from "../../actions"
+import { CollectorDetailsModal } from "./collector-details-modal"
 
 interface StaffMember {
   id: string
@@ -61,6 +62,7 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
   const [editingMember, setEditingMember] = useState<StaffMember | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<StaffMember | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [selectedCollectorId, setSelectedCollectorId] = useState<string | null>(null)
   
   // Form fields
   const [formData, setFormData] = useState({
@@ -312,8 +314,13 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
               <tbody className="divide-y divide-white/5">
                 {sortedStaff.map((member) => {
                   const colors = roleColors[member.role] || roleColors.SALES_STAFF
+                  const isCollector = member.role === "DEBT_COLLECTOR"
                   return (
-                    <tr key={member.id} className="hover:bg-white/[0.02] transition-colors">
+                    <tr 
+                      key={member.id} 
+                      className={`hover:bg-white/[0.02] transition-colors ${isCollector ? "cursor-pointer" : ""}`}
+                      onClick={() => isCollector && setSelectedCollectorId(member.id)}
+                    >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${colors.bg} border ${colors.border}`}>
@@ -322,7 +329,14 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                             </span>
                           </div>
                           <div>
-                            <p className="font-medium text-white">{member.userName || "No Name"}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-white">{member.userName || "No Name"}</p>
+                              {isCollector && (
+                                <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded text-[10px] font-medium">
+                                  Click to view
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-slate-500">{member.userEmail}</p>
                           </div>
                         </div>
@@ -355,7 +369,18 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                         <p className="text-sm text-slate-400">{formatDate(member.createdAt)}</p>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                          {isCollector && (
+                            <button
+                              onClick={() => setSelectedCollectorId(member.id)}
+                              className="p-2 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-all"
+                              title="View Transaction Sheet"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                            </button>
+                          )}
                           <button
                             onClick={() => openEditModal(member)}
                             className="p-2 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition-all"
@@ -548,6 +573,15 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
             </div>
           </div>
         </div>
+      )}
+
+      {/* Collector Details Modal */}
+      {selectedCollectorId && (
+        <CollectorDetailsModal
+          collectorId={selectedCollectorId}
+          businessSlug={businessSlug}
+          onClose={() => setSelectedCollectorId(null)}
+        />
       )}
     </>
   )

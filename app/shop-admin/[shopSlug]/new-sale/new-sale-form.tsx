@@ -83,7 +83,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
   const [newCity, setNewCity] = useState("")
   const [newRegion, setNewRegion] = useState("")
   // Payment Preference
-  const [newPreferredPayment, setNewPreferredPayment] = useState<"ONLINE" | "COLLECTOR" | "BOTH">("BOTH")
+  const [newPreferredPayment, setNewPreferredPayment] = useState<"ONLINE" | "DEBT_COLLECTOR" | "BOTH">("BOTH")
   const [newAssignedCollectorId, setNewAssignedCollectorId] = useState("")
   const [newNotes, setNewNotes] = useState("")
 
@@ -824,9 +824,9 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
                   </button>
                   <button
                     type="button"
-                    onClick={() => setNewPreferredPayment("COLLECTOR")}
+                    onClick={() => setNewPreferredPayment("DEBT_COLLECTOR")}
                     className={`p-3 rounded-xl border text-center transition-all ${
-                      newPreferredPayment === "COLLECTOR"
+                      newPreferredPayment === "DEBT_COLLECTOR"
                         ? "bg-green-500/20 border-green-500/50 text-green-400"
                         : "bg-white/5 border-white/10 text-slate-400 hover:border-green-500/30"
                     }`}
@@ -928,7 +928,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
           onClose={() => {
             setShowBillModal(false)
             setCreatedPurchaseId(null)
-            router.push(`/sales-staff/${shopSlug}/dashboard`)
+            router.push(`/shop-admin/${shopSlug}/dashboard`)
           }}
         />
       )}

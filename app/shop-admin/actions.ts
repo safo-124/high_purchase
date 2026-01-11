@@ -191,7 +191,7 @@ export interface ProductPayload {
 
 export interface ProductData {
   id: string
-  shopId: string
+  shopId: string | null // Optional since products are now at business level
   name: string
   description: string | null
   sku: string | null
@@ -212,41 +212,48 @@ export interface ProductData {
 }
 
 /**
- * Get all products for a shop
+ * Get all products for a shop (via ShopProduct)
  */
 export async function getProducts(shopSlug: string): Promise<ProductData[]> {
   const { shop } = await requireShopAdminForShop(shopSlug)
 
-  const products = await prisma.product.findMany({
+  const shopProducts = await prisma.shopProduct.findMany({
     where: { shopId: shop.id },
     include: {
-      category: true,
+      product: {
+        include: {
+          category: true,
+        },
+      },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { product: { createdAt: "desc" } },
   })
 
-  // Convert Decimal prices to numbers
-  return products.map((p) => ({
-    id: p.id,
-    shopId: p.shopId,
-    name: p.name,
-    description: p.description,
-    sku: p.sku,
-    costPrice: Number(p.costPrice),
-    cashPrice: Number(p.cashPrice),
-    layawayPrice: Number(p.layawayPrice),
-    creditPrice: Number(p.creditPrice),
-    price: Number(p.price),
-    stockQuantity: p.stockQuantity,
-    lowStockThreshold: p.lowStockThreshold,
-    imageUrl: p.imageUrl,
-    isActive: p.isActive,
-    categoryId: p.categoryId,
-    categoryName: p.category?.name || null,
-    categoryColor: p.category?.color || null,
-    createdAt: p.createdAt,
-    updatedAt: p.updatedAt,
-  }))
+  // Convert and return products with shop-specific stock
+  return shopProducts.map((sp) => {
+    const p = sp.product
+    return {
+      id: p.id,
+      shopId: shop.id, // Use current shop context
+      name: p.name,
+      description: p.description,
+      sku: p.sku,
+      costPrice: Number(sp.costPrice ?? p.costPrice),
+      cashPrice: Number(sp.cashPrice ?? p.cashPrice),
+      layawayPrice: Number(sp.layawayPrice ?? p.layawayPrice),
+      creditPrice: Number(sp.creditPrice ?? p.creditPrice),
+      price: Number(sp.cashPrice ?? p.price),
+      stockQuantity: sp.stockQuantity, // Shop-specific stock
+      lowStockThreshold: p.lowStockThreshold,
+      imageUrl: p.imageUrl,
+      isActive: sp.isActive && p.isActive,
+      categoryId: p.categoryId,
+      categoryName: p.category?.name || null,
+      categoryColor: p.category?.color || null,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+    }
+  })
 }
 
 /**
@@ -258,6 +265,16 @@ export async function createProduct(
 ): Promise<ActionResult> {
   try {
     const { user, shop } = await requireShopAdminForShop(shopSlug)
+
+    // Get the business for this shop
+    const shopWithBusiness = await prisma.shop.findUnique({
+      where: { id: shop.id },
+      include: { business: true },
+    })
+
+    if (!shopWithBusiness) {
+      return { success: false, error: "Shop not found" }
+    }
 
     // Validation
     if (!payload.name || payload.name.trim().length === 0) {
@@ -276,11 +293,11 @@ export async function createProduct(
       return { success: false, error: "Layaway price should not exceed credit price" }
     }
 
-    // Check for duplicate SKU if provided
+    // Check for duplicate SKU at business level if provided
     if (payload.sku) {
       const existingSku = await prisma.product.findFirst({
         where: {
-          shopId: shop.id,
+          businessId: shopWithBusiness.businessId,
           sku: payload.sku.trim(),
         },
       })
@@ -289,38 +306,56 @@ export async function createProduct(
       }
     }
 
-    const product = await prisma.product.create({
-      data: {
-        shopId: shop.id,
-        name: payload.name.trim(),
-        description: payload.description?.trim() || null,
-        sku: payload.sku?.trim() || null,
-        costPrice: new Prisma.Decimal(payload.costPrice ?? 0),
-        cashPrice: new Prisma.Decimal(payload.cashPrice),
-        layawayPrice: new Prisma.Decimal(payload.layawayPrice),
-        creditPrice: new Prisma.Decimal(payload.creditPrice),
-        price: new Prisma.Decimal(payload.price ?? payload.cashPrice), // Default to cash price
-        stockQuantity: payload.stockQuantity ?? 0,
-        lowStockThreshold: payload.lowStockThreshold ?? 5,
-        imageUrl: payload.imageUrl || null,
-        isActive: payload.isActive ?? true,
-        categoryId: payload.categoryId || null,
-      },
+    // Create product at business level and ShopProduct entry in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create the product at business level
+      const product = await tx.product.create({
+        data: {
+          businessId: shopWithBusiness.businessId,
+          name: payload.name.trim(),
+          description: payload.description?.trim() || null,
+          sku: payload.sku?.trim() || null,
+          costPrice: new Prisma.Decimal(payload.costPrice ?? 0),
+          cashPrice: new Prisma.Decimal(payload.cashPrice),
+          layawayPrice: new Prisma.Decimal(payload.layawayPrice),
+          creditPrice: new Prisma.Decimal(payload.creditPrice),
+          price: new Prisma.Decimal(payload.price ?? payload.cashPrice), // Default to cash price
+          stockQuantity: 0, // Main product stock stays at 0, shop-specific stock in ShopProduct
+          lowStockThreshold: payload.lowStockThreshold ?? 5,
+          imageUrl: payload.imageUrl || null,
+          isActive: payload.isActive ?? true,
+          categoryId: payload.categoryId || null,
+        },
+      })
+
+      // Create ShopProduct entry with the stock for this shop
+      await tx.shopProduct.create({
+        data: {
+          shopId: shop.id,
+          productId: product.id,
+          stockQuantity: payload.stockQuantity ?? 0,
+          isActive: true,
+        },
+      })
+
+      return product
     })
 
     await createAuditLog({
       actorUserId: user.id,
       action: "PRODUCT_CREATED",
       entityType: "Product",
-      entityId: product.id,
+      entityId: result.id,
       metadata: {
+        businessId: shopWithBusiness.businessId,
         shopId: shop.id,
         shopName: shop.name,
-        productName: product.name,
-        productSku: product.sku,
-        cashPrice: Number(product.cashPrice),
-        layawayPrice: Number(product.layawayPrice),
-        creditPrice: Number(product.creditPrice),
+        productName: result.name,
+        productSku: result.sku,
+        cashPrice: Number(result.cashPrice),
+        layawayPrice: Number(result.layawayPrice),
+        creditPrice: Number(result.creditPrice),
+        stockQuantity: payload.stockQuantity ?? 0,
       },
     })
 
@@ -329,9 +364,9 @@ export async function createProduct(
     return {
       success: true,
       data: {
-        id: product.id,
-        name: product.name,
-        price: Number(product.price),
+        id: result.id,
+        name: result.name,
+        price: Number(result.price),
       },
     }
   } catch (error) {
@@ -341,7 +376,7 @@ export async function createProduct(
 }
 
 /**
- * Update an existing product
+ * Update an existing product (updates product master and shop-specific stock)
  */
 export async function updateProduct(
   shopSlug: string,
@@ -351,14 +386,27 @@ export async function updateProduct(
   try {
     const { user, shop } = await requireShopAdminForShop(shopSlug)
 
-    // Check product exists and belongs to shop
-    const existingProduct = await prisma.product.findFirst({
-      where: { id: productId, shopId: shop.id },
+    // Get the shop's business
+    const shopWithBusiness = await prisma.shop.findUnique({
+      where: { id: shop.id },
+      include: { business: true },
     })
 
-    if (!existingProduct) {
-      return { success: false, error: "Product not found" }
+    if (!shopWithBusiness) {
+      return { success: false, error: "Shop not found" }
     }
+
+    // Check product exists and is assigned to this shop
+    const shopProduct = await prisma.shopProduct.findFirst({
+      where: { productId, shopId: shop.id },
+      include: { product: true },
+    })
+
+    if (!shopProduct) {
+      return { success: false, error: "Product not found in this shop" }
+    }
+
+    const existingProduct = shopProduct.product
 
     // Validation
     if (payload.name !== undefined && payload.name.trim().length === 0) {
@@ -389,11 +437,11 @@ export async function updateProduct(
       return { success: false, error: "Layaway price should not exceed credit price" }
     }
 
-    // Check for duplicate SKU if changing
+    // Check for duplicate SKU at business level if changing
     if (payload.sku && payload.sku !== existingProduct.sku) {
       const existingSku = await prisma.product.findFirst({
         where: {
-          shopId: shop.id,
+          businessId: shopWithBusiness.businessId,
           sku: payload.sku.trim(),
           id: { not: productId },
         },
@@ -403,34 +451,47 @@ export async function updateProduct(
       }
     }
 
-    const product = await prisma.product.update({
-      where: { id: productId },
-      data: {
-        ...(payload.name !== undefined && { name: payload.name.trim() }),
-        ...(payload.description !== undefined && { description: payload.description?.trim() || null }),
-        ...(payload.sku !== undefined && { sku: payload.sku?.trim() || null }),
-        ...(payload.costPrice !== undefined && { costPrice: new Prisma.Decimal(payload.costPrice) }),
-        ...(payload.cashPrice !== undefined && { cashPrice: new Prisma.Decimal(payload.cashPrice) }),
-        ...(payload.layawayPrice !== undefined && { layawayPrice: new Prisma.Decimal(payload.layawayPrice) }),
-        ...(payload.creditPrice !== undefined && { creditPrice: new Prisma.Decimal(payload.creditPrice) }),
-        ...(payload.price !== undefined && { price: new Prisma.Decimal(payload.price) }),
-        ...(payload.stockQuantity !== undefined && { stockQuantity: payload.stockQuantity }),
-        ...(payload.lowStockThreshold !== undefined && { lowStockThreshold: payload.lowStockThreshold }),
-        ...(payload.imageUrl !== undefined && { imageUrl: payload.imageUrl || null }),
-        ...(payload.isActive !== undefined && { isActive: payload.isActive }),
-        ...(payload.categoryId !== undefined && { categoryId: payload.categoryId || null }),
-      },
+    // Update in transaction - update product master and shop-specific stock
+    const result = await prisma.$transaction(async (tx) => {
+      // Update the product master (excludes stock which is shop-specific)
+      const product = await tx.product.update({
+        where: { id: productId },
+        data: {
+          ...(payload.name !== undefined && { name: payload.name.trim() }),
+          ...(payload.description !== undefined && { description: payload.description?.trim() || null }),
+          ...(payload.sku !== undefined && { sku: payload.sku?.trim() || null }),
+          ...(payload.costPrice !== undefined && { costPrice: new Prisma.Decimal(payload.costPrice) }),
+          ...(payload.cashPrice !== undefined && { cashPrice: new Prisma.Decimal(payload.cashPrice) }),
+          ...(payload.layawayPrice !== undefined && { layawayPrice: new Prisma.Decimal(payload.layawayPrice) }),
+          ...(payload.creditPrice !== undefined && { creditPrice: new Prisma.Decimal(payload.creditPrice) }),
+          ...(payload.price !== undefined && { price: new Prisma.Decimal(payload.price) }),
+          ...(payload.lowStockThreshold !== undefined && { lowStockThreshold: payload.lowStockThreshold }),
+          ...(payload.imageUrl !== undefined && { imageUrl: payload.imageUrl || null }),
+          ...(payload.isActive !== undefined && { isActive: payload.isActive }),
+          ...(payload.categoryId !== undefined && { categoryId: payload.categoryId || null }),
+        },
+      })
+
+      // Update shop-specific stock if provided
+      if (payload.stockQuantity !== undefined) {
+        await tx.shopProduct.update({
+          where: { id: shopProduct.id },
+          data: { stockQuantity: payload.stockQuantity },
+        })
+      }
+
+      return product
     })
 
     await createAuditLog({
       actorUserId: user.id,
       action: "PRODUCT_UPDATED",
       entityType: "Product",
-      entityId: product.id,
+      entityId: result.id,
       metadata: {
         shopId: shop.id,
         shopName: shop.name,
-        productName: product.name,
+        productName: result.name,
         changes: payload,
       },
     })
@@ -440,11 +501,11 @@ export async function updateProduct(
     return {
       success: true,
       data: {
-        id: product.id,
-        name: product.name,
-        cashPrice: Number(product.cashPrice),
-        layawayPrice: Number(product.layawayPrice),
-        creditPrice: Number(product.creditPrice),
+        id: result.id,
+        name: result.name,
+        cashPrice: Number(result.cashPrice),
+        layawayPrice: Number(result.layawayPrice),
+        creditPrice: Number(result.creditPrice),
       },
     }
   } catch (error) {
@@ -454,7 +515,8 @@ export async function updateProduct(
 }
 
 /**
- * Delete a product
+ * Remove a product from shop (deletes ShopProduct entry)
+ * Note: This doesn't delete the product itself, just removes it from this shop
  */
 export async function deleteProduct(
   shopSlug: string,
@@ -463,29 +525,47 @@ export async function deleteProduct(
   try {
     const { user, shop } = await requireShopAdminForShop(shopSlug)
 
-    // Check product exists and belongs to shop
-    const product = await prisma.product.findFirst({
-      where: { id: productId, shopId: shop.id },
+    // Check if product is assigned to this shop
+    const shopProduct = await prisma.shopProduct.findFirst({
+      where: { productId, shopId: shop.id },
+      include: { product: true },
     })
 
-    if (!product) {
-      return { success: false, error: "Product not found" }
+    if (!shopProduct) {
+      return { success: false, error: "Product not found in this shop" }
     }
 
-    await prisma.product.delete({
-      where: { id: productId },
+    // Check if product has any active purchases in this shop
+    const activePurchases = await prisma.purchase.count({
+      where: {
+        customer: { shopId: shop.id },
+        items: { some: { productId } },
+        status: { in: ["ACTIVE", "OVERDUE"] },
+      },
+    })
+
+    if (activePurchases > 0) {
+      return { 
+        success: false, 
+        error: `Cannot remove product with ${activePurchases} active purchase(s). Complete or cancel them first.` 
+      }
+    }
+
+    // Remove product from this shop
+    await prisma.shopProduct.delete({
+      where: { id: shopProduct.id },
     })
 
     await createAuditLog({
       actorUserId: user.id,
-      action: "PRODUCT_DELETED",
-      entityType: "Product",
-      entityId: productId,
+      action: "PRODUCT_REMOVED_FROM_SHOP",
+      entityType: "ShopProduct",
+      entityId: shopProduct.id,
       metadata: {
         shopId: shop.id,
         shopName: shop.name,
-        productName: product.name,
-        productSku: product.sku,
+        productName: shopProduct.product.name,
+        productSku: shopProduct.product.sku,
       },
     })
 
@@ -493,13 +573,13 @@ export async function deleteProduct(
 
     return { success: true }
   } catch (error) {
-    console.error("Error deleting product:", error)
-    return { success: false, error: "Failed to delete product" }
+    console.error("Error removing product from shop:", error)
+    return { success: false, error: "Failed to remove product" }
   }
 }
 
 /**
- * Toggle product active status
+ * Toggle product active status in this shop
  */
 export async function toggleProductStatus(
   shopSlug: string,
@@ -508,28 +588,31 @@ export async function toggleProductStatus(
   try {
     const { user, shop } = await requireShopAdminForShop(shopSlug)
 
-    const product = await prisma.product.findFirst({
-      where: { id: productId, shopId: shop.id },
+    // Find the ShopProduct entry
+    const shopProduct = await prisma.shopProduct.findFirst({
+      where: { productId, shopId: shop.id },
+      include: { product: true },
     })
 
-    if (!product) {
-      return { success: false, error: "Product not found" }
+    if (!shopProduct) {
+      return { success: false, error: "Product not found in this shop" }
     }
 
-    const updated = await prisma.product.update({
-      where: { id: productId },
-      data: { isActive: !product.isActive },
+    // Toggle the ShopProduct's isActive status
+    const updated = await prisma.shopProduct.update({
+      where: { id: shopProduct.id },
+      data: { isActive: !shopProduct.isActive },
     })
 
     await createAuditLog({
       actorUserId: user.id,
-      action: updated.isActive ? "PRODUCT_ACTIVATED" : "PRODUCT_DEACTIVATED",
-      entityType: "Product",
-      entityId: productId,
+      action: updated.isActive ? "SHOP_PRODUCT_ACTIVATED" : "SHOP_PRODUCT_DEACTIVATED",
+      entityType: "ShopProduct",
+      entityId: shopProduct.id,
       metadata: {
         shopId: shop.id,
         shopName: shop.name,
-        productName: product.name,
+        productName: shopProduct.product.name,
       },
     })
 
@@ -2289,6 +2372,7 @@ export async function confirmPayment(
 
     // Update purchase totals - NOW the balance is updated
     const purchase = payment.purchase
+    const previousBalance = Number(purchase.outstandingBalance)
     const newAmountPaid = Number(purchase.amountPaid) + Number(payment.amount)
     const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
     const isCompleted = newOutstanding <= 0
@@ -2302,14 +2386,35 @@ export async function confirmPayment(
       },
     })
 
+    // Generate Progress Invoice for this payment
+    const year = new Date().getFullYear()
+    const invoiceCount = await prisma.progressInvoice.count()
+    const invoiceNumber = `INV-${year}-${String(invoiceCount + 1).padStart(6, "0")}`
+
+    // Get collector info if available
+    let collectorName: string | null = null
+    if (payment.collectorId) {
+      const collector = await prisma.shopMember.findUnique({
+        where: { id: payment.collectorId },
+        include: { user: true },
+      })
+      collectorName = collector?.user?.name || null
+    }
+
+    let waybillNumber: string | null = null
+    let waybillGenerated = false
+
     // AUTO-GENERATE WAYBILL and DEDUCT STOCK when purchase is fully paid
     if (isCompleted) {
       // Deduct stock for each item (only for non-CASH purchases, CASH already deducted at sale)
       if (purchase.purchaseType !== "CASH") {
         for (const item of purchase.items) {
           if (item.productId) {
-            await prisma.product.update({
-              where: { id: item.productId },
+            await prisma.shopProduct.updateMany({
+              where: { 
+                shopId: shop.id,
+                productId: item.productId 
+              },
               data: {
                 stockQuantity: {
                   decrement: item.quantity,
@@ -2327,9 +2432,8 @@ export async function confirmPayment(
 
       if (!existingWaybill) {
         // Generate waybill number
-        const year = new Date().getFullYear()
         const waybillCount = await prisma.waybill.count()
-        const waybillNumber = `WB-${year}-${String(waybillCount + 1).padStart(5, "0")}`
+        waybillNumber = `WB-${year}-${String(waybillCount + 1).padStart(5, "0")}`
 
         await prisma.waybill.create({
           data: {
@@ -2344,6 +2448,8 @@ export async function confirmPayment(
             generatedById: user.id,
           },
         })
+
+        waybillGenerated = true
 
         // Update delivery status to SCHEDULED (ready for delivery)
         await prisma.purchase.update({
@@ -2363,8 +2469,69 @@ export async function confirmPayment(
             reason: "Payment completed",
           },
         })
+      } else {
+        waybillNumber = existingWaybill.waybillNumber
+        waybillGenerated = true
       }
     }
+
+    // Create the progress invoice
+    const progressInvoice = await prisma.progressInvoice.create({
+      data: {
+        invoiceNumber,
+        paymentId: payment.id,
+        purchaseId: purchase.id,
+        paymentAmount: payment.amount,
+        previousBalance,
+        newBalance: Math.max(0, newOutstanding),
+        totalPurchaseAmount: purchase.totalAmount,
+        totalAmountPaid: newAmountPaid,
+        collectorId: payment.collectorId,
+        collectorName,
+        confirmedById: shopMember?.id,
+        confirmedByName: user.name,
+        paymentMethod: payment.paymentMethod,
+        customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+        customerPhone: purchase.customer.phone,
+        customerAddress: purchase.customer.address,
+        purchaseNumber: purchase.purchaseNumber,
+        purchaseType: purchase.purchaseType,
+        shopId: shop.id,
+        shopName: shop.name,
+        businessId: shop.businessId,
+        businessName: shop.name, // Will get business name below
+        isPurchaseCompleted: isCompleted,
+        waybillGenerated,
+        waybillNumber,
+        notes: payment.notes,
+      },
+    })
+
+    // Update invoice with actual business name
+    const business = await prisma.business.findUnique({
+      where: { id: shop.businessId },
+    })
+    if (business) {
+      await prisma.progressInvoice.update({
+        where: { id: progressInvoice.id },
+        data: { businessName: business.name },
+      })
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PROGRESS_INVOICE_GENERATED",
+      entityType: "ProgressInvoice",
+      entityId: progressInvoice.id,
+      metadata: {
+        invoiceNumber,
+        paymentId: payment.id,
+        purchaseId: purchase.id,
+        amount: Number(payment.amount),
+        isCompleted,
+        waybillGenerated,
+      },
+    })
 
     await createAuditLog({
       actorUserId: user.id,
@@ -2384,9 +2551,19 @@ export async function confirmPayment(
     revalidatePath(`/shop-admin/${shopSlug}/pending-payments`)
     revalidatePath(`/shop-admin/${shopSlug}/customers/${purchase.customerId}`)
     revalidatePath(`/shop-admin/${shopSlug}/waybills`)
+    revalidatePath(`/shop-admin/${shopSlug}/invoices`)
     revalidatePath(`/collector/${shopSlug}/payments`)
     revalidatePath(`/sales-staff/${shopSlug}/deliveries`)
-    return { success: true, data: { purchaseCompleted: isCompleted } }
+    return { 
+      success: true, 
+      data: { 
+        purchaseCompleted: isCompleted,
+        invoiceId: progressInvoice.id,
+        invoiceNumber,
+        waybillGenerated,
+        waybillNumber,
+      } 
+    }
   } catch (error) {
     console.error("Confirm payment error:", error)
     return { success: false, error: "Failed to confirm payment" }
@@ -2667,6 +2844,88 @@ export async function getWaybillStats(shopSlug: string) {
   ])
 
   return { total, pendingDelivery, inTransit, delivered }
+}
+
+export interface WaybillDetailData {
+  id: string
+  waybillNumber: string
+  purchaseNumber: string
+  recipientName: string
+  recipientPhone: string
+  deliveryAddress: string
+  deliveryCity: string | null
+  deliveryRegion: string | null
+  specialInstructions: string | null
+  items: {
+    productName: string
+    quantity: number
+    unitPrice: number
+  }[]
+  subtotal: number
+  generatedAt: Date
+  receivedBy: string | null
+  shopName: string
+  businessName: string
+  generatedByName: string | null
+}
+
+/**
+ * Get a single waybill by purchase ID for shop admin
+ */
+export async function getWaybillByPurchaseId(shopSlug: string, purchaseId: string): Promise<WaybillDetailData | null> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const waybill = await prisma.waybill.findUnique({
+    where: { purchaseId },
+    include: {
+      purchase: {
+        include: {
+          customer: true,
+          items: true,
+        },
+      },
+    },
+  })
+
+  if (!waybill || waybill.purchase.customer.shopId !== shop.id) {
+    return null
+  }
+
+  // Get generated by user name
+  let generatedByName: string | null = null
+  if (waybill.generatedById) {
+    const user = await prisma.user.findUnique({
+      where: { id: waybill.generatedById },
+    })
+    generatedByName = user?.name || null
+  }
+
+  const business = await prisma.business.findUnique({
+    where: { id: shop.businessId },
+  })
+
+  return {
+    id: waybill.id,
+    waybillNumber: waybill.waybillNumber,
+    purchaseNumber: waybill.purchase.purchaseNumber,
+    recipientName: waybill.recipientName,
+    recipientPhone: waybill.recipientPhone,
+    deliveryAddress: waybill.deliveryAddress,
+    deliveryCity: waybill.deliveryCity,
+    deliveryRegion: waybill.deliveryRegion,
+    specialInstructions: waybill.specialInstructions,
+    items: waybill.purchase.items.map((i) => ({
+      productName: i.productName,
+      quantity: i.quantity,
+      unitPrice: Number(i.unitPrice),
+    })),
+    subtotal: Number(waybill.purchase.subtotal),
+    generatedAt: waybill.generatedAt,
+    receivedBy: waybill.receivedBy,
+    shopName: shop.name,
+    businessName: business?.name || shop.name,
+    generatedByName,
+  }
 }
 
 // ============================================
@@ -3034,3 +3293,836 @@ export async function sendPaymentReminder(
   }
 }
 
+// ============================================
+// PROGRESS INVOICES
+// ============================================
+
+export interface ProgressInvoiceData {
+  id: string
+  invoiceNumber: string
+  paymentId: string
+  purchaseId: string
+  paymentAmount: number
+  previousBalance: number
+  newBalance: number
+  totalPurchaseAmount: number
+  totalAmountPaid: number
+  collectorName: string | null
+  confirmedByName: string | null
+  paymentMethod: string
+  customerName: string
+  customerPhone: string
+  customerAddress: string | null
+  purchaseNumber: string
+  purchaseType: string
+  shopName: string
+  businessName: string
+  isPurchaseCompleted: boolean
+  waybillGenerated: boolean
+  waybillNumber: string | null
+  notes: string | null
+  generatedAt: Date
+  // Purchase items for the invoice
+  items: {
+    productName: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+  }[]
+}
+
+/**
+ * Get all progress invoices for a shop
+ */
+export async function getShopInvoices(shopSlug: string): Promise<ProgressInvoiceData[]> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const invoices = await prisma.progressInvoice.findMany({
+    where: { shopId: shop.id },
+    include: {
+      purchase: {
+        include: {
+          items: true,
+        },
+      },
+    },
+    orderBy: { generatedAt: "desc" },
+    take: 200,
+  })
+
+  return invoices.map((inv) => ({
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    paymentId: inv.paymentId,
+    purchaseId: inv.purchaseId,
+    paymentAmount: Number(inv.paymentAmount),
+    previousBalance: Number(inv.previousBalance),
+    newBalance: Number(inv.newBalance),
+    totalPurchaseAmount: Number(inv.totalPurchaseAmount),
+    totalAmountPaid: Number(inv.totalAmountPaid),
+    collectorName: inv.collectorName,
+    confirmedByName: inv.confirmedByName,
+    paymentMethod: inv.paymentMethod,
+    customerName: inv.customerName,
+    customerPhone: inv.customerPhone,
+    customerAddress: inv.customerAddress,
+    purchaseNumber: inv.purchaseNumber,
+    purchaseType: inv.purchaseType,
+    shopName: inv.shopName,
+    businessName: inv.businessName,
+    isPurchaseCompleted: inv.isPurchaseCompleted,
+    waybillGenerated: inv.waybillGenerated,
+    waybillNumber: inv.waybillNumber,
+    notes: inv.notes,
+    generatedAt: inv.generatedAt,
+    items: inv.purchase.items.map((item) => ({
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      totalPrice: Number(item.totalPrice),
+    })),
+  }))
+}
+
+/**
+ * Get a single progress invoice by ID
+ */
+export async function getProgressInvoice(shopSlug: string, invoiceId: string): Promise<ProgressInvoiceData | null> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const invoice = await prisma.progressInvoice.findFirst({
+    where: { 
+      id: invoiceId,
+      shopId: shop.id,
+    },
+    include: {
+      purchase: {
+        include: {
+          items: true,
+        },
+      },
+    },
+  })
+
+  if (!invoice) return null
+
+  return {
+    id: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    paymentId: invoice.paymentId,
+    purchaseId: invoice.purchaseId,
+    paymentAmount: Number(invoice.paymentAmount),
+    previousBalance: Number(invoice.previousBalance),
+    newBalance: Number(invoice.newBalance),
+    totalPurchaseAmount: Number(invoice.totalPurchaseAmount),
+    totalAmountPaid: Number(invoice.totalAmountPaid),
+    collectorName: invoice.collectorName,
+    confirmedByName: invoice.confirmedByName,
+    paymentMethod: invoice.paymentMethod,
+    customerName: invoice.customerName,
+    customerPhone: invoice.customerPhone,
+    customerAddress: invoice.customerAddress,
+    purchaseNumber: invoice.purchaseNumber,
+    purchaseType: invoice.purchaseType,
+    shopName: invoice.shopName,
+    businessName: invoice.businessName,
+    isPurchaseCompleted: invoice.isPurchaseCompleted,
+    waybillGenerated: invoice.waybillGenerated,
+    waybillNumber: invoice.waybillNumber,
+    notes: invoice.notes,
+    generatedAt: invoice.generatedAt,
+    items: invoice.purchase.items.map((item) => ({
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      totalPrice: Number(item.totalPrice),
+    })),
+  }
+}
+
+/**
+ * Get invoices for a specific purchase
+ */
+export async function getPurchaseInvoices(shopSlug: string, purchaseId: string): Promise<ProgressInvoiceData[]> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const invoices = await prisma.progressInvoice.findMany({
+    where: { 
+      purchaseId,
+      shopId: shop.id,
+    },
+    include: {
+      purchase: {
+        include: {
+          items: true,
+        },
+      },
+    },
+    orderBy: { generatedAt: "asc" },
+  })
+
+  return invoices.map((inv) => ({
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    paymentId: inv.paymentId,
+    purchaseId: inv.purchaseId,
+    paymentAmount: Number(inv.paymentAmount),
+    previousBalance: Number(inv.previousBalance),
+    newBalance: Number(inv.newBalance),
+    totalPurchaseAmount: Number(inv.totalPurchaseAmount),
+    totalAmountPaid: Number(inv.totalAmountPaid),
+    collectorName: inv.collectorName,
+    confirmedByName: inv.confirmedByName,
+    paymentMethod: inv.paymentMethod,
+    customerName: inv.customerName,
+    customerPhone: inv.customerPhone,
+    customerAddress: inv.customerAddress,
+    purchaseNumber: inv.purchaseNumber,
+    purchaseType: inv.purchaseType,
+    shopName: inv.shopName,
+    businessName: inv.businessName,
+    isPurchaseCompleted: inv.isPurchaseCompleted,
+    waybillGenerated: inv.waybillGenerated,
+    waybillNumber: inv.waybillNumber,
+    notes: inv.notes,
+    generatedAt: inv.generatedAt,
+    items: inv.purchase.items.map((item) => ({
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      totalPrice: Number(item.totalPrice),
+    })),
+  }))
+}
+
+// ============================================
+// NEW SALE FUNCTIONS FOR SHOP ADMIN
+// ============================================
+
+export interface ProductForSale {
+  id: string
+  name: string
+  description: string | null
+  sku: string | null
+  price: number
+  cashPrice: number
+  layawayPrice: number
+  creditPrice: number
+  stockQuantity: number
+  lowStockThreshold: number
+  categoryName: string | null
+  categoryColor: string | null
+  imageUrl: string | null
+}
+
+export async function getProductsForSale(shopSlug: string): Promise<ProductForSale[]> {
+  await requireShopAdminForShop(shopSlug)
+
+  const shop = await prisma.shop.findUnique({
+    where: { shopSlug },
+  })
+
+  if (!shop) return []
+
+  // Query ShopProduct to get shop-specific stock and optional pricing
+  const shopProducts = await prisma.shopProduct.findMany({
+    where: {
+      shopId: shop.id,
+      isActive: true,
+      product: {
+        isActive: true,
+      },
+    },
+    include: {
+      product: {
+        include: {
+          category: {
+            select: { name: true, color: true },
+          },
+        },
+      },
+    },
+    orderBy: {
+      product: { name: "asc" },
+    },
+  })
+
+  return shopProducts.map((sp) => {
+    const p = sp.product
+    return {
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      sku: p.sku,
+      // Use shop-specific pricing if set, otherwise fall back to product pricing
+      price: Number(sp.cashPrice ?? p.price),
+      cashPrice: Number(sp.cashPrice ?? p.cashPrice),
+      layawayPrice: Number(sp.layawayPrice ?? p.layawayPrice),
+      creditPrice: Number(sp.creditPrice ?? p.creditPrice),
+      stockQuantity: sp.stockQuantity, // Use shop-specific stock
+      lowStockThreshold: p.lowStockThreshold,
+      categoryName: p.category?.name || null,
+      categoryColor: p.category?.color || null,
+      imageUrl: p.imageUrl,
+    }
+  })
+}
+
+export interface CustomerForSale {
+  id: string
+  firstName: string
+  lastName: string
+  phone: string
+  email: string | null
+}
+
+export async function getCustomersForSale(shopSlug: string): Promise<CustomerForSale[]> {
+  await requireShopAdminForShop(shopSlug)
+
+  const shop = await prisma.shop.findUnique({
+    where: { shopSlug },
+  })
+
+  if (!shop) return []
+
+  const customers = await prisma.customer.findMany({
+    where: {
+      shopId: shop.id,
+      isActive: true,
+    },
+    orderBy: { firstName: "asc" },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      email: true,
+    },
+  })
+
+  return customers
+}
+
+export interface CollectorOption {
+  id: string
+  name: string
+  email: string | null
+}
+
+export async function getCollectorsForDropdown(shopSlug: string): Promise<CollectorOption[]> {
+  await requireShopAdminForShop(shopSlug)
+
+  const shop = await prisma.shop.findUnique({
+    where: { shopSlug },
+  })
+
+  if (!shop) return []
+
+  const collectors = await prisma.shopMember.findMany({
+    where: {
+      shopId: shop.id,
+      role: "DEBT_COLLECTOR",
+      isActive: true,
+    },
+    include: {
+      user: {
+        select: { name: true, email: true },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  })
+
+  return collectors.map((c) => ({
+    id: c.id,
+    name: c.user.name || "Unknown",
+    email: c.user.email,
+  }))
+}
+
+export interface QuickCustomerPayload {
+  firstName: string
+  lastName: string
+  phone: string
+  email?: string | null
+  idType?: string | null
+  idNumber?: string | null
+  address?: string | null
+  city?: string | null
+  region?: string | null
+  preferredPayment?: "ONLINE" | "DEBT_COLLECTOR" | "BOTH"
+  assignedCollectorId?: string | null
+  notes?: string | null
+}
+
+export async function createQuickCustomer(
+  shopSlug: string,
+  payload: QuickCustomerPayload
+): Promise<ActionResult> {
+  try {
+    const { user, shop } = await requireShopAdminForShop(shopSlug)
+
+    if (!payload.firstName || payload.firstName.trim().length === 0) {
+      return { success: false, error: "First name is required" }
+    }
+
+    if (!payload.lastName || payload.lastName.trim().length === 0) {
+      return { success: false, error: "Last name is required" }
+    }
+
+    if (!payload.phone || payload.phone.trim().length === 0) {
+      return { success: false, error: "Phone number is required" }
+    }
+
+    // Check for duplicate phone
+    const existingCustomer = await prisma.customer.findFirst({
+      where: {
+        shopId: shop.id,
+        phone: payload.phone.trim(),
+      },
+    })
+
+    if (existingCustomer) {
+      return { success: false, error: "A customer with this phone number already exists" }
+    }
+
+    // Validate collector if specified
+    let assignedCollector = null
+    if (payload.assignedCollectorId) {
+      assignedCollector = await prisma.shopMember.findFirst({
+        where: {
+          id: payload.assignedCollectorId,
+          shopId: shop.id,
+          role: "DEBT_COLLECTOR",
+          isActive: true,
+        },
+      })
+      if (!assignedCollector) {
+        return { success: false, error: "Selected collector not found or inactive" }
+      }
+    }
+
+    const customer = await prisma.customer.create({
+      data: {
+        shopId: shop.id,
+        firstName: payload.firstName.trim(),
+        lastName: payload.lastName.trim(),
+        phone: payload.phone.trim(),
+        email: payload.email?.trim() || null,
+        idType: payload.idType || null,
+        idNumber: payload.idNumber?.trim() || null,
+        address: payload.address?.trim() || null,
+        city: payload.city?.trim() || null,
+        region: payload.region || null,
+        preferredPayment: payload.preferredPayment || "BOTH",
+        assignedCollectorId: assignedCollector?.id || null,
+        notes: payload.notes?.trim() || null,
+        isActive: true,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CUSTOMER_CREATED",
+      entityType: "Customer",
+      entityId: customer.id,
+      metadata: {
+        shopId: shop.id,
+        shopName: shop.name,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        method: "Quick add during sale",
+      },
+    })
+
+    revalidatePath(`/shop-admin/${shopSlug}/customers`)
+
+    return {
+      success: true,
+      data: {
+        id: customer.id,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        phone: customer.phone,
+        email: customer.email,
+      },
+    }
+  } catch (error) {
+    console.error("Create quick customer error:", error)
+    return { success: false, error: "Failed to create customer" }
+  }
+}
+
+export type PurchaseTypeOption = "CASH" | "LAYAWAY" | "CREDIT"
+
+export interface SaleItem {
+  productId: string
+  productName: string
+  quantity: number
+  unitPrice: number
+}
+
+export interface SalePayload {
+  customerId: string
+  items: SaleItem[]
+  downPayment: number
+  tenorDays: number
+  purchaseType: PurchaseTypeOption
+}
+
+export async function createSale(
+  shopSlug: string,
+  payload: SalePayload
+): Promise<ActionResult> {
+  try {
+    const { user, shop } = await requireShopAdminForShop(shopSlug)
+
+    // Validate inputs
+    if (!payload.customerId) {
+      return { success: false, error: "Customer is required" }
+    }
+
+    if (!payload.items || payload.items.length === 0) {
+      return { success: false, error: "At least one product is required" }
+    }
+
+    if (payload.downPayment < 0) {
+      return { success: false, error: "Down payment cannot be negative" }
+    }
+
+    if (payload.tenorDays < 1) {
+      return { success: false, error: "Tenor must be at least 1 day" }
+    }
+
+    // Verify customer belongs to shop
+    const customer = await prisma.customer.findFirst({
+      where: { id: payload.customerId, shopId: shop.id },
+    })
+
+    if (!customer) {
+      return { success: false, error: "Customer not found" }
+    }
+
+    // Verify all products and their stock via ShopProduct
+    const productIds = payload.items.map(item => item.productId)
+    const shopProducts = await prisma.shopProduct.findMany({
+      where: { 
+        productId: { in: productIds }, 
+        shopId: shop.id, 
+        isActive: true,
+        product: { isActive: true },
+      },
+      include: { product: true },
+    })
+
+    if (shopProducts.length !== payload.items.length) {
+      return { success: false, error: "One or more products not found in this shop" }
+    }
+
+    // Check stock for each item
+    for (const item of payload.items) {
+      const shopProduct = shopProducts.find(sp => sp.productId === item.productId)
+      if (!shopProduct) {
+        return { success: false, error: `Product not found: ${item.productId}` }
+      }
+      if (shopProduct.stockQuantity < item.quantity) {
+        return { success: false, error: `Insufficient stock for ${shopProduct.product.name}. Only ${shopProduct.stockQuantity} available.` }
+      }
+    }
+
+    // Get policy for interest calculation (check shop policy first, then fall back to business policy)
+    // Only required for non-CASH purchases
+    let policy = await prisma.shopPolicy.findFirst({
+      where: { shopId: shop.id },
+    })
+
+    // If no shop policy, try business policy
+    if (!policy) {
+      const businessPolicy = await prisma.businessPolicy.findFirst({
+        where: { 
+          business: { 
+            shops: { some: { id: shop.id } } 
+          } 
+        },
+      })
+      if (businessPolicy) {
+        // Map business policy to same shape as shop policy for consistent usage
+        policy = {
+          id: businessPolicy.id,
+          shopId: shop.id,
+          interestType: businessPolicy.interestType,
+          interestRate: businessPolicy.interestRate,
+          graceDays: businessPolicy.graceDays,
+          maxTenorDays: businessPolicy.maxTenorDays,
+          lateFeeFixed: businessPolicy.lateFeeFixed,
+          lateFeeRate: businessPolicy.lateFeeRate,
+          createdAt: businessPolicy.createdAt,
+          updatedAt: businessPolicy.updatedAt,
+        }
+      }
+    }
+
+    // CASH sales don't require policy
+    if (payload.purchaseType !== "CASH" && !policy) {
+      return { success: false, error: "No policy configured. Please configure either a shop policy or business policy first." }
+    }
+
+    // Check tenor against policy (only for non-CASH)
+    if (payload.purchaseType !== "CASH" && policy && payload.tenorDays > policy.maxTenorDays) {
+      return { success: false, error: `Tenor cannot exceed ${policy.maxTenorDays} days` }
+    }
+
+    // Calculate subtotal from all items
+    const subtotal = payload.items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0)
+    const interestRate = policy ? Number(policy.interestRate) / 100 : 0
+
+    // For CASH purchases, no interest
+    let interestAmount = 0
+    if (payload.purchaseType !== "CASH" && policy) {
+      if (policy.interestType === "FLAT") {
+        interestAmount = subtotal * interestRate
+      } else if (policy.interestType === "MONTHLY") {
+        const months = payload.tenorDays / 30
+        interestAmount = subtotal * interestRate * months
+      }
+    }
+
+    const totalAmount = subtotal + interestAmount
+    const downPayment = Math.min(payload.downPayment, totalAmount)
+    const outstandingBalance = totalAmount - downPayment
+
+    // Calculate due date
+    const dueDate = new Date()
+    dueDate.setDate(dueDate.getDate() + payload.tenorDays)
+
+    // Generate purchase number
+    const purchaseCount = await prisma.purchase.count({
+      where: { customerId: customer.id },
+    })
+    const purchaseNumber = `HP-${String(purchaseCount + 1).padStart(4, "0")}`
+
+    // Create purchase and update stock in a transaction
+    const purchase = await prisma.$transaction(async (tx) => {
+      // Only deduct stock for CASH sales (immediate delivery)
+      if (payload.purchaseType === "CASH") {
+        for (const item of payload.items) {
+          await tx.shopProduct.updateMany({
+            where: { 
+              shopId: shop.id,
+              productId: item.productId 
+            },
+            data: { stockQuantity: { decrement: item.quantity } },
+          })
+        }
+      }
+
+      // Create purchase with all items
+      const newPurchase = await tx.purchase.create({
+        data: {
+          purchaseNumber,
+          customerId: customer.id,
+          purchaseType: payload.purchaseType,
+          status: outstandingBalance === 0 ? "COMPLETED" : "ACTIVE",
+          subtotal: new Prisma.Decimal(subtotal),
+          interestAmount: new Prisma.Decimal(interestAmount),
+          totalAmount: new Prisma.Decimal(totalAmount),
+          amountPaid: new Prisma.Decimal(downPayment),
+          outstandingBalance: new Prisma.Decimal(outstandingBalance),
+          downPayment: new Prisma.Decimal(downPayment),
+          installments: payload.purchaseType === "CASH" ? 1 : Math.ceil(payload.tenorDays / 30),
+          startDate: new Date(),
+          dueDate,
+          interestType: policy?.interestType || "FLAT",
+          interestRate: policy ? Number(policy.interestRate) : 0,
+          notes: `${payload.purchaseType} sale by ${user.name}`,
+          items: {
+            create: payload.items.map(item => ({
+              productId: item.productId,
+              productName: item.productName,
+              quantity: item.quantity,
+              unitPrice: new Prisma.Decimal(item.unitPrice),
+              totalPrice: new Prisma.Decimal(item.unitPrice * item.quantity),
+            })),
+          },
+        },
+        include: {
+          items: {
+            include: { product: true },
+          },
+        },
+      })
+
+      // Create down payment record if > 0
+      if (downPayment > 0) {
+        await tx.payment.create({
+          data: {
+            purchaseId: newPurchase.id,
+            amount: new Prisma.Decimal(downPayment),
+            paymentMethod: "CASH",
+            status: "COMPLETED",
+            paidAt: new Date(),
+            notes: "Down payment at time of purchase",
+          },
+        })
+      }
+
+      return newPurchase
+    })
+
+    // Create audit log
+    const productNames = payload.items.map(item => item.productName).join(", ")
+    const totalQuantity = payload.items.reduce((sum, item) => sum + item.quantity, 0)
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "SALE_CREATED",
+      entityType: "Purchase",
+      entityId: purchase.id,
+      metadata: {
+        shopId: shop.id,
+        shopName: shop.name,
+        customerId: customer.id,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        productCount: payload.items.length,
+        productNames,
+        totalQuantity,
+        totalAmount,
+        downPayment,
+        tenorDays: payload.tenorDays,
+      },
+    })
+
+    // AUTO-GENERATE WAYBILL for CASH sales (they are completed immediately)
+    if (payload.purchaseType === "CASH" && outstandingBalance === 0) {
+      const year = new Date().getFullYear()
+      const waybillCount = await prisma.waybill.count()
+      const waybillNumber = `WB-${year}-${String(waybillCount + 1).padStart(5, "0")}`
+
+      await prisma.waybill.create({
+        data: {
+          waybillNumber,
+          purchaseId: purchase.id,
+          recipientName: `${customer.firstName} ${customer.lastName}`,
+          recipientPhone: customer.phone,
+          deliveryAddress: customer.address || "N/A",
+          deliveryCity: customer.city,
+          deliveryRegion: customer.region,
+          specialInstructions: `Cash sale - Ready for delivery`,
+          generatedById: user.id,
+        },
+      })
+    }
+
+    revalidatePath(`/shop-admin/${shopSlug}/customers`)
+    revalidatePath(`/shop-admin/${shopSlug}/products`)
+
+    return {
+      success: true,
+      data: {
+        purchaseId: purchase.id,
+        purchaseNumber: purchase.purchaseNumber,
+        totalAmount,
+        downPayment,
+        outstandingBalance,
+      },
+    }
+  } catch (error) {
+    console.error("Create sale error:", error)
+    return { success: false, error: "Failed to create sale" }
+  }
+}
+
+// ============================================
+// BILL / RECEIPT DATA
+// ============================================
+
+export interface BillData {
+  purchaseId: string
+  purchaseNumber: string
+  purchaseType: string
+  createdAt: Date
+  dueDate: Date | null
+  customer: {
+    name: string
+    phone: string
+    address: string | null
+    city: string | null
+    region: string | null
+  }
+  shop: {
+    name: string
+    phone: string | null
+    address: string | null
+  }
+  items: {
+    productName: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+  }[]
+  subtotal: number
+  interestAmount: number
+  totalAmount: number
+  downPayment: number
+  amountPaid: number
+  outstandingBalance: number
+  installments: number
+  interestRate: number
+  interestType: string
+  salesStaff: string | null
+}
+
+export async function getBillData(shopSlug: string, purchaseId: string): Promise<BillData | null> {
+  const { user, shop } = await requireShopAdminForShop(shopSlug)
+
+  const purchase = await prisma.purchase.findFirst({
+    where: {
+      id: purchaseId,
+      customer: { shopId: shop.id },
+    },
+    include: {
+      customer: true,
+      items: {
+        include: { product: true },
+      },
+    },
+  })
+
+  if (!purchase) {
+    return null
+  }
+
+  return {
+    purchaseId: purchase.id,
+    purchaseNumber: purchase.purchaseNumber,
+    purchaseType: purchase.purchaseType,
+    createdAt: purchase.createdAt,
+    dueDate: purchase.dueDate,
+    customer: {
+      name: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+      phone: purchase.customer.phone,
+      address: purchase.customer.address,
+      city: purchase.customer.city,
+      region: purchase.customer.region,
+    },
+    shop: {
+      name: shop.name,
+      phone: null,
+      address: null,
+    },
+    items: purchase.items.map((item) => ({
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      totalPrice: Number(item.totalPrice),
+    })),
+    subtotal: Number(purchase.subtotal),
+    interestAmount: Number(purchase.interestAmount),
+    totalAmount: Number(purchase.totalAmount),
+    downPayment: Number(purchase.downPayment),
+    amountPaid: Number(purchase.amountPaid),
+    outstandingBalance: Number(purchase.outstandingBalance),
+    installments: purchase.installments,
+    interestRate: Number(purchase.interestRate),
+    interestType: purchase.interestType,
+    salesStaff: user.name,
+  }
+}

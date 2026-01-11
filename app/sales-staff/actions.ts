@@ -91,34 +91,48 @@ export async function getProductsForSale(shopSlug: string): Promise<ProductForSa
 
   if (!shop) return []
 
-  const products = await prisma.product.findMany({
+  // Query ShopProduct to get shop-specific stock and optional pricing
+  const shopProducts = await prisma.shopProduct.findMany({
     where: {
       shopId: shop.id,
       isActive: true,
-    },
-    include: {
-      category: {
-        select: { name: true, color: true },
+      product: {
+        isActive: true,
       },
     },
-    orderBy: { name: "asc" },
+    include: {
+      product: {
+        include: {
+          category: {
+            select: { name: true, color: true },
+          },
+        },
+      },
+    },
+    orderBy: {
+      product: { name: "asc" },
+    },
   })
 
-  return products.map((p) => ({
-    id: p.id,
-    name: p.name,
-    description: p.description,
-    sku: p.sku,
-    price: Number(p.price),
-    cashPrice: Number(p.cashPrice),
-    layawayPrice: Number(p.layawayPrice),
-    creditPrice: Number(p.creditPrice),
-    stockQuantity: p.stockQuantity,
-    lowStockThreshold: p.lowStockThreshold,
-    categoryName: p.category?.name || null,
-    categoryColor: p.category?.color || null,
-    imageUrl: p.imageUrl,
-  }))
+  return shopProducts.map((sp) => {
+    const p = sp.product
+    return {
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      sku: p.sku,
+      // Use shop-specific pricing if set, otherwise fall back to product pricing
+      price: Number(sp.cashPrice ?? p.price),
+      cashPrice: Number(sp.cashPrice ?? p.cashPrice),
+      layawayPrice: Number(sp.layawayPrice ?? p.layawayPrice),
+      creditPrice: Number(sp.creditPrice ?? p.creditPrice),
+      stockQuantity: sp.stockQuantity, // Use shop-specific stock
+      lowStockThreshold: p.lowStockThreshold,
+      categoryName: p.category?.name || null,
+      categoryColor: p.category?.color || null,
+      imageUrl: p.imageUrl,
+    }
+  })
 }
 
 // ============================================
@@ -349,28 +363,30 @@ export async function createSale(
       return { success: false, error: "Customer not found" }
     }
 
-    // Verify all products and their stock
+    // Verify all products and their stock via ShopProduct
     const productIds = payload.items.map(item => item.productId)
-    const products = await prisma.product.findMany({
+    const shopProducts = await prisma.shopProduct.findMany({
       where: { 
-        id: { in: productIds }, 
+        productId: { in: productIds }, 
         shopId: shop.id, 
-        isActive: true 
+        isActive: true,
+        product: { isActive: true },
       },
+      include: { product: true },
     })
 
-    if (products.length !== payload.items.length) {
-      return { success: false, error: "One or more products not found" }
+    if (shopProducts.length !== payload.items.length) {
+      return { success: false, error: "One or more products not found in this shop" }
     }
 
     // Check stock for each item
     for (const item of payload.items) {
-      const product = products.find(p => p.id === item.productId)
-      if (!product) {
+      const shopProduct = shopProducts.find(sp => sp.productId === item.productId)
+      if (!shopProduct) {
         return { success: false, error: `Product not found: ${item.productId}` }
       }
-      if (product.stockQuantity < item.quantity) {
-        return { success: false, error: `Insufficient stock for ${product.name}. Only ${product.stockQuantity} available.` }
+      if (shopProduct.stockQuantity < item.quantity) {
+        return { success: false, error: `Insufficient stock for ${shopProduct.product.name}. Only ${shopProduct.stockQuantity} available.` }
       }
     }
 
@@ -428,8 +444,11 @@ export async function createSale(
       // For CREDIT/LAYAWAY, stock is deducted when payment is completed
       if (payload.purchaseType === "CASH") {
         for (const item of payload.items) {
-          await tx.product.update({
-            where: { id: item.productId },
+          await tx.shopProduct.updateMany({
+            where: { 
+              shopId: shop.id,
+              productId: item.productId 
+            },
             data: { stockQuantity: { decrement: item.quantity } },
           })
         }
@@ -452,7 +471,7 @@ export async function createSale(
           startDate: new Date(),
           dueDate,
           interestType: policy?.interestType || "FLAT",
-          interestRate: policy?.interestRate || 0,
+          interestRate: policy ? Number(policy.interestRate) : 0,
           notes: `${payload.purchaseType} sale by ${user.name}`,
           items: {
             create: payload.items.map(item => ({
@@ -1627,5 +1646,151 @@ export async function getBillData(shopSlug: string, purchaseId: string): Promise
     interestRate: Number(purchase.interestRate),
     interestType: purchase.interestType,
     salesStaff: user.name,
+  }
+}
+
+// ============================================
+// PROGRESS INVOICES (Sales Staff View)
+// ============================================
+
+export interface SalesStaffInvoiceData {
+  id: string
+  invoiceNumber: string
+  paymentId: string
+  purchaseId: string
+  paymentAmount: number
+  previousBalance: number
+  newBalance: number
+  totalPurchaseAmount: number
+  totalAmountPaid: number
+  collectorName: string | null
+  confirmedByName: string | null
+  paymentMethod: string
+  customerName: string
+  customerPhone: string
+  customerAddress: string | null
+  purchaseNumber: string
+  purchaseType: string
+  shopName: string
+  businessName: string
+  isPurchaseCompleted: boolean
+  waybillGenerated: boolean
+  waybillNumber: string | null
+  notes: string | null
+  generatedAt: Date
+  items: {
+    productName: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+  }[]
+}
+
+/**
+ * Get all invoices for the shop (sales staff view)
+ */
+export async function getSalesStaffInvoices(shopSlug: string): Promise<SalesStaffInvoiceData[]> {
+  const { shop } = await requireSalesStaffForShop(shopSlug)
+
+  const invoices = await prisma.progressInvoice.findMany({
+    where: { shopId: shop.id },
+    include: {
+      purchase: {
+        include: {
+          items: true,
+        },
+      },
+    },
+    orderBy: { generatedAt: "desc" },
+    take: 200,
+  })
+
+  return invoices.map((inv) => ({
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    paymentId: inv.paymentId,
+    purchaseId: inv.purchaseId,
+    paymentAmount: Number(inv.paymentAmount),
+    previousBalance: Number(inv.previousBalance),
+    newBalance: Number(inv.newBalance),
+    totalPurchaseAmount: Number(inv.totalPurchaseAmount),
+    totalAmountPaid: Number(inv.totalAmountPaid),
+    collectorName: inv.collectorName,
+    confirmedByName: inv.confirmedByName,
+    paymentMethod: inv.paymentMethod,
+    customerName: inv.customerName,
+    customerPhone: inv.customerPhone,
+    customerAddress: inv.customerAddress,
+    purchaseNumber: inv.purchaseNumber,
+    purchaseType: inv.purchaseType,
+    shopName: inv.shopName,
+    businessName: inv.businessName,
+    isPurchaseCompleted: inv.isPurchaseCompleted,
+    waybillGenerated: inv.waybillGenerated,
+    waybillNumber: inv.waybillNumber,
+    notes: inv.notes,
+    generatedAt: inv.generatedAt,
+    items: inv.purchase.items.map((item) => ({
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      totalPrice: Number(item.totalPrice),
+    })),
+  }))
+}
+
+/**
+ * Get a single progress invoice by ID (for sales staff view)
+ */
+export async function getSalesStaffProgressInvoice(shopSlug: string, invoiceId: string): Promise<SalesStaffInvoiceData | null> {
+  const { shop } = await requireSalesStaffForShop(shopSlug)
+
+  const invoice = await prisma.progressInvoice.findFirst({
+    where: { 
+      id: invoiceId,
+      shopId: shop.id,
+    },
+    include: {
+      purchase: {
+        include: {
+          items: true,
+        },
+      },
+    },
+  })
+
+  if (!invoice) return null
+
+  return {
+    id: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    paymentId: invoice.paymentId,
+    purchaseId: invoice.purchaseId,
+    paymentAmount: Number(invoice.paymentAmount),
+    previousBalance: Number(invoice.previousBalance),
+    newBalance: Number(invoice.newBalance),
+    totalPurchaseAmount: Number(invoice.totalPurchaseAmount),
+    totalAmountPaid: Number(invoice.totalAmountPaid),
+    collectorName: invoice.collectorName,
+    confirmedByName: invoice.confirmedByName,
+    paymentMethod: invoice.paymentMethod,
+    customerName: invoice.customerName,
+    customerPhone: invoice.customerPhone,
+    customerAddress: invoice.customerAddress,
+    purchaseNumber: invoice.purchaseNumber,
+    purchaseType: invoice.purchaseType,
+    shopName: invoice.shopName,
+    businessName: invoice.businessName,
+    isPurchaseCompleted: invoice.isPurchaseCompleted,
+    waybillGenerated: invoice.waybillGenerated,
+    waybillNumber: invoice.waybillNumber,
+    notes: invoice.notes,
+    generatedAt: invoice.generatedAt,
+    items: invoice.purchase.items.map((item) => ({
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      totalPrice: Number(item.totalPrice),
+    })),
   }
 }

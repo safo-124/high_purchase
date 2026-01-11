@@ -1,4 +1,4 @@
-import { getBusinessCustomers, getBusinessShops } from "../../actions"
+import { getBusinessCustomers, getBusinessShops, getBusinessStaff } from "../../actions"
 import { CustomersContent } from "./customers-content"
 
 interface Props {
@@ -7,10 +7,16 @@ interface Props {
 
 export default async function BusinessCustomersPage({ params }: Props) {
   const { businessSlug } = await params
-  const [customers, shops] = await Promise.all([
+  const [customers, shops, staff] = await Promise.all([
     getBusinessCustomers(businessSlug),
     getBusinessShops(businessSlug),
+    getBusinessStaff(businessSlug),
   ])
+
+  // Filter to get only active debt collectors
+  const collectors = staff
+    .filter(s => s.role === "DEBT_COLLECTOR" && s.isActive)
+    .map(s => ({ id: s.id, name: s.userName || "Unknown", shopSlug: s.shopSlug, shopName: s.shopName }))
 
   // Calculate totals
   const totalCustomers = customers.length
@@ -60,6 +66,8 @@ export default async function BusinessCustomersPage({ params }: Props) {
       <CustomersContent 
         customers={customers} 
         shops={shops.map(s => ({ name: s.name, shopSlug: s.shopSlug }))} 
+        collectors={collectors}
+        businessSlug={businessSlug}
       />
     </div>
   )

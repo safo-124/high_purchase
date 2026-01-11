@@ -4,10 +4,22 @@ import { useState, useTransition } from "react"
 import Link from "next/link"
 import { confirmPayment, rejectPayment, type PendingPaymentForAdmin } from "../../actions"
 import { PaymentMethod } from "@/app/generated/prisma/client"
+import { ProgressInvoiceModal } from "../components/progress-invoice-modal"
+import { WaybillModal } from "../components/waybill-modal"
+import { toast } from "sonner"
 
 interface PendingPaymentsTableProps {
   payments: PendingPaymentForAdmin[]
   shopSlug: string
+}
+
+interface ConfirmationResult {
+  invoiceId: string
+  invoiceNumber: string
+  purchaseCompleted: boolean
+  waybillGenerated: boolean
+  waybillNumber: string | null
+  purchaseId: string
 }
 
 export function PendingPaymentsTable({ payments, shopSlug }: PendingPaymentsTableProps) {
@@ -16,6 +28,11 @@ export function PendingPaymentsTable({ payments, shopSlug }: PendingPaymentsTabl
   const [rejectModalOpen, setRejectModalOpen] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<PendingPaymentForAdmin | null>(null)
   const [rejectReason, setRejectReason] = useState("")
+  
+  // Invoice/Waybill modal state
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false)
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
+  const [showWaybillModal, setShowWaybillModal] = useState(false)
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-GH", {
@@ -35,12 +52,32 @@ export function PendingPaymentsTable({ payments, shopSlug }: PendingPaymentsTabl
     }).format(new Date(date))
   }
 
-  const handleConfirm = async (paymentId: string) => {
-    setProcessingId(paymentId)
+  const handleConfirm = async (payment: PendingPaymentForAdmin) => {
+    setProcessingId(payment.id)
     startTransition(async () => {
-      const result = await confirmPayment(shopSlug, paymentId)
-      if (!result.success) {
-        alert(result.error || "Failed to confirm payment")
+      const result = await confirmPayment(shopSlug, payment.id)
+      if (result.success && result.data) {
+        const data = result.data as {
+          purchaseCompleted: boolean
+          invoiceId: string
+          invoiceNumber: string
+          waybillGenerated: boolean
+          waybillNumber: string | null
+        }
+        
+        setConfirmationResult({
+          ...data,
+          purchaseId: payment.purchaseId,
+        })
+        setShowInvoiceModal(true)
+        
+        if (data.purchaseCompleted) {
+          toast.success(`Payment confirmed! Purchase completed. Waybill ${data.waybillNumber} generated.`)
+        } else {
+          toast.success(`Payment confirmed! Invoice ${data.invoiceNumber} generated.`)
+        }
+      } else {
+        toast.error(result.error || "Failed to confirm payment")
       }
       setProcessingId(null)
     })
@@ -141,7 +178,7 @@ export function PendingPaymentsTable({ payments, shopSlug }: PendingPaymentsTabl
                 <td className="py-4 px-4">
                   <div className="flex items-center justify-center gap-2">
                     <button
-                      onClick={() => handleConfirm(payment.id)}
+                      onClick={() => handleConfirm(payment)}
                       disabled={isPending && processingId === payment.id}
                       className="px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 text-xs font-medium hover:bg-green-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                     >
@@ -218,6 +255,34 @@ export function PendingPaymentsTable({ payments, shopSlug }: PendingPaymentsTabl
             </div>
           </div>
         </div>
+      )}
+
+      {/* Invoice Modal */}
+      {showInvoiceModal && confirmationResult && (
+        <ProgressInvoiceModal
+          shopSlug={shopSlug}
+          invoiceId={confirmationResult.invoiceId}
+          onClose={() => {
+            setShowInvoiceModal(false)
+            setConfirmationResult(null)
+          }}
+          onViewWaybill={(purchaseId) => {
+            setShowInvoiceModal(false)
+            setShowWaybillModal(true)
+          }}
+        />
+      )}
+
+      {/* Waybill Modal */}
+      {showWaybillModal && confirmationResult && (
+        <WaybillModal
+          shopSlug={shopSlug}
+          purchaseId={confirmationResult.purchaseId}
+          onClose={() => {
+            setShowWaybillModal(false)
+            setConfirmationResult(null)
+          }}
+        />
       )}
     </>
   )

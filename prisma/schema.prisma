@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client"
   output   = "../app/generated/prisma"
@@ -10,349 +7,290 @@ datasource db {
   provider = "postgresql"
 }
 
-// Role enum for RBAC
-enum Role {
-  SUPER_ADMIN
-  BUSINESS_ADMIN
-  SHOP_ADMIN
-  SALES_STAFF
-  DEBT_COLLECTOR
-  CUSTOMER
-}
-
-// Interest calculation type
-enum InterestType {
-  FLAT    // One-time flat interest
-  MONTHLY // Monthly compounding interest
-}
-
-// Customer payment preference
-enum PaymentPreference {
-  ONLINE          // Mobile money, bank transfer, etc.
-  DEBT_COLLECTOR  // Pay to debt collector in person
-  BOTH            // Either method
-}
-
-// Actual payment method for transactions
-enum PaymentMethod {
-  CASH
-  MOBILE_MONEY
-  BANK_TRANSFER
-  CARD
-}
-
-// User model
 model User {
-  id                  String             @id @default(cuid())
-  email               String             @unique
+  id                  String           @id @default(cuid())
+  email               String           @unique
   name                String?
   passwordHash        String
   role                Role
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
-  auditLogs           AuditLog[]         @relation("AuditLogActor")
-  memberships         ShopMember[]       @relation("UserMemberships")
-  businessMemberships BusinessMember[]   @relation("UserBusinessMemberships")
-  customerProfiles    Customer[]         @relation("CustomerUser")
-  sentMessages        Message[]          @relation("MessageSender")
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  auditLogs           AuditLog[]       @relation("AuditLogActor")
+  businessMemberships BusinessMember[] @relation("UserBusinessMemberships")
+  customerProfiles    Customer[]       @relation("CustomerUser")
+  sentMessages        Message[]        @relation("MessageSender")
+  memberships         ShopMember[]     @relation("UserMemberships")
 }
 
-// Business model - groups multiple shops under one owner
 model Business {
   id            String           @id @default(cuid())
   name          String
-  businessSlug  String           @unique // lowercase, [a-z0-9-] only
+  businessSlug  String           @unique
   country       String           @default("Ghana")
   isActive      Boolean          @default(true)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
-  shops         Shop[]           @relation("BusinessShops")
+  brands        Brand[]          @relation("BusinessBrands")
   members       BusinessMember[] @relation("BusinessMembers")
-  emailSettings EmailSettings?   @relation("BusinessEmailSettings")
-  smsSettings   SmsSettings?     @relation("BusinessSmsSettings")
   policy        BusinessPolicy?  @relation("BusinessPolicy")
   categories    Category[]       @relation("BusinessCategories")
-  brands        Brand[]          @relation("BusinessBrands")
+  emailSettings EmailSettings?   @relation("BusinessEmailSettings")
+  products      Product[]        @relation("BusinessProducts")
+  shops         Shop[]           @relation("BusinessShops")
+  smsSettings   SmsSettings?     @relation("BusinessSmsSettings")
 }
 
-// Business BNPL Policy - 1:1 with Business (applies to all shops under this business)
 model BusinessPolicy {
   id           String       @id @default(cuid())
   businessId   String       @unique
-  business     Business     @relation("BusinessPolicy", fields: [businessId], references: [id], onDelete: Cascade)
   interestType InterestType @default(FLAT)
-  interestRate Decimal      @default(0.00) @db.Decimal(5, 2) // 0.00 to 100.00%
-  graceDays    Int          @default(3) // Days before interest/late fees kick in
-  maxTenorDays Int          @default(60) // Maximum repayment period
-  lateFeeFixed Decimal?     @db.Decimal(10, 2) // Fixed late fee amount (nullable)
-  lateFeeRate  Decimal?     @db.Decimal(5, 2) // Late fee as percentage (nullable)
+  interestRate Decimal      @default(0.00) @db.Decimal(5, 2)
+  graceDays    Int          @default(3)
+  maxTenorDays Int          @default(60)
+  lateFeeFixed Decimal?     @db.Decimal(10, 2)
+  lateFeeRate  Decimal?     @db.Decimal(5, 2)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
+  business     Business     @relation("BusinessPolicy", fields: [businessId], references: [id], onDelete: Cascade)
 }
 
-// Business membership - links users to businesses (BUSINESS_ADMIN role)
 model BusinessMember {
   id         String   @id @default(cuid())
   userId     String
-  user       User     @relation("UserBusinessMemberships", fields: [userId], references: [id], onDelete: Cascade)
   businessId String
-  business   Business @relation("BusinessMembers", fields: [businessId], references: [id], onDelete: Cascade)
   role       Role     @default(BUSINESS_ADMIN)
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  business   Business @relation("BusinessMembers", fields: [businessId], references: [id], onDelete: Cascade)
+  user       User     @relation("UserBusinessMemberships", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, businessId])
   @@index([userId])
   @@index([businessId])
 }
 
-// Shop (tenant) model - belongs to a business
 model Shop {
-  id         String       @id @default(cuid())
-  businessId String
-  business   Business     @relation("BusinessShops", fields: [businessId], references: [id], onDelete: Cascade)
-  name       String
-  shopSlug   String       @unique // lowercase, [a-z0-9-] only
-  country    String       @default("Ghana")
-  isActive   Boolean      @default(true)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  members    ShopMember[] @relation("ShopMembers")
-  policy     ShopPolicy?  @relation("ShopPolicy")
-  products   Product[]    @relation("ShopProducts")
-  customers  Customer[]   @relation("ShopCustomers")
-  messages   Message[]    @relation("ShopMessages")
+  id           String        @id @default(cuid())
+  businessId   String
+  name         String
+  shopSlug     String        @unique
+  country      String        @default("Ghana")
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  customers    Customer[]    @relation("ShopCustomers")
+  messages     Message[]     @relation("ShopMessages")
+  business     Business      @relation("BusinessShops", fields: [businessId], references: [id], onDelete: Cascade)
+  members      ShopMember[]  @relation("ShopMembers")
+  policy       ShopPolicy?   @relation("ShopPolicy")
+  shopProducts ShopProduct[] @relation("ShopProductInventory")
 
   @@index([businessId])
 }
 
-// Product Category model (business-level)
 model Category {
   id          String    @id @default(cuid())
   businessId  String
-  business    Business  @relation("BusinessCategories", fields: [businessId], references: [id], onDelete: Cascade)
   name        String
   description String?
-  color       String?   @default("#6366f1") // Category color for UI
+  color       String?   @default("#6366f1")
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  business    Business  @relation("BusinessCategories", fields: [businessId], references: [id], onDelete: Cascade)
   products    Product[] @relation("CategoryProducts")
 
-  @@unique([businessId, name]) // Category name unique per business
+  @@unique([businessId, name])
   @@index([businessId])
   @@index([isActive])
 }
 
-// Product Brand model (business-level)
 model Brand {
   id          String    @id @default(cuid())
   businessId  String
-  business    Business  @relation("BusinessBrands", fields: [businessId], references: [id], onDelete: Cascade)
   name        String
   description String?
   logoUrl     String?
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  business    Business  @relation("BusinessBrands", fields: [businessId], references: [id], onDelete: Cascade)
   products    Product[] @relation("BrandProducts")
 
-  @@unique([businessId, name]) // Brand name unique per business
+  @@unique([businessId, name])
   @@index([businessId])
   @@index([isActive])
 }
 
-// Customer model - BNPL customers for a shop
 model Customer {
   id                  String            @id @default(cuid())
   shopId              String
-  shop                Shop              @relation("ShopCustomers", fields: [shopId], references: [id], onDelete: Cascade)
-  // Optional user account for customer portal access
   userId              String?
-  user                User?             @relation("CustomerUser", fields: [userId], references: [id], onDelete: SetNull)
   firstName           String
   lastName            String
-  phone               String            // Primary contact
+  phone               String
   email               String?
-  idType              String?           // e.g., "Ghana Card", "Voter ID", "Passport"
-  idNumber            String?           // ID document number
+  idType              String?
+  idNumber            String?
   address             String?
   city                String?
-  region              String?           // State/Region
+  region              String?
   preferredPayment    PaymentPreference @default(BOTH)
-  assignedCollectorId String?           // Preferred debt collector
-  assignedCollector   ShopMember?       @relation("AssignedCustomers", fields: [assignedCollectorId], references: [id], onDelete: SetNull)
-  // Notification preferences
+  assignedCollectorId String?
   emailNotifications  Boolean           @default(true)
   smsNotifications    Boolean           @default(true)
   notes               String?
   isActive            Boolean           @default(true)
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
-  purchases           Purchase[]        @relation("CustomerPurchases")
+  assignedCollector   ShopMember?       @relation("AssignedCustomers", fields: [assignedCollectorId], references: [id])
+  shop                Shop              @relation("ShopCustomers", fields: [shopId], references: [id], onDelete: Cascade)
+  user                User?             @relation("CustomerUser", fields: [userId], references: [id])
   messages            Message[]         @relation("CustomerMessages")
   notifications       Notification[]    @relation("CustomerNotifications")
+  purchases           Purchase[]        @relation("CustomerPurchases")
 
-  @@unique([shopId, phone])   // Phone unique per shop
+  @@unique([shopId, phone])
   @@index([shopId])
   @@index([userId])
   @@index([assignedCollectorId])
   @@index([isActive])
 }
 
-// Product model for shop inventory
 model Product {
-  id            String         @id @default(cuid())
-  shopId        String
-  shop          Shop           @relation("ShopProducts", fields: [shopId], references: [id], onDelete: Cascade)
-  categoryId    String?
-  category      Category?      @relation("CategoryProducts", fields: [categoryId], references: [id], onDelete: SetNull)
-  brandId       String?
-  brand         Brand?         @relation("BrandProducts", fields: [brandId], references: [id], onDelete: SetNull)
-  name          String
-  description   String?
-  sku           String?        // Stock keeping unit
-  // Pricing tiers based on payment type
-  costPrice     Decimal        @default(0) @db.Decimal(12, 2) // Cost/purchase price (for profit calculation)
-  cashPrice     Decimal        @default(0) @db.Decimal(12, 2) // Full payment upfront (best price)
-  layawayPrice  Decimal        @default(0) @db.Decimal(12, 2) // Pay in installments BEFORE taking product
-  creditPrice   Decimal        @default(0) @db.Decimal(12, 2) // Take product BEFORE paying (BNPL - highest price)
-  price         Decimal        @db.Decimal(12, 2) // Default/display price (usually cashPrice)
-  stockQuantity Int            @default(0) // Available quantity in stock
-  lowStockThreshold Int        @default(5) // Alert when stock falls to or below this level
-  imageUrl      String?
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  purchaseItems PurchaseItem[] @relation("ProductPurchaseItems")
+  id                String         @id @default(cuid())
+  businessId        String
+  shopId            String?
+  categoryId        String?
+  brandId           String?
+  name              String
+  description       String?
+  sku               String?
+  costPrice         Decimal        @default(0) @db.Decimal(12, 2)
+  cashPrice         Decimal        @default(0) @db.Decimal(12, 2)
+  layawayPrice      Decimal        @default(0) @db.Decimal(12, 2)
+  creditPrice       Decimal        @default(0) @db.Decimal(12, 2)
+  price             Decimal        @db.Decimal(12, 2)
+  stockQuantity     Int            @default(0)
+  lowStockThreshold Int            @default(5)
+  imageUrl          String?
+  isActive          Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  brand             Brand?         @relation("BrandProducts", fields: [brandId], references: [id])
+  business          Business       @relation("BusinessProducts", fields: [businessId], references: [id], onDelete: Cascade)
+  category          Category?      @relation("CategoryProducts", fields: [categoryId], references: [id])
+  purchaseItems     PurchaseItem[] @relation("ProductPurchaseItems")
+  shopProducts      ShopProduct[]  @relation("ProductShopInventory")
 
-  @@unique([shopId, sku]) // SKU unique per shop
+  @@unique([businessId, sku])
+  @@index([businessId])
   @@index([shopId])
   @@index([categoryId])
   @@index([brandId])
   @@index([isActive])
 }
 
-// Shop membership - links users to shops with roles
+model ShopProduct {
+  id                String   @id @default(cuid())
+  shopId            String
+  productId         String
+  stockQuantity     Int      @default(0)
+  lowStockThreshold Int      @default(5)
+  costPrice         Decimal? @db.Decimal(12, 2)
+  cashPrice         Decimal? @db.Decimal(12, 2)
+  layawayPrice      Decimal? @db.Decimal(12, 2)
+  creditPrice       Decimal? @db.Decimal(12, 2)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  product           Product  @relation("ProductShopInventory", fields: [productId], references: [id], onDelete: Cascade)
+  shop              Shop     @relation("ShopProductInventory", fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, productId])
+  @@index([shopId])
+  @@index([productId])
+  @@index([isActive])
+}
+
 model ShopMember {
-  id                  String     @id @default(cuid())
-  userId              String
-  user                User       @relation("UserMemberships", fields: [userId], references: [id], onDelete: Cascade)
-  shopId              String
-  shop                Shop       @relation("ShopMembers", fields: [shopId], references: [id], onDelete: Cascade)
-  role                Role       @default(SHOP_ADMIN) // Role within this shop
-  isActive            Boolean    @default(true)
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
-  assignedCustomers   Customer[] @relation("AssignedCustomers") // For debt collectors
-  collectedPayments   Payment[]  @relation("CollectorPayments") // Payments collected by this member
-  confirmedPayments   Payment[]  @relation("ConfirmedPayments") // Payments confirmed by this member (shop admin)
-  deliveredPurchases  Purchase[] @relation("DeliveredPurchases") // Purchases delivered by this member
+  id                 String     @id @default(cuid())
+  userId             String
+  shopId             String
+  role               Role       @default(SHOP_ADMIN)
+  isActive           Boolean    @default(true)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  assignedCustomers  Customer[] @relation("AssignedCustomers")
+  collectedPayments  Payment[]  @relation("CollectorPayments")
+  confirmedPayments  Payment[]  @relation("ConfirmedPayments")
+  deliveredPurchases Purchase[] @relation("DeliveredPurchases")
+  shop               Shop       @relation("ShopMembers", fields: [shopId], references: [id], onDelete: Cascade)
+  user               User       @relation("UserMemberships", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, shopId])
   @@index([userId])
   @@index([shopId])
 }
 
-// Shop BNPL Policy - 1:1 with Shop
 model ShopPolicy {
   id           String       @id @default(cuid())
   shopId       String       @unique
-  shop         Shop         @relation("ShopPolicy", fields: [shopId], references: [id], onDelete: Cascade)
   interestType InterestType @default(FLAT)
-  interestRate Decimal      @default(0.00) @db.Decimal(5, 2) // 0.00 to 100.00%
-  graceDays    Int          @default(3) // Days before interest/late fees kick in
-  maxTenorDays Int          @default(60) // Maximum repayment period
-  lateFeeFixed Decimal?     @db.Decimal(10, 2) // Fixed late fee amount (nullable)
-  lateFeeRate  Decimal?     @db.Decimal(5, 2) // Late fee as percentage (nullable)
+  interestRate Decimal      @default(0.00) @db.Decimal(5, 2)
+  graceDays    Int          @default(3)
+  maxTenorDays Int          @default(60)
+  lateFeeFixed Decimal?     @db.Decimal(10, 2)
+  lateFeeRate  Decimal?     @db.Decimal(5, 2)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
+  shop         Shop         @relation("ShopPolicy", fields: [shopId], references: [id], onDelete: Cascade)
 }
 
-// Audit log for tracking admin actions
 model AuditLog {
   id          String   @id @default(cuid())
   actorUserId String?
-  actor       User?    @relation("AuditLogActor", fields: [actorUserId], references: [id])
-  action      String   // LOGIN, SHOP_CREATED, SHOP_SUSPENDED, SHOP_ACTIVATED, POLICY_UPDATED
-  entityType  String?  // e.g., "Shop", "ShopPolicy"
+  action      String
+  entityType  String?
   entityId    String?
   metadata    Json?
   createdAt   DateTime @default(now())
+  actor       User?    @relation("AuditLogActor", fields: [actorUserId], references: [id])
 }
 
-// Purchase/Payment type enum - determines pricing tier
-enum PurchaseType {
-  CASH        // Full payment upfront - uses cashPrice
-  LAYAWAY     // Pay in installments before taking product - uses layawayPrice
-  CREDIT      // Take product before paying (BNPL) - uses creditPrice
-}
-
-// Purchase status enum
-enum PurchaseStatus {
-  PENDING     // Awaiting first payment
-  ACTIVE      // Payments in progress
-  COMPLETED   // Fully paid
-  OVERDUE     // Missed payment deadline
-  DEFAULTED   // Written off as bad debt
-}
-
-// Delivery status enum
-enum DeliveryStatus {
-  PENDING     // Not yet scheduled for delivery
-  SCHEDULED   // Delivery date set
-  IN_TRANSIT  // Out for delivery
-  DELIVERED   // Successfully delivered
-  FAILED      // Delivery attempt failed
-}
-
-// Payment status enum
-enum PaymentStatus {
-  PENDING     // Expected payment not yet made
-  COMPLETED   // Payment received
-  PARTIAL     // Partial payment made
-  MISSED      // Payment deadline passed
-  WAIVED      // Payment waived by shop admin
-}
-
-// Purchase/Order - Customer buying products
 model Purchase {
-  id              String         @id @default(cuid())
-  purchaseNumber  String         // Human-readable purchase number (e.g., "HP-001")
-  customerId      String
-  customer        Customer       @relation("CustomerPurchases", fields: [customerId], references: [id], onDelete: Cascade)
-  status          PurchaseStatus @default(PENDING)
-  purchaseType    PurchaseType   @default(CREDIT) // CASH, LAYAWAY, or CREDIT
-  // Pricing
-  subtotal        Decimal        @db.Decimal(12, 2) // Total of all items (based on purchaseType pricing)
-  interestAmount  Decimal        @db.Decimal(12, 2) // Calculated interest (0 for CASH)
-  totalAmount     Decimal        @db.Decimal(12, 2) // subtotal + interest
-  amountPaid      Decimal        @default(0) @db.Decimal(12, 2) // Running total paid
-  outstandingBalance Decimal     @db.Decimal(12, 2) // totalAmount - amountPaid
-  // Payment terms
-  downPayment     Decimal        @default(0) @db.Decimal(12, 2) // Initial payment
-  installments    Int            @default(1) // Number of installments
-  startDate       DateTime       @default(now()) // When payment plan starts
-  dueDate         DateTime       // Final due date
-  // Interest settings (copied from shop policy at time of purchase)
-  interestType    InterestType   @default(FLAT)
-  interestRate    Decimal        @db.Decimal(5, 2)
-  // Delivery tracking
-  deliveryStatus  DeliveryStatus @default(PENDING)
-  deliveryAddress String?        // Override customer address if different
-  deliveryNotes   String?
-  scheduledDelivery DateTime?    // Scheduled delivery date
-  deliveredAt     DateTime?      // Actual delivery time
-  deliveredById   String?        // Staff who delivered
-  deliveredBy     ShopMember?    @relation("DeliveredPurchases", fields: [deliveredById], references: [id], onDelete: SetNull)
-  notes           String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  // Relations
-  items           PurchaseItem[] @relation("PurchaseItems")
-  payments        Payment[]      @relation("PurchasePayments")
-  waybill         Waybill?       @relation("PurchaseWaybill")
+  id                 String            @id @default(cuid())
+  purchaseNumber     String
+  customerId         String
+  status             PurchaseStatus    @default(PENDING)
+  purchaseType       PurchaseType      @default(CREDIT)
+  subtotal           Decimal           @db.Decimal(12, 2)
+  interestAmount     Decimal           @db.Decimal(12, 2)
+  totalAmount        Decimal           @db.Decimal(12, 2)
+  amountPaid         Decimal           @default(0) @db.Decimal(12, 2)
+  outstandingBalance Decimal           @db.Decimal(12, 2)
+  downPayment        Decimal           @default(0) @db.Decimal(12, 2)
+  installments       Int               @default(1)
+  startDate          DateTime          @default(now())
+  dueDate            DateTime
+  interestType       InterestType      @default(FLAT)
+  interestRate       Decimal           @db.Decimal(5, 2)
+  deliveryStatus     DeliveryStatus    @default(PENDING)
+  deliveryAddress    String?
+  deliveryNotes      String?
+  scheduledDelivery  DateTime?
+  deliveredAt        DateTime?
+  deliveredById      String?
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  payments           Payment[]         @relation("PurchasePayments")
+  invoices           ProgressInvoice[] @relation("PurchaseInvoices")
+  customer           Customer          @relation("CustomerPurchases", fields: [customerId], references: [id], onDelete: Cascade)
+  deliveredBy        ShopMember?       @relation("DeliveredPurchases", fields: [deliveredById], references: [id])
+  items              PurchaseItem[]    @relation("PurchaseItems")
+  waybill            Waybill?          @relation("PurchaseWaybill")
 
   @@index([customerId])
   @@index([status])
@@ -361,49 +299,44 @@ model Purchase {
   @@index([purchaseType])
 }
 
-// Purchase Item - Individual products in a purchase
 model PurchaseItem {
   id          String   @id @default(cuid())
   purchaseId  String
-  purchase    Purchase @relation("PurchaseItems", fields: [purchaseId], references: [id], onDelete: Cascade)
-  productId   String?  // Optional - product might be deleted
-  product     Product? @relation("ProductPurchaseItems", fields: [productId], references: [id], onDelete: SetNull)
-  productName String   // Store name in case product is deleted
+  productId   String?
+  productName String
   quantity    Int      @default(1)
-  unitPrice   Decimal  @db.Decimal(12, 2) // Price at time of purchase
-  totalPrice  Decimal  @db.Decimal(12, 2) // quantity * unitPrice
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  totalPrice  Decimal  @db.Decimal(12, 2)
   createdAt   DateTime @default(now())
+  product     Product? @relation("ProductPurchaseItems", fields: [productId], references: [id])
+  purchase    Purchase @relation("PurchaseItems", fields: [purchaseId], references: [id], onDelete: Cascade)
 
   @@index([purchaseId])
   @@index([productId])
 }
 
-// Payment - Individual payment towards a purchase
 model Payment {
-  id            String        @id @default(cuid())
-  purchaseId    String
-  purchase      Purchase      @relation("PurchasePayments", fields: [purchaseId], references: [id], onDelete: Cascade)
-  amount        Decimal       @db.Decimal(12, 2)
-  paymentMethod PaymentMethod // How payment was made
-  status        PaymentStatus @default(COMPLETED)
-  // For collector payments
-  collectorId   String?       // Which collector received payment
-  collector     ShopMember?   @relation("CollectorPayments", fields: [collectorId], references: [id], onDelete: SetNull)
-  // Confirmation workflow (for collector-collected payments)
-  isConfirmed   Boolean       @default(false) // Must be confirmed by shop admin to reflect on customer account
-  confirmedAt   DateTime?     // When payment was confirmed
-  confirmedById String?       // Shop admin who confirmed
-  confirmedBy   ShopMember?   @relation("ConfirmedPayments", fields: [confirmedById], references: [id], onDelete: SetNull)
-  rejectedAt    DateTime?     // If payment was rejected
-  rejectionReason String?     // Why payment was rejected
-  // For scheduled/expected payments
-  dueDate       DateTime?     // When payment was expected
-  paidAt        DateTime?     // When payment was actually made
-  // Reference info
-  reference     String?       // Transaction reference, receipt number, etc.
-  notes         String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id              String           @id @default(cuid())
+  purchaseId      String
+  amount          Decimal          @db.Decimal(12, 2)
+  paymentMethod   PaymentMethod
+  status          PaymentStatus    @default(COMPLETED)
+  collectorId     String?
+  isConfirmed     Boolean          @default(false)
+  confirmedAt     DateTime?
+  confirmedById   String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  dueDate         DateTime?
+  paidAt          DateTime?
+  reference       String?
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  collector       ShopMember?      @relation("CollectorPayments", fields: [collectorId], references: [id])
+  confirmedBy     ShopMember?      @relation("ConfirmedPayments", fields: [confirmedById], references: [id])
+  purchase        Purchase         @relation("PurchasePayments", fields: [purchaseId], references: [id], onDelete: Cascade)
+  invoice         ProgressInvoice? @relation("PaymentInvoice")
 
   @@index([purchaseId])
   @@index([collectorId])
@@ -412,72 +345,101 @@ model Payment {
   @@index([isConfirmed])
 }
 
-// Waybill - Delivery tracking document
-model Waybill {
-  id              String       @id @default(cuid())
-  waybillNumber   String       @unique // e.g., "WB-2026-001"
-  purchaseId      String       @unique
-  purchase        Purchase     @relation("PurchaseWaybill", fields: [purchaseId], references: [id], onDelete: Cascade)
-  // Delivery info
-  recipientName   String       // Who to deliver to
-  recipientPhone  String
-  deliveryAddress String
-  deliveryCity    String?
-  deliveryRegion  String?
+// Progress Invoice - Generated for each payment, visible to multiple roles
+model ProgressInvoice {
+  id                    String   @id @default(cuid())
+  invoiceNumber         String   @unique
+  paymentId             String   @unique
+  purchaseId            String
+  // Amount details at time of invoice
+  paymentAmount         Decimal  @db.Decimal(12, 2)
+  previousBalance       Decimal  @db.Decimal(12, 2)
+  newBalance            Decimal  @db.Decimal(12, 2)
+  totalPurchaseAmount   Decimal  @db.Decimal(12, 2)
+  totalAmountPaid       Decimal  @db.Decimal(12, 2)
+  // Who recorded/collected the payment
+  collectorId           String?
+  collectorName         String?
+  // Who confirmed the payment (for collector payments)
+  confirmedById         String?
+  confirmedByName       String?
+  // Payment method used
+  paymentMethod         String
+  // Customer info snapshot
+  customerName          String
+  customerPhone         String
+  customerAddress       String?
+  // Purchase info snapshot
+  purchaseNumber        String
+  purchaseType          String
+  // Shop info snapshot
+  shopId                String
+  shopName              String
+  businessId            String
+  businessName          String
+  // Status - whether purchase is now fully paid
+  isPurchaseCompleted   Boolean  @default(false)
+  // Waybill auto-generated when completed
+  waybillGenerated      Boolean  @default(false)
+  waybillNumber         String?
   // Metadata
+  notes                 String?
+  generatedAt           DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  payment               Payment  @relation("PaymentInvoice", fields: [paymentId], references: [id], onDelete: Cascade)
+  purchase              Purchase @relation("PurchaseInvoices", fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([shopId])
+  @@index([businessId])
+  @@index([collectorId])
+  @@index([generatedAt])
+  @@index([isPurchaseCompleted])
+}
+
+model Waybill {
+  id                  String   @id @default(cuid())
+  waybillNumber       String   @unique
+  purchaseId          String   @unique
+  recipientName       String
+  recipientPhone      String
+  deliveryAddress     String
+  deliveryCity        String?
+  deliveryRegion      String?
   specialInstructions String?
-  generatedById   String?      // Staff who generated waybill
-  generatedAt     DateTime     @default(now())
-  // Signature/proof of delivery
-  receivedBy      String?      // Name of person who received
-  signature       String?      // Base64 signature or URL
-  proofImageUrl   String?      // Photo proof of delivery
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  generatedById       String?
+  generatedAt         DateTime @default(now())
+  receivedBy          String?
+  signature           String?
+  proofImageUrl       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  purchase            Purchase @relation("PurchaseWaybill", fields: [purchaseId], references: [id], onDelete: Cascade)
 
   @@index([waybillNumber])
   @@index([purchaseId])
 }
 
-// Message types
-enum MessageType {
-  EMAIL
-  SMS
-  IN_APP
-}
-
-// Message status
-enum MessageStatus {
-  PENDING
-  SENT
-  DELIVERED
-  FAILED
-  READ
-}
-
-// Message model - for emails, SMS, and in-app messages
 model Message {
-  id            String        @id @default(cuid())
-  shopId        String
-  shop          Shop          @relation("ShopMessages", fields: [shopId], references: [id], onDelete: Cascade)
-  customerId    String
-  customer      Customer      @relation("CustomerMessages", fields: [customerId], references: [id], onDelete: Cascade)
-  senderId      String        // User who sent the message
-  sender        User          @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
-  // Message content
-  type          MessageType
-  subject       String?       // For emails
-  body          String
-  // Delivery tracking
-  status        MessageStatus @default(PENDING)
-  sentAt        DateTime?
-  deliveredAt   DateTime?
-  readAt        DateTime?
-  errorMessage  String?       // If failed
-  // Metadata
-  metadata      Json?         // Extra data like SMS provider response, email headers
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id           String        @id @default(cuid())
+  shopId       String
+  customerId   String
+  senderId     String
+  type         MessageType
+  subject      String?
+  body         String
+  status       MessageStatus @default(PENDING)
+  sentAt       DateTime?
+  deliveredAt  DateTime?
+  readAt       DateTime?
+  errorMessage String?
+  metadata     Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  customer     Customer      @relation("CustomerMessages", fields: [customerId], references: [id], onDelete: Cascade)
+  sender       User          @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  shop         Shop          @relation("ShopMessages", fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
   @@index([customerId])
@@ -487,80 +449,58 @@ model Message {
   @@index([createdAt])
 }
 
-// Notification model - in-app notifications for customers with accounts
 model Notification {
-  id          String   @id @default(cuid())
-  customerId  String
-  customer    Customer @relation("CustomerNotifications", fields: [customerId], references: [id], onDelete: Cascade)
-  // Notification content
-  title       String
-  body        String
-  type        String   // e.g., "PAYMENT_DUE", "PAYMENT_RECEIVED", "PURCHASE_UPDATE"
-  link        String?  // Optional link to navigate to
-  // Status
-  isRead      Boolean  @default(false)
-  readAt      DateTime?
-  // Metadata
-  metadata    Json?
-  createdAt   DateTime @default(now())
+  id         String    @id @default(cuid())
+  customerId String
+  title      String
+  body       String
+  type       String
+  link       String?
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+  customer   Customer  @relation("CustomerNotifications", fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([customerId])
   @@index([isRead])
   @@index([createdAt])
 }
 
-// Email settings status
-enum EmailStatus {
-  PENDING
-  SENT
-  FAILED
-  BOUNCED
-}
-
-// Email Settings model - business-level email configuration
 model EmailSettings {
-  id            String   @id @default(cuid())
-  businessId    String   @unique
-  business      Business @relation("BusinessEmailSettings", fields: [businessId], references: [id], onDelete: Cascade)
-  // Sender info
-  fromEmail     String   // Email address to send from
-  fromName      String   // Display name for emails
-  replyToEmail  String?  // Optional reply-to address
-  // SMTP Configuration
-  smtpHost      String   // SMTP server hostname
-  smtpPort      Int      @default(587) // SMTP port (587 for TLS, 465 for SSL, 25 for unencrypted)
-  smtpUser      String   // SMTP username
-  smtpPassword  String   // SMTP password (encrypted)
-  smtpSecure    Boolean  @default(false) // true for SSL (port 465), false for TLS (port 587)
-  // Settings
-  isEnabled     Boolean  @default(true) // Enable/disable email sending
-  isVerified    Boolean  @default(false) // Has test email been sent successfully
-  // Metadata
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(cuid())
+  businessId   String   @unique
+  fromEmail    String
+  fromName     String
+  replyToEmail String?
+  smtpHost     String
+  smtpPort     Int      @default(587)
+  smtpUser     String
+  smtpPassword String
+  smtpSecure   Boolean  @default(false)
+  isEnabled    Boolean  @default(true)
+  isVerified   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  business     Business @relation("BusinessEmailSettings", fields: [businessId], references: [id], onDelete: Cascade)
 }
 
-// Email Log model - track all sent emails
 model EmailLog {
   id              String      @id @default(cuid())
   businessId      String
-  shopId          String?     // Optional - which shop sent the email (null for business-level emails)
-  // Email details
+  shopId          String?
   subject         String
-  body            String      @db.Text
-  fromEmail       String      // Sender email
-  fromName        String      // Sender name
-  // Recipients
-  recipientEmails String[]    // Array of recipient emails
-  recipientCount  Int         // Number of recipients
-  // Status
+  body            String
+  fromEmail       String
+  fromName        String
+  recipientEmails String[]
+  recipientCount  Int
   status          EmailStatus @default(PENDING)
   sentAt          DateTime?
-  errorMessage    String?     // Error details if failed
-  // Metadata
-  sentByUserId    String?     // User who initiated the email
-  emailType       String?     // e.g., "BULK", "INDIVIDUAL", "PAYMENT_REMINDER", "WELCOME"
-  metadata        Json?       // Additional data (customer IDs, etc.)
+  errorMessage    String?
+  sentByUserId    String?
+  emailType       String?
+  metadata        Json?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -571,73 +511,43 @@ model EmailLog {
   @@index([sentByUserId])
 }
 
-// SMS Provider types
-enum SmsProvider {
-  CUSTOM_API   // Your own gateway (Android phone, GSM modem, etc.)
-  HUBTEL       // Hubtel SMS API
-  ARKESEL      // Arkesel SMS API
-  MNOTIFY      // mNotify SMS API
-}
-
-// SMS status
-enum SmsStatus {
-  PENDING
-  SENT
-  DELIVERED
-  FAILED
-}
-
-// SMS Settings model - business-level SMS configuration
 model SmsSettings {
   id              String      @id @default(cuid())
   businessId      String      @unique
-  business        Business    @relation("BusinessSmsSettings", fields: [businessId], references: [id], onDelete: Cascade)
-  // Provider selection
   provider        SmsProvider @default(CUSTOM_API)
-  // Sender ID (what recipients see as sender)
-  senderId        String?     // e.g., "MyShop" or phone number
-  // Custom API Configuration
-  apiEndpoint     String?     // e.g., https://your-gateway.com/send
-  apiKey          String?     // API key or auth token
-  apiSecret       String?     // Optional secret for some providers
-  httpMethod      String      @default("POST") // POST, GET
-  // Request format template (JSON with placeholders)
-  // Placeholders: {{phone}}, {{message}}, {{senderId}}
-  requestTemplate String?     @db.Text // e.g., {"to": "{{phone}}", "message": "{{message}}"}
-  // Headers template (JSON)
-  headersTemplate String?     @db.Text // e.g., {"Authorization": "Bearer {{apiKey}}"}
-  // Response parsing
-  successField    String?     // Field to check in response, e.g., "status"
-  successValue    String?     // Expected value for success, e.g., "sent"
-  // Settings
+  senderId        String?
+  apiEndpoint     String?
+  apiKey          String?
+  apiSecret       String?
+  httpMethod      String      @default("POST")
+  requestTemplate String?
+  headersTemplate String?
+  successField    String?
+  successValue    String?
   isEnabled       Boolean     @default(true)
   isVerified      Boolean     @default(false)
-  // Metadata
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
+  business        Business    @relation("BusinessSmsSettings", fields: [businessId], references: [id], onDelete: Cascade)
 }
 
-// SMS Log model - track all sent SMS
 model SmsLog {
-  id              String    @id @default(cuid())
-  businessId      String
-  shopId          String?   // Optional - which shop sent the SMS
-  // SMS details
-  recipientPhone  String    // Phone number
-  message         String    @db.Text
-  senderId        String?   // Sender ID used
-  // Status
-  status          SmsStatus @default(PENDING)
-  sentAt          DateTime?
-  deliveredAt     DateTime?
-  errorMessage    String?   // Error details if failed
-  providerRef     String?   // Provider's message ID/reference
-  // Metadata
-  sentByUserId    String?   // User who initiated the SMS
-  smsType         String?   // e.g., "BULK", "PAYMENT_REMINDER", "WELCOME"
-  metadata        Json?     // Additional data
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  businessId     String
+  shopId         String?
+  recipientPhone String
+  message        String
+  senderId       String?
+  status         SmsStatus @default(PENDING)
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  errorMessage   String?
+  providerRef    String?
+  sentByUserId   String?
+  smsType        String?
+  metadata       Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([businessId])
   @@index([shopId])
@@ -645,4 +555,96 @@ model SmsLog {
   @@index([status])
   @@index([createdAt])
   @@index([sentByUserId])
+}
+
+enum Role {
+  SUPER_ADMIN
+  BUSINESS_ADMIN
+  SHOP_ADMIN
+  SALES_STAFF
+  DEBT_COLLECTOR
+  CUSTOMER
+}
+
+enum InterestType {
+  FLAT
+  MONTHLY
+}
+
+enum PaymentPreference {
+  ONLINE
+  DEBT_COLLECTOR
+  BOTH
+}
+
+enum PaymentMethod {
+  CASH
+  MOBILE_MONEY
+  BANK_TRANSFER
+  CARD
+}
+
+enum PurchaseType {
+  CASH
+  LAYAWAY
+  CREDIT
+}
+
+enum PurchaseStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  OVERDUE
+  DEFAULTED
+}
+
+enum DeliveryStatus {
+  PENDING
+  SCHEDULED
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  PARTIAL
+  MISSED
+  WAIVED
+}
+
+enum MessageType {
+  EMAIL
+  SMS
+  IN_APP
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  READ
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+  BOUNCED
+}
+
+enum SmsProvider {
+  CUSTOM_API
+  HUBTEL
+  ARKESEL
+  MNOTIFY
+}
+
+enum SmsStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
 }

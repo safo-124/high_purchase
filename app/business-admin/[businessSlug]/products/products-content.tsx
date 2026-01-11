@@ -4,11 +4,25 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   createBusinessProduct,
+  createBusinessProductMultiShop,
   updateBusinessProduct,
   deleteBusinessProduct,
   toggleBusinessProductStatus,
+  assignProductToShop,
+  updateShopProductStock,
+  removeProductFromShop,
 } from "../../actions"
 import { toast } from "sonner"
+
+interface ShopAssignment {
+  shopId: string
+  shopName: string
+  shopSlug: string
+  stockQuantity: number
+  lowStockThreshold: number
+  isActive: boolean
+  hasCustomPricing: boolean
+}
 
 interface Product {
   id: string
@@ -28,11 +42,13 @@ interface Product {
   cashProfit: number
   layawayProfit: number
   creditProfit: number
-  stockQuantity: number
+  stockQuantity: number // Total stock across all shops
   lowStockThreshold: number
   isActive: boolean
-  shopName: string
-  shopSlug: string
+  // Shop assignments (replaces shopName/shopSlug)
+  shopNames: string[]
+  shopCount: number
+  shopAssignments: ShopAssignment[]
   purchaseCount: number
   createdAt: Date
 }
@@ -62,7 +78,7 @@ interface ProductsContentProps {
   businessSlug: string
 }
 
-type ModalMode = "create" | "edit" | "delete" | "stock" | null
+type ModalMode = "create" | "edit" | "delete" | "stock" | "assign" | null
 
 export function ProductsContent({ products, shops, categories, brands, categoryNames, businessSlug }: ProductsContentProps) {
   const router = useRouter()
@@ -100,6 +116,20 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
   const [stockAdjustmentType, setStockAdjustmentType] = useState<"set" | "add" | "subtract">("set")
   const [stockAdjustmentAmount, setStockAdjustmentAmount] = useState("")
 
+  // Shop assignment state (for assign modal)
+  const [shopAssignments, setShopAssignments] = useState<{[shopId: string]: { selected: boolean; stockQuantity: string; lowStockThreshold: string }}>({})
+  const [assigningShopId, setAssigningShopId] = useState<string | null>(null)
+
+  // Create modal shop assignments (for multi-shop creation)
+  const [createShopAssignments, setCreateShopAssignments] = useState<{[shopId: string]: { selected: boolean; stockQuantity: string; lowStockThreshold: string }}>({})
+
+  // Edit modal shop stock state (per-shop stock and threshold editing)
+  const [editShopStocks, setEditShopStocks] = useState<{[shopId: string]: { stockQuantity: string; lowStockThreshold: string }}>({})
+
+  // Inline stock editing state
+  const [editingStock, setEditingStock] = useState<{ productId: string; shopId: string } | null>(null)
+  const [editingStockValue, setEditingStockValue] = useState("")
+
   // Filter products
   const filteredProducts = products.filter((product) => {
     const matchesSearch = 
@@ -107,7 +137,8 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
       (product.sku || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.description?.toLowerCase().includes(searchQuery.toLowerCase())
     
-    const matchesShop = shopFilter === "all" || product.shopSlug === shopFilter
+    // Match shop by checking if product is assigned to the selected shop
+    const matchesShop = shopFilter === "all" || product.shopAssignments.some(sa => sa.shopSlug === shopFilter)
     const matchesCategory = categoryFilter === "all" || product.category === categoryFilter
     
     let matchesStock = true
@@ -149,13 +180,24 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
       lowStockThreshold: "5",
       isActive: true,
     })
+    // Initialize create shop assignments - all unselected with default values
+    const initialAssignments: {[shopId: string]: { selected: boolean; stockQuantity: string; lowStockThreshold: string }} = {}
+    shops.forEach(shop => {
+      initialAssignments[shop.id] = {
+        selected: false,
+        stockQuantity: "0",
+        lowStockThreshold: "5"
+      }
+    })
+    setCreateShopAssignments(initialAssignments)
     setFormError(null)
     setModalMode("create")
   }
 
   const openEditModal = (product: Product) => {
     setSelectedProduct(product)
-    setSelectedShopSlug(product.shopSlug)
+    // Use the first shop assignment's slug, or empty if none
+    setSelectedShopSlug(product.shopAssignments[0]?.shopSlug || "")
     setFormData({
       name: product.name,
       description: product.description || "",
@@ -170,6 +212,15 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
       lowStockThreshold: product.lowStockThreshold.toString(),
       isActive: product.isActive,
     })
+    // Initialize per-shop stock editing state
+    const shopStocks: {[shopId: string]: { stockQuantity: string; lowStockThreshold: string }} = {}
+    product.shopAssignments.forEach(sa => {
+      shopStocks[sa.shopId] = {
+        stockQuantity: sa.stockQuantity.toString(),
+        lowStockThreshold: sa.lowStockThreshold.toString(),
+      }
+    })
+    setEditShopStocks(shopStocks)
     setFormError(null)
     setModalMode("edit")
   }
@@ -186,6 +237,23 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
     setSelectedProduct(product)
     setFormError(null)
     setModalMode("delete")
+  }
+
+  const openAssignModal = (product: Product) => {
+    setSelectedProduct(product)
+    // Initialize shop assignments based on current state
+    const assignments: {[shopId: string]: { selected: boolean; stockQuantity: string; lowStockThreshold: string }} = {}
+    shops.forEach(shop => {
+      const existingAssignment = product.shopAssignments.find(sa => sa.shopId === shop.id)
+      assignments[shop.id] = {
+        selected: !!existingAssignment,
+        stockQuantity: existingAssignment?.stockQuantity?.toString() || "0",
+        lowStockThreshold: existingAssignment?.lowStockThreshold?.toString() || "5"
+      }
+    })
+    setShopAssignments(assignments)
+    setFormError(null)
+    setModalMode("assign")
   }
 
   const closeModal = () => {
@@ -223,26 +291,60 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
         isActive: formData.isActive,
       })
 
-      if (result.success) {
-        toast.success(`Product "${formData.name}" updated successfully`)
-        closeModal()
-        router.refresh()
-      } else {
+      if (!result.success) {
         setFormError(result.error || "Failed to update product")
+        return
       }
+
+      // Update per-shop stock and threshold
+      for (const shopId of Object.keys(editShopStocks)) {
+        const shopStock = editShopStocks[shopId]
+        const existingAssignment = selectedProduct.shopAssignments.find(sa => sa.shopId === shopId)
+        
+        if (existingAssignment) {
+          const newQty = parseInt(shopStock.stockQuantity) || 0
+          const newThreshold = parseInt(shopStock.lowStockThreshold) || 5
+          
+          // Only update if values changed
+          if (newQty !== existingAssignment.stockQuantity || newThreshold !== existingAssignment.lowStockThreshold) {
+            const stockResult = await updateShopProductStock(businessSlug, selectedProduct.id, shopId, {
+              stockQuantity: newQty,
+              lowStockThreshold: newThreshold,
+            })
+            if (!stockResult.success) {
+              setFormError(`Failed to update stock for shop: ${stockResult.error}`)
+              return
+            }
+          }
+        }
+      }
+
+      toast.success(`Product "${formData.name}" updated successfully`)
+      closeModal()
+      router.refresh()
     })
   }
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedShopSlug) {
-      setFormError("Please select a shop")
+    
+    // Get selected shops
+    const selectedShops = Object.entries(createShopAssignments)
+      .filter(([_, assignment]) => assignment.selected)
+      .map(([shopId, assignment]) => ({
+        shopId,
+        stockQuantity: parseInt(assignment.stockQuantity) || 0,
+        lowStockThreshold: parseInt(assignment.lowStockThreshold) || 5,
+      }))
+    
+    if (selectedShops.length === 0) {
+      setFormError("Please assign the product to at least one shop")
       return
     }
     setFormError(null)
 
     startTransition(async () => {
-      const result = await createBusinessProduct(businessSlug, selectedShopSlug, {
+      const result = await createBusinessProductMultiShop(businessSlug, {
         name: formData.name.trim(),
         description: formData.description.trim() || null,
         sku: formData.sku.trim() || null,
@@ -252,14 +354,14 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
         cashPrice: parseFloat(formData.cashPrice) || 0,
         layawayPrice: parseFloat(formData.layawayPrice) || 0,
         creditPrice: parseFloat(formData.creditPrice) || 0,
-        stockQuantity: parseInt(formData.stockQuantity) || 0,
-        lowStockThreshold: parseInt(formData.lowStockThreshold) || 5,
+        stockQuantity: 0, // Not used for multi-shop
+        lowStockThreshold: 5, // Not used for multi-shop
         isActive: formData.isActive,
-      })
+      }, selectedShops)
 
       if (result.success) {
-        const data = result.data as { name: string; shopName: string }
-        toast.success(`Product "${data.name}" created in ${data.shopName}`)
+        const data = result.data as { name: string; shopCount: number; totalStock: number }
+        toast.success(`Product "${data.name}" created in ${data.shopCount} shop(s) with ${data.totalStock} total stock`)
         closeModal()
         router.refresh()
       } else {
@@ -305,6 +407,109 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
         setFormError(result.error || "Failed to delete product")
       }
     })
+  }
+
+  const handleAssignSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedProduct) return
+    setFormError(null)
+
+    startTransition(async () => {
+      try {
+        // Process each shop assignment
+        for (const shop of shops) {
+          const assignment = shopAssignments[shop.id]
+          const existingAssignment = selectedProduct.shopAssignments.find(sa => sa.shopId === shop.id)
+          
+          if (assignment.selected && !existingAssignment) {
+            // Assign to new shop
+            setAssigningShopId(shop.id)
+            const result = await assignProductToShop(businessSlug, selectedProduct.id, shop.id, {
+              stockQuantity: parseInt(assignment.stockQuantity) || 0,
+              lowStockThreshold: parseInt(assignment.lowStockThreshold) || 5,
+            })
+            if (!result.success) {
+              setFormError(`Failed to assign to ${shop.name}: ${result.error}`)
+              return
+            }
+          } else if (assignment.selected && existingAssignment) {
+            // Update existing assignment (stock quantity and threshold)
+            const newQty = parseInt(assignment.stockQuantity) || 0
+            const newThreshold = parseInt(assignment.lowStockThreshold) || 5
+            if (newQty !== existingAssignment.stockQuantity || newThreshold !== existingAssignment.lowStockThreshold) {
+              setAssigningShopId(shop.id)
+              const result = await updateShopProductStock(businessSlug, selectedProduct.id, shop.id, {
+                stockQuantity: newQty,
+                lowStockThreshold: newThreshold,
+              })
+              if (!result.success) {
+                setFormError(`Failed to update stock for ${shop.name}: ${result.error}`)
+                return
+              }
+            }
+          } else if (!assignment.selected && existingAssignment) {
+            // Remove from shop
+            setAssigningShopId(shop.id)
+            const result = await removeProductFromShop(businessSlug, selectedProduct.id, shop.id)
+            if (!result.success) {
+              setFormError(`Failed to remove from ${shop.name}: ${result.error}`)
+              return
+            }
+          }
+        }
+        
+        setAssigningShopId(null)
+        toast.success(`Shop assignments updated for "${selectedProduct.name}"`)
+        closeModal()
+        router.refresh()
+      } catch (error) {
+        setAssigningShopId(null)
+        setFormError("An unexpected error occurred")
+      }
+    })
+  }
+
+  // Inline stock editing handlers
+  const startEditingStock = (productId: string, shopId: string, currentStock: number) => {
+    setEditingStock({ productId, shopId })
+    setEditingStockValue(currentStock.toString())
+  }
+
+  const cancelEditingStock = () => {
+    setEditingStock(null)
+    setEditingStockValue("")
+  }
+
+  const saveInlineStock = async (productId: string, shopId: string) => {
+    const newStock = parseInt(editingStockValue) || 0
+    if (newStock < 0) {
+      toast.error("Stock cannot be negative")
+      return
+    }
+
+    startTransition(async () => {
+      const result = await updateShopProductStock(businessSlug, productId, shopId, {
+        stockQuantity: newStock,
+      })
+
+      if (result.success) {
+        toast.success("Stock updated")
+        setEditingStock(null)
+        setEditingStockValue("")
+        router.refresh()
+      } else {
+        toast.error(result.error || "Failed to update stock")
+      }
+    })
+  }
+
+  const handleInlineStockKeyDown = (e: React.KeyboardEvent, productId: string, shopId: string) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      saveInlineStock(productId, shopId)
+    } else if (e.key === "Escape") {
+      cancelEditingStock()
+    }
   }
 
   const handleToggleStatus = async (product: Product) => {
@@ -479,9 +684,20 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-300">
-                        {product.shopName}
-                      </span>
+                      {product.shopCount > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          {product.shopNames.slice(0, 2).map((name, i) => (
+                            <span key={i} className="px-2 py-0.5 bg-white/5 border border-white/10 rounded text-xs text-slate-300">
+                              {name}
+                            </span>
+                          ))}
+                          {product.shopCount > 2 && (
+                            <span className="text-xs text-slate-500">+{product.shopCount - 2} more</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-500 text-xs">Not assigned</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <p className="text-sm font-medium text-rose-400">₵{product.costPrice.toLocaleString()}</p>
@@ -507,18 +723,63 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <button
-                        onClick={() => openStockModal(product)}
-                        className={`px-2 py-1 rounded-lg text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${
-                          product.stockQuantity === 0
-                            ? "bg-red-500/10 text-red-400 border border-red-500/20"
-                            : product.stockQuantity <= product.lowStockThreshold
-                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                            : "bg-green-500/10 text-green-400 border border-green-500/20"
-                        }`}
-                      >
-                        {product.stockQuantity} units
-                      </button>
+                      <div className="flex flex-col gap-1">
+                        {product.shopAssignments.length > 0 ? (
+                          <>
+                            {product.shopAssignments.slice(0, 3).map((sa) => {
+                              const isEditing = editingStock?.productId === product.id && editingStock?.shopId === sa.shopId
+                              return (
+                                <div 
+                                  key={sa.shopId} 
+                                  className={`flex items-center justify-between gap-2 px-2 py-1 rounded-lg text-xs ${
+                                    sa.stockQuantity === 0
+                                      ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                      : sa.stockQuantity <= sa.lowStockThreshold
+                                      ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                      : "bg-green-500/10 text-green-400 border border-green-500/20"
+                                  }`}
+                                >
+                                  <span className="truncate max-w-[60px]" title={sa.shopName}>{sa.shopName}</span>
+                                  {isEditing ? (
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={editingStockValue}
+                                      onChange={(e) => setEditingStockValue(e.target.value)}
+                                      onBlur={() => saveInlineStock(product.id, sa.shopId)}
+                                      onKeyDown={(e) => handleInlineStockKeyDown(e, product.id, sa.shopId)}
+                                      autoFocus
+                                      className="w-14 px-1 py-0.5 bg-white/10 border border-white/20 rounded text-white text-xs text-center focus:outline-none focus:border-cyan-500/50"
+                                      disabled={isPending}
+                                    />
+                                  ) : (
+                                    <button
+                                      onClick={() => startEditingStock(product.id, sa.shopId, sa.stockQuantity)}
+                                      className="font-medium whitespace-nowrap hover:bg-white/10 px-1.5 py-0.5 rounded transition-colors cursor-pointer"
+                                      title="Click to edit"
+                                    >
+                                      {sa.stockQuantity}
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })}
+                            {product.shopAssignments.length > 3 && (
+                              <button
+                                onClick={() => openAssignModal(product)}
+                                className="text-[10px] text-slate-500 hover:text-slate-400 text-left"
+                              >
+                                +{product.shopAssignments.length - 3} more shops...
+                              </button>
+                            )}
+                            <div className="border-t border-white/10 pt-1 mt-0.5 text-[10px] text-slate-400">
+                              Total: <span className="text-white font-medium">{product.stockQuantity}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-slate-500 text-xs">Not assigned</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <button
@@ -543,6 +804,15 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => openAssignModal(product)}
+                          className="p-2 text-slate-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all"
+                          title="Assign to shops"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                           </svg>
                         </button>
                         <button
@@ -578,24 +848,6 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
             )}
 
             <form onSubmit={handleCreateSubmit} className="space-y-4">
-              {/* Shop Selection */}
-              <div>
-                <label className="block text-sm text-slate-400 mb-2">Select Shop *</label>
-                <select
-                  value={selectedShopSlug}
-                  onChange={(e) => setSelectedShopSlug(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
-                  required
-                >
-                  <option value="">Choose a shop...</option>
-                  {shops.map((shop) => (
-                    <option key={shop.shopSlug} value={shop.shopSlug}>
-                      {shop.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               <div>
                 <label className="block text-sm text-slate-400 mb-2">Product Name *</label>
                 <input
@@ -729,32 +981,87 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm text-slate-400 mb-2">Initial Stock Quantity</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={formData.stockQuantity}
-                  onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm text-amber-400 mb-2 flex items-center gap-2">
+              {/* Multi-Shop Assignment Section */}
+              <div className="space-y-3">
+                <label className="text-sm text-purple-400 flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                   </svg>
-                  Low Stock Alert Threshold
+                  Assign to Shops *
                 </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={formData.lowStockThreshold}
-                  onChange={(e) => setFormData({ ...formData, lowStockThreshold: e.target.value })}
-                  className="w-full px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 focus:outline-none focus:border-amber-500/50"
-                />
-                <p className="text-xs text-slate-500 mt-1">Alert when stock falls to or below this level</p>
+                <p className="text-xs text-slate-500 -mt-1">Select shops and set initial stock for each</p>
+                
+                <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                  {shops.map((shop) => {
+                    const assignment = createShopAssignments[shop.id] || { selected: false, stockQuantity: "0", lowStockThreshold: "5" }
+                    return (
+                      <div 
+                        key={shop.id}
+                        className={`p-3 rounded-xl border transition-all ${
+                          assignment.selected
+                            ? "bg-purple-500/10 border-purple-500/30"
+                            : "bg-white/5 border-white/10"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={assignment.selected}
+                            onChange={(e) => setCreateShopAssignments(prev => ({
+                              ...prev,
+                              [shop.id]: { ...prev[shop.id], selected: e.target.checked }
+                            }))}
+                            className="w-4 h-4 rounded border-white/20 bg-white/5 text-purple-500 focus:ring-purple-500/20"
+                          />
+                          <span className="text-sm font-medium text-white flex-1">{shop.name}</span>
+                        </div>
+                        {assignment.selected && (
+                          <div className="grid grid-cols-2 gap-3 mt-3 pl-7">
+                            <div>
+                              <label className="block text-[10px] text-slate-400 mb-1">Initial Stock</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={assignment.stockQuantity}
+                                onChange={(e) => setCreateShopAssignments(prev => ({
+                                  ...prev,
+                                  [shop.id]: { ...prev[shop.id], stockQuantity: e.target.value }
+                                }))}
+                                className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-amber-400 mb-1">Low Stock Alert</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={assignment.lowStockThreshold}
+                                onChange={(e) => setCreateShopAssignments(prev => ({
+                                  ...prev,
+                                  [shop.id]: { ...prev[shop.id], lowStockThreshold: e.target.value }
+                                }))}
+                                className="w-full px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm focus:outline-none focus:border-amber-500/50"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                
+                {/* Total preview */}
+                {Object.values(createShopAssignments).some(a => a.selected) && (
+                  <div className="text-xs text-slate-500 pt-1 border-t border-white/10">
+                    Total initial stock: <span className="text-white font-medium">
+                      {Object.values(createShopAssignments)
+                        .filter(a => a.selected)
+                        .reduce((sum, a) => sum + (parseInt(a.stockQuantity) || 0), 0)}
+                    </span> units across <span className="text-purple-400 font-medium">
+                      {Object.values(createShopAssignments).filter(a => a.selected).length}
+                    </span> shop(s)
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-3">
@@ -923,7 +1230,7 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-slate-400 mb-2">Credit Price (₵)</label>
+                <label className="block text-sm text-slate-400 mb-2">Credit Price (₵)</label>
                   <input
                     type="number"
                     min="0"
@@ -935,33 +1242,102 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm text-slate-400 mb-2">Stock Quantity</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={formData.stockQuantity}
-                  onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
-                />
-              </div>
+              {/* Per-Shop Inventory Section */}
+              {selectedProduct.shopAssignments.length > 0 && (
+                <div className="space-y-3">
+                  <label className="text-sm text-purple-400 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    Shop Inventory
+                  </label>
+                  <p className="text-xs text-slate-500 -mt-1">Set stock and low stock alert per shop</p>
+                  
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    {selectedProduct.shopAssignments.map((sa) => {
+                      const shopStock = editShopStocks[sa.shopId] || { stockQuantity: "0", lowStockThreshold: "5" }
+                      const currentStock = parseInt(shopStock.stockQuantity) || 0
+                      const threshold = parseInt(shopStock.lowStockThreshold) || 5
+                      
+                      return (
+                        <div 
+                          key={sa.shopId}
+                          className={`p-3 rounded-xl border ${
+                            currentStock === 0
+                              ? "bg-red-500/10 border-red-500/30"
+                              : currentStock <= threshold
+                              ? "bg-amber-500/10 border-amber-500/30"
+                              : "bg-green-500/10 border-green-500/30"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-white">{sa.shopName}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              currentStock === 0
+                                ? "bg-red-500/20 text-red-400"
+                                : currentStock <= threshold
+                                ? "bg-amber-500/20 text-amber-400"
+                                : "bg-green-500/20 text-green-400"
+                            }`}>
+                              {currentStock === 0 ? "Out of Stock" : currentStock <= threshold ? "Low Stock" : "In Stock"}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] text-slate-400 mb-1">Stock Qty</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={shopStock.stockQuantity}
+                                onChange={(e) => setEditShopStocks(prev => ({
+                                  ...prev,
+                                  [sa.shopId]: { ...prev[sa.shopId], stockQuantity: e.target.value }
+                                }))}
+                                className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-amber-400 mb-1">Low Stock Alert</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={shopStock.lowStockThreshold}
+                                onChange={(e) => setEditShopStocks(prev => ({
+                                  ...prev,
+                                  [sa.shopId]: { ...prev[sa.shopId], lowStockThreshold: e.target.value }
+                                }))}
+                                className="w-full px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm focus:outline-none focus:border-amber-500/50"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  
+                  <div className="text-xs text-slate-500 pt-1 border-t border-white/10">
+                    Total across all shops: <span className="text-white font-medium">
+                      {Object.values(editShopStocks).reduce((sum, s) => sum + (parseInt(s.stockQuantity) || 0), 0)}
+                    </span> units
+                  </div>
+                </div>
+              )}
 
-              <div>
-                <label className="text-sm text-amber-400 mb-2 flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  Low Stock Alert Threshold
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={formData.lowStockThreshold}
-                  onChange={(e) => setFormData({ ...formData, lowStockThreshold: e.target.value })}
-                  className="w-full px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 focus:outline-none focus:border-amber-500/50"
-                />
-                <p className="text-xs text-slate-500 mt-1">Alert when stock falls to or below this level</p>
-              </div>
+              {selectedProduct.shopAssignments.length === 0 && (
+                <div className="p-4 rounded-xl bg-slate-500/10 border border-slate-500/20 text-center">
+                  <p className="text-sm text-slate-400">This product is not assigned to any shops yet.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeModal()
+                      setTimeout(() => openAssignModal(selectedProduct), 100)
+                    }}
+                    className="text-sm text-purple-400 hover:text-purple-300 mt-2"
+                  >
+                    Assign to shops →
+                  </button>
+                </div>
+              )}
 
               <div className="flex items-center gap-3">
                 <input
@@ -1110,7 +1486,12 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
             </div>
 
             <p className="text-slate-300 mb-6">
-              Are you sure you want to delete <strong className="text-white">{selectedProduct.name}</strong> from <strong className="text-white">{selectedProduct.shopName}</strong>?
+              Are you sure you want to delete <strong className="text-white">{selectedProduct.name}</strong>?
+              {selectedProduct.shopCount > 0 && (
+                <span className="block mt-1 text-sm text-amber-400">
+                  This will remove the product from all {selectedProduct.shopCount} shop(s).
+                </span>
+              )}
             </p>
 
             {formError && (
@@ -1134,6 +1515,142 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                 {isPending ? "Deleting..." : "Delete Product"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign to Shops Modal */}
+      {modalMode === "assign" && selectedProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
+          <div className="relative w-full max-w-lg glass-card p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center">
+                <svg className="w-6 h-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Assign to Shops</h3>
+                <p className="text-sm text-slate-400">{selectedProduct.name}</p>
+              </div>
+            </div>
+
+            {formError && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+                {formError}
+              </div>
+            )}
+
+            <form onSubmit={handleAssignSubmit} className="space-y-4">
+              <p className="text-sm text-slate-400 mb-2">
+                Select shops where this product should be available and set stock quantities:
+              </p>
+
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                {shops.map((shop) => {
+                  const assignment = shopAssignments[shop.id]
+                  return (
+                    <div
+                      key={shop.id}
+                      className={`p-4 rounded-xl border transition-all ${
+                        assignment?.selected
+                          ? "bg-purple-500/10 border-purple-500/30"
+                          : "bg-white/5 border-white/10"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <label className="flex items-center gap-3 cursor-pointer flex-1">
+                          <input
+                            type="checkbox"
+                            checked={assignment?.selected || false}
+                            onChange={(e) =>
+                              setShopAssignments((prev) => ({
+                                ...prev,
+                                [shop.id]: {
+                                  ...prev[shop.id],
+                                  selected: e.target.checked,
+                                },
+                              }))
+                            }
+                            className="w-4 h-4 rounded border-white/20 bg-white/5 text-purple-500 focus:ring-purple-500/20"
+                          />
+                          <div>
+                            <span className="text-white font-medium">{shop.name}</span>
+                            {assigningShopId === shop.id && (
+                              <span className="ml-2 text-xs text-purple-400">Updating...</span>
+                            )}
+                          </div>
+                        </label>
+                      </div>
+                      {assignment?.selected && (
+                        <div className="grid grid-cols-2 gap-3 mt-3 pl-7">
+                          <div>
+                            <label className="block text-[10px] text-slate-400 mb-1">Stock Qty</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={assignment.stockQuantity}
+                              onChange={(e) =>
+                                setShopAssignments((prev) => ({
+                                  ...prev,
+                                  [shop.id]: {
+                                    ...prev[shop.id],
+                                    stockQuantity: e.target.value,
+                                  },
+                                }))
+                              }
+                              className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm text-center focus:outline-none focus:border-purple-500/50"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-amber-400 mb-1">Low Stock Alert</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={assignment.lowStockThreshold}
+                              onChange={(e) =>
+                                setShopAssignments((prev) => ({
+                                  ...prev,
+                                  [shop.id]: {
+                                    ...prev[shop.id],
+                                    lowStockThreshold: e.target.value,
+                                  },
+                                }))
+                              }
+                              className="w-full px-2 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm text-center focus:outline-none focus:border-amber-500/50"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {shops.length === 0 && (
+                <div className="text-center py-8 text-slate-400">
+                  No shops available. Create a shop first.
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-slate-300 hover:bg-white/10 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending || shops.length === 0}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-xl font-medium hover:shadow-lg hover:shadow-purple-500/20 transition-all disabled:opacity-50"
+                >
+                  {isPending ? "Saving..." : "Save Assignments"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
