@@ -684,9 +684,11 @@ export async function getBusinessShopsWithMetrics(businessSlug: string): Promise
       for (const purchase of customer.purchases) {
         totalSales += Number(purchase.totalAmount)
         
-        // Sum payments
+        // Sum only CONFIRMED payments
         for (const payment of purchase.payments) {
-          totalCollected += Number(payment.amount)
+          if (payment.isConfirmed) {
+            totalCollected += Number(payment.amount)
+          }
         }
         
         // Count active/overdue
@@ -929,7 +931,9 @@ export async function getBusinessPurchases(businessSlug: string) {
   })
 
   return purchases.map((purchase) => {
-    const totalPaid = purchase.payments.reduce((sum, p) => sum + Number(p.amount), 0)
+    const totalPaid = purchase.payments
+      .filter(p => p.isConfirmed)
+      .reduce((sum, p) => sum + Number(p.amount), 0)
     const outstanding = Number(purchase.totalAmount) - totalPaid
     const isOverdue = purchase.status === "ACTIVE" && 
       purchase.dueDate && 
@@ -985,7 +989,10 @@ export async function getBusinessPayments(businessSlug: string) {
   const { business } = await requireBusinessAdmin(businessSlug)
 
   const payments = await prisma.payment.findMany({
-    where: { purchase: { customer: { shop: { businessId: business.id } } } },
+    where: { 
+      purchase: { customer: { shop: { businessId: business.id } } },
+      isConfirmed: true, // Only return confirmed payments
+    },
     include: {
       purchase: {
         include: {
@@ -1140,6 +1147,11 @@ export async function getBusinessProducts(businessSlug: string) {
         lowStockThreshold: sp.lowStockThreshold,
         isActive: sp.isActive,
         hasCustomPricing: !!(sp.costPrice || sp.cashPrice || sp.layawayPrice || sp.creditPrice),
+        // Shop-specific prices (null means use default product price)
+        costPrice: sp.costPrice ? Number(sp.costPrice) : null,
+        cashPrice: sp.cashPrice ? Number(sp.cashPrice) : null,
+        layawayPrice: sp.layawayPrice ? Number(sp.layawayPrice) : null,
+        creditPrice: sp.creditPrice ? Number(sp.creditPrice) : null,
       })),
       purchaseCount: product.purchaseItems.length,
       createdAt: product.createdAt,

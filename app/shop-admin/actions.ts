@@ -207,6 +207,7 @@ export interface ProductData {
   categoryId: string | null
   categoryName: string | null
   categoryColor: string | null
+  hasCustomPricing: boolean
   createdAt: Date
   updatedAt: Date
 }
@@ -232,6 +233,7 @@ export async function getProducts(shopSlug: string): Promise<ProductData[]> {
   // Convert and return products with shop-specific stock
   return shopProducts.map((sp) => {
     const p = sp.product
+    const hasCustomPricing = !!(sp.costPrice || sp.cashPrice || sp.layawayPrice || sp.creditPrice)
     return {
       id: p.id,
       shopId: shop.id, // Use current shop context
@@ -250,6 +252,7 @@ export async function getProducts(shopSlug: string): Promise<ProductData[]> {
       categoryId: p.categoryId,
       categoryName: p.category?.name || null,
       categoryColor: p.category?.color || null,
+      hasCustomPricing,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
     }
@@ -3513,6 +3516,7 @@ export interface ProductForSale {
   categoryName: string | null
   categoryColor: string | null
   imageUrl: string | null
+  hasCustomPricing: boolean
 }
 
 export async function getProductsForSale(shopSlug: string): Promise<ProductForSale[]> {
@@ -3549,6 +3553,7 @@ export async function getProductsForSale(shopSlug: string): Promise<ProductForSa
 
   return shopProducts.map((sp) => {
     const p = sp.product
+    const hasCustomPricing = !!(sp.costPrice || sp.cashPrice || sp.layawayPrice || sp.creditPrice)
     return {
       id: p.id,
       name: p.name,
@@ -3564,6 +3569,7 @@ export async function getProductsForSale(shopSlug: string): Promise<ProductForSa
       categoryName: p.category?.name || null,
       categoryColor: p.category?.color || null,
       imageUrl: p.imageUrl,
+      hasCustomPricing,
     }
   })
 }

@@ -421,7 +421,12 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
               <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <p className="text-sm text-white font-medium">{selectedProduct.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-white font-medium">{selectedProduct.name}</p>
+                      {selectedProduct.hasCustomPricing && (
+                        <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">shop pricing</span>
+                      )}
+                    </div>
                     {selectedProduct.categoryName && (
                       <p className="text-xs text-slate-400">{selectedProduct.categoryName}</p>
                     )}

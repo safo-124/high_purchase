@@ -143,12 +143,20 @@ export function ProductsTable({ products, shopSlug, categories }: ProductsTableP
 
                 {/* Cost Price */}
                 <td className="px-6 py-4 text-right">
-                  <span className="text-sm font-medium text-rose-400">₵{(product.costPrice || 0).toLocaleString()}</span>
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span className="text-sm font-medium text-rose-400">₵{(product.costPrice || 0).toLocaleString()}</span>
+                    {product.hasCustomPricing && (
+                      <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">custom</span>
+                    )}
+                  </div>
                 </td>
 
                 {/* Selling Prices */}
                 <td className="px-6 py-4 text-right">
                   <div className="flex flex-col items-end gap-0.5 text-xs">
+                    {product.hasCustomPricing && (
+                      <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded mb-0.5">shop pricing</span>
+                    )}
                     <span className="text-green-400 font-medium">₵{(product.cashPrice || 0).toLocaleString()}</span>
                     <span className="text-blue-400 font-medium">₵{(product.layawayPrice || 0).toLocaleString()}</span>
                     <span className="text-amber-400 font-medium">₵{(product.creditPrice || 0).toLocaleString()}</span>

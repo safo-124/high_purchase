@@ -80,6 +80,7 @@ export interface ProductForSale {
   categoryName: string | null
   categoryColor: string | null
   imageUrl: string | null
+  hasCustomPricing: boolean
 }
 
 export async function getProductsForSale(shopSlug: string): Promise<ProductForSale[]> {
@@ -116,6 +117,7 @@ export async function getProductsForSale(shopSlug: string): Promise<ProductForSa
 
   return shopProducts.map((sp) => {
     const p = sp.product
+    const hasCustomPricing = !!(sp.costPrice || sp.cashPrice || sp.layawayPrice || sp.creditPrice)
     return {
       id: p.id,
       name: p.name,
@@ -131,6 +133,7 @@ export async function getProductsForSale(shopSlug: string): Promise<ProductForSa
       categoryName: p.category?.name || null,
       categoryColor: p.category?.color || null,
       imageUrl: p.imageUrl,
+      hasCustomPricing,
     }
   })
 }

@@ -130,7 +130,12 @@ export function ProductsContent({ products }: ProductsContentProps) {
             <div className="p-4">
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <h3 className="font-semibold text-white">{product.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-white">{product.name}</h3>
+                    {product.hasCustomPricing && (
+                      <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">shop pricing</span>
+                    )}
+                  </div>
                   {product.category && (
                     <span className="text-xs text-slate-400">{product.category}</span>
                   )}

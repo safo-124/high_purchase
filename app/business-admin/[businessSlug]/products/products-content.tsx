@@ -22,6 +22,11 @@ interface ShopAssignment {
   lowStockThreshold: number
   isActive: boolean
   hasCustomPricing: boolean
+  // Custom shop-specific prices (null = use default product price)
+  costPrice: number | null
+  cashPrice: number | null
+  layawayPrice: number | null
+  creditPrice: number | null
 }
 
 interface Product {
@@ -117,14 +122,31 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
   const [stockAdjustmentAmount, setStockAdjustmentAmount] = useState("")
 
   // Shop assignment state (for assign modal)
-  const [shopAssignments, setShopAssignments] = useState<{[shopId: string]: { selected: boolean; stockQuantity: string; lowStockThreshold: string }}>({})
+  const [shopAssignments, setShopAssignments] = useState<{[shopId: string]: { 
+    selected: boolean
+    stockQuantity: string
+    lowStockThreshold: string
+    useCustomPricing: boolean
+    costPrice: string
+    cashPrice: string
+    layawayPrice: string
+    creditPrice: string
+  }}>({})
   const [assigningShopId, setAssigningShopId] = useState<string | null>(null)
 
   // Create modal shop assignments (for multi-shop creation)
   const [createShopAssignments, setCreateShopAssignments] = useState<{[shopId: string]: { selected: boolean; stockQuantity: string; lowStockThreshold: string }}>({})
 
-  // Edit modal shop stock state (per-shop stock and threshold editing)
-  const [editShopStocks, setEditShopStocks] = useState<{[shopId: string]: { stockQuantity: string; lowStockThreshold: string }}>({})
+  // Edit modal shop stock state (per-shop stock, threshold, and pricing editing)
+  const [editShopStocks, setEditShopStocks] = useState<{[shopId: string]: { 
+    stockQuantity: string
+    lowStockThreshold: string
+    useCustomPricing: boolean
+    costPrice: string
+    cashPrice: string
+    layawayPrice: string
+    creditPrice: string
+  }}>({})
 
   // Inline stock editing state
   const [editingStock, setEditingStock] = useState<{ productId: string; shopId: string } | null>(null)
@@ -212,12 +234,25 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
       lowStockThreshold: product.lowStockThreshold.toString(),
       isActive: product.isActive,
     })
-    // Initialize per-shop stock editing state
-    const shopStocks: {[shopId: string]: { stockQuantity: string; lowStockThreshold: string }} = {}
+    // Initialize per-shop stock and pricing editing state
+    const shopStocks: {[shopId: string]: { 
+      stockQuantity: string
+      lowStockThreshold: string
+      useCustomPricing: boolean
+      costPrice: string
+      cashPrice: string
+      layawayPrice: string
+      creditPrice: string
+    }} = {}
     product.shopAssignments.forEach(sa => {
       shopStocks[sa.shopId] = {
         stockQuantity: sa.stockQuantity.toString(),
         lowStockThreshold: sa.lowStockThreshold.toString(),
+        useCustomPricing: sa.hasCustomPricing || false,
+        costPrice: sa.costPrice?.toString() || product.costPrice.toString(),
+        cashPrice: sa.cashPrice?.toString() || product.cashPrice.toString(),
+        layawayPrice: sa.layawayPrice?.toString() || product.layawayPrice.toString(),
+        creditPrice: sa.creditPrice?.toString() || product.creditPrice.toString(),
       }
     })
     setEditShopStocks(shopStocks)
@@ -242,13 +277,27 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
   const openAssignModal = (product: Product) => {
     setSelectedProduct(product)
     // Initialize shop assignments based on current state
-    const assignments: {[shopId: string]: { selected: boolean; stockQuantity: string; lowStockThreshold: string }} = {}
+    const assignments: {[shopId: string]: { 
+      selected: boolean
+      stockQuantity: string
+      lowStockThreshold: string
+      useCustomPricing: boolean
+      costPrice: string
+      cashPrice: string
+      layawayPrice: string
+      creditPrice: string
+    }} = {}
     shops.forEach(shop => {
       const existingAssignment = product.shopAssignments.find(sa => sa.shopId === shop.id)
       assignments[shop.id] = {
         selected: !!existingAssignment,
         stockQuantity: existingAssignment?.stockQuantity?.toString() || "0",
-        lowStockThreshold: existingAssignment?.lowStockThreshold?.toString() || "5"
+        lowStockThreshold: existingAssignment?.lowStockThreshold?.toString() || "5",
+        useCustomPricing: existingAssignment?.hasCustomPricing || false,
+        costPrice: existingAssignment?.costPrice?.toString() || product.costPrice.toString(),
+        cashPrice: existingAssignment?.cashPrice?.toString() || product.cashPrice.toString(),
+        layawayPrice: existingAssignment?.layawayPrice?.toString() || product.layawayPrice.toString(),
+        creditPrice: existingAssignment?.creditPrice?.toString() || product.creditPrice.toString(),
       }
     })
     setShopAssignments(assignments)
@@ -296,25 +345,33 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
         return
       }
 
-      // Update per-shop stock and threshold
+      // Update per-shop stock, threshold, and pricing
       for (const shopId of Object.keys(editShopStocks)) {
         const shopStock = editShopStocks[shopId]
         const existingAssignment = selectedProduct.shopAssignments.find(sa => sa.shopId === shopId)
         
         if (existingAssignment) {
-          const newQty = parseInt(shopStock.stockQuantity) || 0
-          const newThreshold = parseInt(shopStock.lowStockThreshold) || 5
+          // Prepare pricing data (null if not using custom pricing)
+          const pricingData = shopStock.useCustomPricing ? {
+            costPrice: parseFloat(shopStock.costPrice) || null,
+            cashPrice: parseFloat(shopStock.cashPrice) || null,
+            layawayPrice: parseFloat(shopStock.layawayPrice) || null,
+            creditPrice: parseFloat(shopStock.creditPrice) || null,
+          } : {
+            costPrice: null,
+            cashPrice: null,
+            layawayPrice: null,
+            creditPrice: null,
+          }
           
-          // Only update if values changed
-          if (newQty !== existingAssignment.stockQuantity || newThreshold !== existingAssignment.lowStockThreshold) {
-            const stockResult = await updateShopProductStock(businessSlug, selectedProduct.id, shopId, {
-              stockQuantity: newQty,
-              lowStockThreshold: newThreshold,
-            })
-            if (!stockResult.success) {
-              setFormError(`Failed to update stock for shop: ${stockResult.error}`)
-              return
-            }
+          const stockResult = await updateShopProductStock(businessSlug, selectedProduct.id, shopId, {
+            stockQuantity: parseInt(shopStock.stockQuantity) || 0,
+            lowStockThreshold: parseInt(shopStock.lowStockThreshold) || 5,
+            ...pricingData,
+          })
+          if (!stockResult.success) {
+            setFormError(`Failed to update shop: ${stockResult.error}`)
+            return
           }
         }
       }
@@ -421,31 +478,42 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
           const assignment = shopAssignments[shop.id]
           const existingAssignment = selectedProduct.shopAssignments.find(sa => sa.shopId === shop.id)
           
+          // Prepare pricing data (null if not using custom pricing)
+          const pricingData = assignment.useCustomPricing ? {
+            costPrice: parseFloat(assignment.costPrice) || null,
+            cashPrice: parseFloat(assignment.cashPrice) || null,
+            layawayPrice: parseFloat(assignment.layawayPrice) || null,
+            creditPrice: parseFloat(assignment.creditPrice) || null,
+          } : {
+            costPrice: null,
+            cashPrice: null,
+            layawayPrice: null,
+            creditPrice: null,
+          }
+          
           if (assignment.selected && !existingAssignment) {
-            // Assign to new shop
+            // Assign to new shop with stock and pricing
             setAssigningShopId(shop.id)
             const result = await assignProductToShop(businessSlug, selectedProduct.id, shop.id, {
               stockQuantity: parseInt(assignment.stockQuantity) || 0,
               lowStockThreshold: parseInt(assignment.lowStockThreshold) || 5,
+              ...pricingData,
             })
             if (!result.success) {
               setFormError(`Failed to assign to ${shop.name}: ${result.error}`)
               return
             }
           } else if (assignment.selected && existingAssignment) {
-            // Update existing assignment (stock quantity and threshold)
-            const newQty = parseInt(assignment.stockQuantity) || 0
-            const newThreshold = parseInt(assignment.lowStockThreshold) || 5
-            if (newQty !== existingAssignment.stockQuantity || newThreshold !== existingAssignment.lowStockThreshold) {
-              setAssigningShopId(shop.id)
-              const result = await updateShopProductStock(businessSlug, selectedProduct.id, shop.id, {
-                stockQuantity: newQty,
-                lowStockThreshold: newThreshold,
-              })
-              if (!result.success) {
-                setFormError(`Failed to update stock for ${shop.name}: ${result.error}`)
-                return
-              }
+            // Update existing assignment (stock, threshold, and pricing)
+            setAssigningShopId(shop.id)
+            const result = await updateShopProductStock(businessSlug, selectedProduct.id, shop.id, {
+              stockQuantity: parseInt(assignment.stockQuantity) || 0,
+              lowStockThreshold: parseInt(assignment.lowStockThreshold) || 5,
+              ...pricingData,
+            })
+            if (!result.success) {
+              setFormError(`Failed to update ${shop.name}: ${result.error}`)
+              return
             }
           } else if (!assignment.selected && existingAssignment) {
             // Remove from shop
@@ -700,84 +768,133 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm font-medium text-rose-400">₵{product.costPrice.toLocaleString()}</p>
+                      {(() => {
+                        // Show shop-specific cost if filtering by shop
+                        const shopAssignment = shopFilter !== "all" 
+                          ? product.shopAssignments.find(sa => sa.shopSlug === shopFilter)
+                          : null
+                        const costPrice = shopAssignment?.costPrice ?? product.costPrice
+                        const hasCustomPrice = shopAssignment?.hasCustomPricing
+                        return (
+                          <div className="flex items-center gap-1">
+                            <p className="text-sm font-medium text-rose-400">₵{costPrice.toLocaleString()}</p>
+                            {hasCustomPrice && (
+                              <span className="text-[9px] px-1 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">custom</span>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-col gap-0.5 text-xs">
-                        <span className="text-green-400">Cash: ₵{product.cashPrice.toLocaleString()}</span>
-                        <span className="text-blue-400">Layaway: ₵{product.layawayPrice.toLocaleString()}</span>
-                        <span className="text-amber-400">Credit: ₵{product.creditPrice.toLocaleString()}</span>
-                      </div>
+                      {(() => {
+                        // Show shop-specific prices if filtering by shop
+                        const shopAssignment = shopFilter !== "all" 
+                          ? product.shopAssignments.find(sa => sa.shopSlug === shopFilter)
+                          : null
+                        const cashPrice = shopAssignment?.cashPrice ?? product.cashPrice
+                        const layawayPrice = shopAssignment?.layawayPrice ?? product.layawayPrice
+                        const creditPrice = shopAssignment?.creditPrice ?? product.creditPrice
+                        const hasCustomPrice = shopAssignment?.hasCustomPricing
+                        return (
+                          <div className="flex flex-col gap-0.5 text-xs">
+                            {hasCustomPrice && (
+                              <span className="text-[9px] px-1 py-0.5 bg-cyan-500/20 text-cyan-400 rounded w-fit mb-0.5">custom pricing</span>
+                            )}
+                            <span className="text-green-400">Cash: ₵{cashPrice.toLocaleString()}</span>
+                            <span className="text-blue-400">Layaway: ₵{layawayPrice.toLocaleString()}</span>
+                            <span className="text-amber-400">Credit: ₵{creditPrice.toLocaleString()}</span>
+                          </div>
+                        )
+                      })()}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-col gap-0.5 text-xs">
-                        <span className={product.cashProfit >= 0 ? "text-emerald-400" : "text-red-400"}>
-                          Cash: ₵{product.cashProfit.toLocaleString()}
-                        </span>
-                        <span className={product.layawayProfit >= 0 ? "text-emerald-400" : "text-red-400"}>
-                          Layaway: ₵{product.layawayProfit.toLocaleString()}
-                        </span>
-                        <span className={product.creditProfit >= 0 ? "text-emerald-400" : "text-red-400"}>
-                          Credit: ₵{product.creditProfit.toLocaleString()}
-                        </span>
-                      </div>
+                      {(() => {
+                        // Calculate shop-specific profits if filtering by shop
+                        const shopAssignment = shopFilter !== "all" 
+                          ? product.shopAssignments.find(sa => sa.shopSlug === shopFilter)
+                          : null
+                        const costPrice = shopAssignment?.costPrice ?? product.costPrice
+                        const cashPrice = shopAssignment?.cashPrice ?? product.cashPrice
+                        const layawayPrice = shopAssignment?.layawayPrice ?? product.layawayPrice
+                        const creditPrice = shopAssignment?.creditPrice ?? product.creditPrice
+                        const cashProfit = cashPrice - costPrice
+                        const layawayProfit = layawayPrice - costPrice
+                        const creditProfit = creditPrice - costPrice
+                        return (
+                          <div className="flex flex-col gap-0.5 text-xs">
+                            <span className={cashProfit >= 0 ? "text-emerald-400" : "text-red-400"}>
+                              Cash: ₵{cashProfit.toLocaleString()}
+                            </span>
+                            <span className={layawayProfit >= 0 ? "text-emerald-400" : "text-red-400"}>
+                              Layaway: ₵{layawayProfit.toLocaleString()}
+                            </span>
+                            <span className={creditProfit >= 0 ? "text-emerald-400" : "text-red-400"}>
+                              Credit: ₵{creditProfit.toLocaleString()}
+                            </span>
+                          </div>
+                        )
+                      })()}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1">
-                        {product.shopAssignments.length > 0 ? (
-                          <>
-                            {product.shopAssignments.slice(0, 3).map((sa) => {
-                              const isEditing = editingStock?.productId === product.id && editingStock?.shopId === sa.shopId
-                              return (
-                                <div 
-                                  key={sa.shopId} 
-                                  className={`flex items-center justify-between gap-2 px-2 py-1 rounded-lg text-xs ${
-                                    sa.stockQuantity === 0
-                                      ? "bg-red-500/10 text-red-400 border border-red-500/20"
-                                      : sa.stockQuantity <= sa.lowStockThreshold
-                                      ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                      : "bg-green-500/10 text-green-400 border border-green-500/20"
-                                  }`}
-                                >
-                                  <span className="truncate max-w-[60px]" title={sa.shopName}>{sa.shopName}</span>
-                                  {isEditing ? (
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      value={editingStockValue}
-                                      onChange={(e) => setEditingStockValue(e.target.value)}
-                                      onBlur={() => saveInlineStock(product.id, sa.shopId)}
-                                      onKeyDown={(e) => handleInlineStockKeyDown(e, product.id, sa.shopId)}
-                                      autoFocus
-                                      className="w-14 px-1 py-0.5 bg-white/10 border border-white/20 rounded text-white text-xs text-center focus:outline-none focus:border-cyan-500/50"
-                                      disabled={isPending}
-                                    />
-                                  ) : (
-                                    <button
-                                      onClick={() => startEditingStock(product.id, sa.shopId, sa.stockQuantity)}
-                                      className="font-medium whitespace-nowrap hover:bg-white/10 px-1.5 py-0.5 rounded transition-colors cursor-pointer"
-                                      title="Click to edit"
-                                    >
-                                      {sa.stockQuantity}
-                                    </button>
-                                  )}
-                                </div>
-                              )
-                            })}
-                            {product.shopAssignments.length > 3 && (
-                              <button
-                                onClick={() => openAssignModal(product)}
-                                className="text-[10px] text-slate-500 hover:text-slate-400 text-left"
-                              >
-                                +{product.shopAssignments.length - 3} more shops...
-                              </button>
-                            )}
-                            <div className="border-t border-white/10 pt-1 mt-0.5 text-[10px] text-slate-400">
-                              Total: <span className="text-white font-medium">{product.stockQuantity}</span>
+                        {shopFilter === "all" ? (
+                          // Show total stock when "All Shops" is selected
+                          product.shopAssignments.length > 0 ? (
+                            <div className={`inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                              product.stockQuantity === 0
+                                ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                : product.stockQuantity <= product.lowStockThreshold
+                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                : "bg-green-500/10 text-green-400 border border-green-500/20"
+                            }`}>
+                              <span>{product.stockQuantity}</span>
+                              <span className="text-xs opacity-70">units</span>
                             </div>
-                          </>
+                          ) : (
+                            <span className="text-slate-500 text-xs">Not assigned</span>
+                          )
                         ) : (
-                          <span className="text-slate-500 text-xs">Not assigned</span>
+                          // Show only the filtered shop's stock
+                          (() => {
+                            const filteredShopAssignment = product.shopAssignments.find(sa => sa.shopSlug === shopFilter)
+                            if (!filteredShopAssignment) {
+                              return <span className="text-slate-500 text-xs">Not in shop</span>
+                            }
+                            const isEditing = editingStock?.productId === product.id && editingStock?.shopId === filteredShopAssignment.shopId
+                            return (
+                              <div 
+                                className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm ${
+                                  filteredShopAssignment.stockQuantity === 0
+                                    ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                    : filteredShopAssignment.stockQuantity <= filteredShopAssignment.lowStockThreshold
+                                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                    : "bg-green-500/10 text-green-400 border border-green-500/20"
+                                }`}
+                              >
+                                {isEditing ? (
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={editingStockValue}
+                                    onChange={(e) => setEditingStockValue(e.target.value)}
+                                    onBlur={() => saveInlineStock(product.id, filteredShopAssignment.shopId)}
+                                    onKeyDown={(e) => handleInlineStockKeyDown(e, product.id, filteredShopAssignment.shopId)}
+                                    autoFocus
+                                    className="w-16 px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm text-center focus:outline-none focus:border-cyan-500/50"
+                                    disabled={isPending}
+                                  />
+                                ) : (
+                                  <button
+                                    onClick={() => startEditingStock(product.id, filteredShopAssignment.shopId, filteredShopAssignment.stockQuantity)}
+                                    className="font-medium whitespace-nowrap hover:bg-white/10 px-2 py-1 rounded transition-colors cursor-pointer"
+                                    title="Click to edit"
+                                  >
+                                    {filteredShopAssignment.stockQuantity} <span className="text-xs opacity-70">units</span>
+                                  </button>
+                                )}
+                              </div>
+                            )
+                          })()
                         )}
                       </div>
                     </td>
@@ -1249,13 +1366,21 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
-                    Shop Inventory
+                    Shop Inventory & Pricing
                   </label>
-                  <p className="text-xs text-slate-500 -mt-1">Set stock and low stock alert per shop</p>
+                  <p className="text-xs text-slate-500 -mt-1">Set stock, alerts, and custom pricing per shop</p>
                   
-                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                  <div className="space-y-3 max-h-[350px] overflow-y-auto">
                     {selectedProduct.shopAssignments.map((sa) => {
-                      const shopStock = editShopStocks[sa.shopId] || { stockQuantity: "0", lowStockThreshold: "5" }
+                      const shopStock = editShopStocks[sa.shopId] || { 
+                        stockQuantity: "0", 
+                        lowStockThreshold: "5",
+                        useCustomPricing: false,
+                        costPrice: formData.costPrice,
+                        cashPrice: formData.cashPrice,
+                        layawayPrice: formData.layawayPrice,
+                        creditPrice: formData.creditPrice,
+                      }
                       const currentStock = parseInt(shopStock.stockQuantity) || 0
                       const threshold = parseInt(shopStock.lowStockThreshold) || 5
                       
@@ -1310,6 +1435,88 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                               />
                             </div>
                           </div>
+
+                          {/* Custom Pricing Toggle */}
+                          <div className="mt-3 pt-2 border-t border-white/10">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={shopStock.useCustomPricing}
+                                onChange={(e) => setEditShopStocks(prev => ({
+                                  ...prev,
+                                  [sa.shopId]: { ...prev[sa.shopId], useCustomPricing: e.target.checked }
+                                }))}
+                                className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-cyan-500 focus:ring-cyan-500/20"
+                              />
+                              <span className="text-xs text-slate-300">Custom pricing for this shop</span>
+                            </label>
+                          </div>
+
+                          {/* Custom Pricing Fields */}
+                          {shopStock.useCustomPricing && (
+                            <div className="grid grid-cols-2 gap-2 mt-2 p-2 bg-cyan-500/5 border border-cyan-500/20 rounded-lg">
+                              <div>
+                                <label className="block text-[10px] text-rose-400 mb-1">Cost (₵)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={shopStock.costPrice}
+                                  onChange={(e) => setEditShopStocks(prev => ({
+                                    ...prev,
+                                    [sa.shopId]: { ...prev[sa.shopId], costPrice: e.target.value }
+                                  }))}
+                                  placeholder={formData.costPrice}
+                                  className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs text-center focus:outline-none focus:border-cyan-500/50"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-green-400 mb-1">Cash (₵)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={shopStock.cashPrice}
+                                  onChange={(e) => setEditShopStocks(prev => ({
+                                    ...prev,
+                                    [sa.shopId]: { ...prev[sa.shopId], cashPrice: e.target.value }
+                                  }))}
+                                  placeholder={formData.cashPrice}
+                                  className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs text-center focus:outline-none focus:border-cyan-500/50"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-blue-400 mb-1">Layaway (₵)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={shopStock.layawayPrice}
+                                  onChange={(e) => setEditShopStocks(prev => ({
+                                    ...prev,
+                                    [sa.shopId]: { ...prev[sa.shopId], layawayPrice: e.target.value }
+                                  }))}
+                                  placeholder={formData.layawayPrice}
+                                  className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs text-center focus:outline-none focus:border-cyan-500/50"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-amber-400 mb-1">Credit (₵)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={shopStock.creditPrice}
+                                  onChange={(e) => setEditShopStocks(prev => ({
+                                    ...prev,
+                                    [sa.shopId]: { ...prev[sa.shopId], creditPrice: e.target.value }
+                                  }))}
+                                  placeholder={formData.creditPrice}
+                                  className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs text-center focus:outline-none focus:border-cyan-500/50"
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -1584,43 +1791,158 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                         </label>
                       </div>
                       {assignment?.selected && (
-                        <div className="grid grid-cols-2 gap-3 mt-3 pl-7">
-                          <div>
-                            <label className="block text-[10px] text-slate-400 mb-1">Stock Qty</label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={assignment.stockQuantity}
-                              onChange={(e) =>
-                                setShopAssignments((prev) => ({
-                                  ...prev,
-                                  [shop.id]: {
-                                    ...prev[shop.id],
-                                    stockQuantity: e.target.value,
-                                  },
-                                }))
-                              }
-                              className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm text-center focus:outline-none focus:border-purple-500/50"
-                            />
+                        <div className="mt-3 pl-7 space-y-3">
+                          {/* Stock Settings Row */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] text-slate-400 mb-1">Stock Qty</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={assignment.stockQuantity}
+                                onChange={(e) =>
+                                  setShopAssignments((prev) => ({
+                                    ...prev,
+                                    [shop.id]: {
+                                      ...prev[shop.id],
+                                      stockQuantity: e.target.value,
+                                    },
+                                  }))
+                                }
+                                className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm text-center focus:outline-none focus:border-purple-500/50"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-amber-400 mb-1">Low Stock Alert</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={assignment.lowStockThreshold}
+                                onChange={(e) =>
+                                  setShopAssignments((prev) => ({
+                                    ...prev,
+                                    [shop.id]: {
+                                      ...prev[shop.id],
+                                      lowStockThreshold: e.target.value,
+                                    },
+                                  }))
+                                }
+                                className="w-full px-2 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm text-center focus:outline-none focus:border-amber-500/50"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="block text-[10px] text-amber-400 mb-1">Low Stock Alert</label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={assignment.lowStockThreshold}
-                              onChange={(e) =>
-                                setShopAssignments((prev) => ({
-                                  ...prev,
-                                  [shop.id]: {
-                                    ...prev[shop.id],
-                                    lowStockThreshold: e.target.value,
-                                  },
-                                }))
-                              }
-                              className="w-full px-2 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm text-center focus:outline-none focus:border-amber-500/50"
-                            />
+
+                          {/* Custom Pricing Toggle */}
+                          <div className="pt-2 border-t border-white/10">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={assignment.useCustomPricing}
+                                onChange={(e) =>
+                                  setShopAssignments((prev) => ({
+                                    ...prev,
+                                    [shop.id]: {
+                                      ...prev[shop.id],
+                                      useCustomPricing: e.target.checked,
+                                    },
+                                  }))
+                                }
+                                className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-cyan-500 focus:ring-cyan-500/20"
+                              />
+                              <span className="text-xs text-slate-300">Use custom pricing for this shop</span>
+                            </label>
                           </div>
+
+                          {/* Custom Pricing Fields */}
+                          {assignment.useCustomPricing && (
+                            <div className="grid grid-cols-2 gap-2 p-3 bg-cyan-500/5 border border-cyan-500/20 rounded-lg">
+                              <div>
+                                <label className="block text-[10px] text-rose-400 mb-1">Cost Price (₵)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={assignment.costPrice}
+                                  onChange={(e) =>
+                                    setShopAssignments((prev) => ({
+                                      ...prev,
+                                      [shop.id]: {
+                                        ...prev[shop.id],
+                                        costPrice: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  placeholder={selectedProduct.costPrice.toString()}
+                                  className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs text-center focus:outline-none focus:border-cyan-500/50"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-green-400 mb-1">Cash Price (₵)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={assignment.cashPrice}
+                                  onChange={(e) =>
+                                    setShopAssignments((prev) => ({
+                                      ...prev,
+                                      [shop.id]: {
+                                        ...prev[shop.id],
+                                        cashPrice: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  placeholder={selectedProduct.cashPrice.toString()}
+                                  className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs text-center focus:outline-none focus:border-cyan-500/50"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-blue-400 mb-1">Layaway Price (₵)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={assignment.layawayPrice}
+                                  onChange={(e) =>
+                                    setShopAssignments((prev) => ({
+                                      ...prev,
+                                      [shop.id]: {
+                                        ...prev[shop.id],
+                                        layawayPrice: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  placeholder={selectedProduct.layawayPrice.toString()}
+                                  className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs text-center focus:outline-none focus:border-cyan-500/50"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-amber-400 mb-1">Credit Price (₵)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={assignment.creditPrice}
+                                  onChange={(e) =>
+                                    setShopAssignments((prev) => ({
+                                      ...prev,
+                                      [shop.id]: {
+                                        ...prev[shop.id],
+                                        creditPrice: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  placeholder={selectedProduct.creditPrice.toString()}
+                                  className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs text-center focus:outline-none focus:border-cyan-500/50"
+                                />
+                              </div>
+                              <div className="col-span-2 mt-1">
+                                <p className="text-[10px] text-slate-500">
+                                  Default: Cost ₵{selectedProduct.costPrice.toLocaleString()}, Cash ₵{selectedProduct.cashPrice.toLocaleString()}, Layaway ₵{selectedProduct.layawayPrice.toLocaleString()}, Credit ₵{selectedProduct.creditPrice.toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

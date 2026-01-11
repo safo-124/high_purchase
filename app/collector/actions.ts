@@ -139,12 +139,13 @@ export async function getCollectorDashboard(shopSlug: string): Promise<Collector
     0
   )
 
-  // Get recent payments collected by this collector
+  // Get recent payments collected by this collector (only confirmed ones)
   const recentPayments = collectorMemberId
     ? await prisma.payment.findMany({
         where: {
           collectorId: collectorMemberId,
           status: "COMPLETED",
+          isConfirmed: true,
         },
         include: {
           purchase: {
@@ -543,6 +544,7 @@ export interface ProductForCollector {
   category: string | null
   imageUrl: string | null
   isActive: boolean
+  hasCustomPricing: boolean
 }
 
 export async function getProductsForCollector(shopSlug: string): Promise<ProductForCollector[]> {
@@ -567,20 +569,25 @@ export async function getProductsForCollector(shopSlug: string): Promise<Product
     orderBy: { product: { name: "asc" } },
   })
 
-  return shopProducts.map((sp) => ({
-    id: sp.product.id,
-    name: sp.product.name,
-    sku: sp.product.sku,
-    description: sp.product.description,
-    price: Number(sp.product.price),
-    cashPrice: Number(sp.product.cashPrice),
-    layawayPrice: Number(sp.product.layawayPrice),
-    creditPrice: Number(sp.product.creditPrice),
-    stockQuantity: sp.stockQuantity, // Use shop-specific stock
-    category: sp.product.category?.name || null,
-    imageUrl: sp.product.imageUrl,
-    isActive: sp.isActive,
-  }))
+  return shopProducts.map((sp) => {
+    const hasCustomPricing = !!(sp.costPrice || sp.cashPrice || sp.layawayPrice || sp.creditPrice)
+    return {
+      id: sp.product.id,
+      name: sp.product.name,
+      sku: sp.product.sku,
+      description: sp.product.description,
+      // Use shop-specific pricing if set, otherwise fall back to product pricing
+      price: Number(sp.cashPrice ?? sp.product.price),
+      cashPrice: Number(sp.cashPrice ?? sp.product.cashPrice),
+      layawayPrice: Number(sp.layawayPrice ?? sp.product.layawayPrice),
+      creditPrice: Number(sp.creditPrice ?? sp.product.creditPrice),
+      stockQuantity: sp.stockQuantity, // Use shop-specific stock
+      category: sp.product.category?.name || null,
+      imageUrl: sp.product.imageUrl,
+      isActive: sp.isActive,
+      hasCustomPricing,
+    }
+  })
 }
 
 // ============================================

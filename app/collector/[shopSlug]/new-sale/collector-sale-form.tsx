@@ -378,7 +378,12 @@ export function CollectorSaleForm({ shopSlug, products, customers: initialCustom
               <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                 <div className="flex justify-between items-start mb-3">
                   <div>
-                    <h3 className="font-medium text-white">{selectedProduct.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium text-white">{selectedProduct.name}</h3>
+                      {selectedProduct.hasCustomPricing && (
+                        <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">shop pricing</span>
+                      )}
+                    </div>
                     {selectedProduct.category && (
                       <p className="text-xs text-slate-400">{selectedProduct.category}</p>
                     )}
