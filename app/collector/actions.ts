@@ -548,30 +548,38 @@ export interface ProductForCollector {
 export async function getProductsForCollector(shopSlug: string): Promise<ProductForCollector[]> {
   const { shop } = await requireCollectorForShop(shopSlug)
 
-  const products = await prisma.product.findMany({
+  // Get products via ShopProduct junction table
+  const shopProducts = await prisma.shopProduct.findMany({
     where: {
       shopId: shop.id,
       isActive: true,
+      product: {
+        isActive: true,
+      },
     },
     include: {
-      category: true,
+      product: {
+        include: {
+          category: true,
+        },
+      },
     },
-    orderBy: { name: "asc" },
+    orderBy: { product: { name: "asc" } },
   })
 
-  return products.map((p) => ({
-    id: p.id,
-    name: p.name,
-    sku: p.sku,
-    description: p.description,
-    price: Number(p.price),
-    cashPrice: Number(p.cashPrice),
-    layawayPrice: Number(p.layawayPrice),
-    creditPrice: Number(p.creditPrice),
-    stockQuantity: p.stockQuantity,
-    category: p.category?.name || null,
-    imageUrl: p.imageUrl,
-    isActive: p.isActive,
+  return shopProducts.map((sp) => ({
+    id: sp.product.id,
+    name: sp.product.name,
+    sku: sp.product.sku,
+    description: sp.product.description,
+    price: Number(sp.product.price),
+    cashPrice: Number(sp.product.cashPrice),
+    layawayPrice: Number(sp.product.layawayPrice),
+    creditPrice: Number(sp.product.creditPrice),
+    stockQuantity: sp.stockQuantity, // Use shop-specific stock
+    category: sp.product.category?.name || null,
+    imageUrl: sp.product.imageUrl,
+    isActive: sp.isActive,
   }))
 }
 

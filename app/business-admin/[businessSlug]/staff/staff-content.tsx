@@ -9,6 +9,7 @@ import {
   toggleStaffActive,
 } from "../../actions"
 import { CollectorDetailsModal } from "./collector-details-modal"
+import { SalesStaffDetailsModal } from "./sales-staff-details-modal"
 
 interface StaffMember {
   id: string
@@ -63,6 +64,7 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
   const [deleteConfirm, setDeleteConfirm] = useState<StaffMember | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [selectedCollectorId, setSelectedCollectorId] = useState<string | null>(null)
+  const [selectedSalesStaffId, setSelectedSalesStaffId] = useState<string | null>(null)
   
   // Form fields
   const [formData, setFormData] = useState({
@@ -315,11 +317,22 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                 {sortedStaff.map((member) => {
                   const colors = roleColors[member.role] || roleColors.SALES_STAFF
                   const isCollector = member.role === "DEBT_COLLECTOR"
+                  const isSalesStaff = member.role === "SALES_STAFF"
+                  const isClickable = isCollector || isSalesStaff
+                  
+                  const handleRowClick = () => {
+                    if (isCollector) {
+                      setSelectedCollectorId(member.id)
+                    } else if (isSalesStaff) {
+                      setSelectedSalesStaffId(member.id)
+                    }
+                  }
+                  
                   return (
                     <tr 
                       key={member.id} 
-                      className={`hover:bg-white/[0.02] transition-colors ${isCollector ? "cursor-pointer" : ""}`}
-                      onClick={() => isCollector && setSelectedCollectorId(member.id)}
+                      className={`hover:bg-white/[0.02] transition-colors ${isClickable ? "cursor-pointer" : ""}`}
+                      onClick={handleRowClick}
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -331,8 +344,12 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                           <div>
                             <div className="flex items-center gap-2">
                               <p className="font-medium text-white">{member.userName || "No Name"}</p>
-                              {isCollector && (
-                                <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded text-[10px] font-medium">
+                              {isClickable && (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                  isCollector 
+                                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                    : "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+                                }`}>
                                   Click to view
                                 </span>
                               )}
@@ -370,6 +387,17 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                          {isSalesStaff && (
+                            <button
+                              onClick={() => setSelectedSalesStaffId(member.id)}
+                              className="p-2 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition-all"
+                              title="View Transaction Sheet"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                            </button>
+                          )}
                           {isCollector && (
                             <button
                               onClick={() => setSelectedCollectorId(member.id)}
@@ -581,6 +609,15 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
           collectorId={selectedCollectorId}
           businessSlug={businessSlug}
           onClose={() => setSelectedCollectorId(null)}
+        />
+      )}
+
+      {/* Sales Staff Details Modal */}
+      {selectedSalesStaffId && (
+        <SalesStaffDetailsModal
+          staffId={selectedSalesStaffId}
+          businessSlug={businessSlug}
+          onClose={() => setSelectedSalesStaffId(null)}
         />
       )}
     </>

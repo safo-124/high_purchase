@@ -1669,6 +1669,183 @@ export async function getCollectorDetails(
   }
 }
 
+/**
+ * Get detailed sales staff transaction data
+ */
+export interface SalesStaffDetailsData {
+  id: string
+  name: string
+  email: string
+  shopName: string
+  shopSlug: string
+  isActive: boolean
+  joinedAt: Date
+  stats: {
+    totalCustomersSignedUp: number
+    totalSales: number
+    cashSales: number
+    cashSalesAmount: number
+    creditSales: number
+    creditSalesAmount: number
+    layawaySales: number
+    layawaySalesAmount: number
+    totalProductsSold: number
+    deliveredItems: number
+    pendingDeliveries: number
+  }
+  recentSales: {
+    id: string
+    purchaseNumber: string
+    customerName: string
+    purchaseType: string
+    totalAmount: number
+    status: string
+    deliveryStatus: string
+    productCount: number
+    createdAt: Date
+  }[]
+  deliveries: {
+    id: string
+    purchaseNumber: string
+    customerName: string
+    deliveryStatus: string
+    deliveredAt: Date | null
+    productNames: string[]
+  }[]
+}
+
+export async function getSalesStaffDetails(
+  businessSlug: string,
+  staffId: string
+): Promise<ActionResult> {
+  try {
+    const { business } = await requireBusinessAdmin(businessSlug)
+
+    // Get the sales staff member
+    const staffMember = await prisma.shopMember.findFirst({
+      where: {
+        id: staffId,
+        role: "SALES_STAFF",
+        shop: { businessId: business.id },
+      },
+      include: {
+        user: true,
+        shop: {
+          select: { id: true, name: true, shopSlug: true },
+        },
+        deliveredPurchases: {
+          orderBy: { deliveredAt: "desc" },
+          take: 50,
+          include: {
+            customer: true,
+            items: true,
+          },
+        },
+      },
+    })
+
+    if (!staffMember) {
+      return { success: false, error: "Sales staff member not found" }
+    }
+
+    // Count customers created by this user (via audit log)
+    const customersCreated = await prisma.auditLog.count({
+      where: {
+        actorUserId: staffMember.userId,
+        action: "CUSTOMER_CREATED",
+        entityType: "Customer",
+      },
+    })
+
+    // Get sales created by this user
+    const sales = await prisma.auditLog.findMany({
+      where: {
+        actorUserId: staffMember.userId,
+        action: "SALE_CREATED",
+        entityType: "Purchase",
+      },
+      select: {
+        entityId: true,
+      },
+    })
+
+    const saleIds = sales.map(s => s.entityId).filter(Boolean) as string[]
+
+    // Get purchase details
+    const purchases = await prisma.purchase.findMany({
+      where: {
+        id: { in: saleIds },
+      },
+      include: {
+        customer: true,
+        items: true,
+      },
+      orderBy: { createdAt: "desc" },
+    })
+
+    // Calculate stats
+    const cashSales = purchases.filter(p => p.purchaseType === "CASH")
+    const creditSales = purchases.filter(p => p.purchaseType === "CREDIT")
+    const layawaySales = purchases.filter(p => p.purchaseType === "LAYAWAY")
+    const totalProductsSold = purchases.reduce((sum, p) => sum + p.items.reduce((s, i) => s + i.quantity, 0), 0)
+
+    const stats = {
+      totalCustomersSignedUp: customersCreated,
+      totalSales: purchases.length,
+      cashSales: cashSales.length,
+      cashSalesAmount: cashSales.reduce((sum, p) => sum + Number(p.totalAmount), 0),
+      creditSales: creditSales.length,
+      creditSalesAmount: creditSales.reduce((sum, p) => sum + Number(p.totalAmount), 0),
+      layawaySales: layawaySales.length,
+      layawaySalesAmount: layawaySales.reduce((sum, p) => sum + Number(p.totalAmount), 0),
+      totalProductsSold,
+      deliveredItems: staffMember.deliveredPurchases.length,
+      pendingDeliveries: purchases.filter(p => p.deliveryStatus === "PENDING" || p.deliveryStatus === "SCHEDULED").length,
+    }
+
+    // Format recent sales
+    const recentSales = purchases.slice(0, 20).map(p => ({
+      id: p.id,
+      purchaseNumber: p.purchaseNumber,
+      customerName: `${p.customer.firstName} ${p.customer.lastName}`,
+      purchaseType: p.purchaseType,
+      totalAmount: Number(p.totalAmount),
+      status: p.status,
+      deliveryStatus: p.deliveryStatus,
+      productCount: p.items.reduce((sum, i) => sum + i.quantity, 0),
+      createdAt: p.createdAt,
+    }))
+
+    // Format deliveries made by this staff
+    const deliveries = staffMember.deliveredPurchases.map(p => ({
+      id: p.id,
+      purchaseNumber: p.purchaseNumber,
+      customerName: `${p.customer.firstName} ${p.customer.lastName}`,
+      deliveryStatus: p.deliveryStatus,
+      deliveredAt: p.deliveredAt,
+      productNames: p.items.map(i => i.productName),
+    }))
+
+    const data: SalesStaffDetailsData = {
+      id: staffMember.id,
+      name: staffMember.user.name || "No Name",
+      email: staffMember.user.email,
+      shopName: staffMember.shop.name,
+      shopSlug: staffMember.shop.shopSlug,
+      isActive: staffMember.isActive,
+      joinedAt: staffMember.createdAt,
+      stats,
+      recentSales,
+      deliveries,
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    console.error("Get sales staff details error:", error)
+    return { success: false, error: "Failed to fetch sales staff details" }
+  }
+}
+
 // ===== CATEGORY MANAGEMENT =====
 
 export interface CategoryPayload {
