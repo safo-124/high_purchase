@@ -477,9 +477,11 @@ export async function updateProduct(
 
       // Update shop-specific stock if provided
       if (payload.stockQuantity !== undefined) {
+        // Ensure stock cannot be negative
+        const validStock = Math.max(0, payload.stockQuantity)
         await tx.shopProduct.update({
           where: { id: shopProduct.id },
-          data: { stockQuantity: payload.stockQuantity },
+          data: { stockQuantity: validStock },
         })
       }
 
@@ -1750,19 +1752,37 @@ export async function createPurchase(
 
     const purchaseNumber = await generatePurchaseNumber(customer.id)
 
-    // Validate stock availability for all items
+    // Validate stock availability for all items (check ShopProduct for shop-specific stock)
     for (const item of payload.items) {
-      const product = await prisma.product.findUnique({
-        where: { id: item.productId },
-        select: { stockQuantity: true, name: true },
+      const shopProduct = await prisma.shopProduct.findFirst({
+        where: { 
+          shopId: shop.id,
+          productId: item.productId 
+        },
+        include: { product: { select: { name: true } } },
       })
-      if (!product) {
-        return { success: false, error: `Product not found: ${item.productName}` }
-      }
-      if (product.stockQuantity < item.quantity) {
-        return { 
-          success: false, 
-          error: `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}` 
+      
+      // Fall back to Product table if no ShopProduct exists
+      if (!shopProduct) {
+        const product = await prisma.product.findUnique({
+          where: { id: item.productId },
+          select: { stockQuantity: true, name: true },
+        })
+        if (!product) {
+          return { success: false, error: `Product not found: ${item.productName}` }
+        }
+        if (product.stockQuantity < item.quantity) {
+          return { 
+            success: false, 
+            error: `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}` 
+          }
+        }
+      } else {
+        if (shopProduct.stockQuantity < item.quantity) {
+          return { 
+            success: false, 
+            error: `Insufficient stock for ${shopProduct.product.name}. Available: ${shopProduct.stockQuantity}, Requested: ${item.quantity}` 
+          }
         }
       }
     }
