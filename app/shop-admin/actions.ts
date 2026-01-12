@@ -1819,7 +1819,7 @@ export async function createPurchase(
     // Stock deduction is deferred until payment is completed
     // This ensures stock is only deducted when customer fully pays (waybill + delivery)
 
-    // If down payment was made, record it as a payment
+    // If down payment was made, record it as a payment (already confirmed since it's counted in amountPaid)
     if (downPayment > 0) {
       await prisma.payment.create({
         data: {
@@ -1827,6 +1827,8 @@ export async function createPurchase(
           amount: downPayment,
           paymentMethod: "CASH", // Default for in-store down payments
           status: "COMPLETED",
+          isConfirmed: true,
+          confirmedAt: new Date(),
           paidAt: new Date(),
           notes: "Down payment",
         },
@@ -3976,7 +3978,7 @@ export async function createSale(
         },
       })
 
-      // Create down payment record if > 0
+      // Create down payment record if > 0 (already confirmed since it's counted in amountPaid)
       if (downPayment > 0) {
         await tx.payment.create({
           data: {
@@ -3984,6 +3986,8 @@ export async function createSale(
             amount: new Prisma.Decimal(downPayment),
             paymentMethod: "CASH",
             status: "COMPLETED",
+            isConfirmed: true,
+            confirmedAt: new Date(),
             paidAt: new Date(),
             notes: "Down payment at time of purchase",
           },

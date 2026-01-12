@@ -493,7 +493,7 @@ export async function createSale(
         },
       })
 
-      // Create down payment record if > 0
+      // Create down payment record if > 0 (already confirmed since it's counted in amountPaid)
       if (downPayment > 0) {
         await tx.payment.create({
           data: {
@@ -501,6 +501,8 @@ export async function createSale(
             amount: new Prisma.Decimal(downPayment),
             paymentMethod: "CASH",
             status: "COMPLETED",
+            isConfirmed: true,
+            confirmedAt: new Date(),
             paidAt: new Date(),
             notes: "Down payment at time of purchase",
           },
