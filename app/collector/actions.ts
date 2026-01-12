@@ -120,7 +120,6 @@ export async function getCollectorDashboard(shopSlug: string): Promise<Collector
             },
             select: {
               outstandingBalance: true,
-              amountPaid: true,
             },
           },
         },
@@ -134,10 +133,22 @@ export async function getCollectorDashboard(shopSlug: string): Promise<Collector
     (sum, c) => sum + c.purchases.reduce((ps, p) => ps + Number(p.outstandingBalance), 0),
     0
   )
-  const totalCollected = customers.reduce(
-    (sum, c) => sum + c.purchases.reduce((ps, p) => ps + Number(p.amountPaid), 0),
-    0
-  )
+
+  // Calculate totalCollected from CONFIRMED payments made by THIS collector
+  // NOT from purchase.amountPaid which includes all payments (down payments, other collectors, etc.)
+  const confirmedPaymentsByCollector = collectorMemberId
+    ? await prisma.payment.aggregate({
+        where: {
+          collectorId: collectorMemberId,
+          isConfirmed: true,
+        },
+        _sum: { amount: true },
+      })
+    : { _sum: { amount: null } }
+  
+  const totalCollected = confirmedPaymentsByCollector._sum.amount 
+    ? Number(confirmedPaymentsByCollector._sum.amount) 
+    : 0
 
   // Get recent payments collected by this collector (only confirmed ones)
   const recentPayments = collectorMemberId
@@ -195,19 +206,44 @@ export async function getAssignedCustomers(shopSlug: string): Promise<AssignedCu
     include: {
       purchases: {
         select: {
+          id: true,
           status: true,
           outstandingBalance: true,
-          amountPaid: true,
         },
       },
     },
     orderBy: { createdAt: "desc" },
   })
 
+  // Get confirmed payments by this collector for these customers
+  const customerIds = customers.map(c => c.id)
+  const confirmedPaymentsByCustomer = collectorMemberId && customerIds.length > 0
+    ? await prisma.payment.groupBy({
+        by: ['purchaseId'],
+        where: {
+          collectorId: collectorMemberId,
+          isConfirmed: true,
+          purchase: {
+            customerId: { in: customerIds },
+          },
+        },
+        _sum: { amount: true },
+      })
+    : []
+
+  // Create a map of purchaseId to confirmed amount
+  const purchasePaymentMap = new Map<string, number>()
+  confirmedPaymentsByCustomer.forEach(p => {
+    purchasePaymentMap.set(p.purchaseId, Number(p._sum.amount) || 0)
+  })
+
   return customers.map((c) => {
     const activePurchases = c.purchases.filter(
       (p) => p.status === "ACTIVE" || p.status === "PENDING" || p.status === "OVERDUE"
     )
+    // Sum confirmed payments by this collector for this customer's purchases
+    const totalPaid = c.purchases.reduce((sum, p) => sum + (purchasePaymentMap.get(p.id) || 0), 0)
+    
     return {
       id: c.id,
       firstName: c.firstName,
@@ -219,7 +255,7 @@ export async function getAssignedCustomers(shopSlug: string): Promise<AssignedCu
       totalPurchases: c.purchases.length,
       activePurchases: activePurchases.length,
       totalOwed: activePurchases.reduce((sum, p) => sum + Number(p.outstandingBalance), 0),
-      totalPaid: c.purchases.reduce((sum, p) => sum + Number(p.amountPaid), 0),
+      totalPaid,
     }
   })
 }
