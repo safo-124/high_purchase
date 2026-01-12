@@ -57,10 +57,10 @@ export default async function CollectorCustomerDetailPage({ params }: CollectorC
   const totalPaid = purchases.reduce((sum, p) => sum + p.amountPaid, 0)
 
   return (
-    <div className="p-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
+    <div className="p-4 sm:p-6">
+      {/* Page Header - Stacked on mobile */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
+        <div className="flex items-center gap-3 sm:gap-4">
           <Link
             href={`/collector/${shopSlug}/customers`}
             className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"
@@ -70,75 +70,75 @@ export default async function CollectorCustomerDetailPage({ params }: CollectorC
             </svg>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className="text-xl sm:text-2xl font-bold text-white">
               {customer.firstName} {customer.lastName}
             </h1>
             <p className="text-sm text-slate-400">{customer.phone}</p>
           </div>
         </div>
         {totalOwed > 0 && (
-          <div className="text-right">
+          <div className="text-left sm:text-right ml-11 sm:ml-0">
             <p className="text-xs text-slate-400 uppercase tracking-wider">To Collect</p>
-            <p className="text-xl font-bold text-orange-400">GHS {totalOwed.toLocaleString()}</p>
+            <p className="text-lg sm:text-xl font-bold text-orange-400">GHS {totalOwed.toLocaleString()}</p>
           </div>
         )}
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-          <div className="glass-card p-5 rounded-2xl">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+          <div className="glass-card p-4 sm:p-5 rounded-2xl">
             <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Total Purchases</p>
-            <p className="text-2xl font-bold text-white">{purchases.length}</p>
+            <p className="text-xl sm:text-2xl font-bold text-white">{purchases.length}</p>
           </div>
-          <div className="glass-card p-5 rounded-2xl">
+          <div className="glass-card p-4 sm:p-5 rounded-2xl">
             <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Active Loans</p>
-            <p className="text-2xl font-bold text-blue-400">{activePurchases.length}</p>
+            <p className="text-xl sm:text-2xl font-bold text-blue-400">{activePurchases.length}</p>
           </div>
-          <div className="glass-card p-5 rounded-2xl">
+          <div className="glass-card p-4 sm:p-5 rounded-2xl">
             <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Outstanding</p>
-            <p className="text-xl font-bold text-orange-400">GHS {totalOwed.toLocaleString()}</p>
+            <p className="text-lg sm:text-xl font-bold text-orange-400">GHS {totalOwed.toLocaleString()}</p>
           </div>
-          <div className="glass-card p-5 rounded-2xl">
+          <div className="glass-card p-4 sm:p-5 rounded-2xl">
             <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Total Paid</p>
-            <p className="text-xl font-bold text-emerald-400">GHS {totalPaid.toLocaleString()}</p>
+            <p className="text-lg sm:text-xl font-bold text-emerald-400">GHS {totalPaid.toLocaleString()}</p>
           </div>
         </div>
 
         {/* Customer Info */}
-        <div className="glass-card rounded-2xl p-6 mb-8">
-          <h2 className="text-lg font-semibold text-white mb-4">Customer Information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="glass-card rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8">
+          <h2 className="text-base sm:text-lg font-semibold text-white mb-4">Customer Information</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Phone</p>
-              <p className="text-white">{customer.phone}</p>
+              <p className="text-sm sm:text-base text-white">{customer.phone}</p>
             </div>
             {customer.email && (
-              <div>
+              <div className="col-span-2 sm:col-span-1">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Email</p>
-                <p className="text-white">{customer.email}</p>
+                <p className="text-sm sm:text-base text-white truncate">{customer.email}</p>
               </div>
             )}
             {customer.address && (
-              <div>
+              <div className="col-span-2 sm:col-span-1">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Address</p>
-                <p className="text-white">{customer.address}</p>
+                <p className="text-sm sm:text-base text-white">{customer.address}</p>
               </div>
             )}
             {customer.city && (
               <div>
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">City</p>
-                <p className="text-white">{customer.city}</p>
+                <p className="text-sm sm:text-base text-white">{customer.city}</p>
               </div>
             )}
             {customer.region && (
               <div>
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Region</p>
-                <p className="text-white">{customer.region}</p>
+                <p className="text-sm sm:text-base text-white">{customer.region}</p>
               </div>
             )}
             <div>
               <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Customer Since</p>
-              <p className="text-white">{new Date(customer.createdAt).toLocaleDateString()}</p>
+              <p className="text-sm sm:text-base text-white">{new Date(customer.createdAt).toLocaleDateString()}</p>
             </div>
           </div>
         </div>

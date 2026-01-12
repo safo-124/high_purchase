@@ -20,11 +20,11 @@ export default async function CollectorNewSalePage({ params }: CollectorNewSaleP
   const availableProducts = products.filter((p) => p.stockQuantity > 0)
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       {/* Page Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-2">New Sale</h1>
-        <p className="text-slate-400">Create a new sale for a customer</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-white mb-1 sm:mb-2">New Sale</h1>
+        <p className="text-sm sm:text-base text-slate-400">Create a new sale for a customer</p>
       </div>
 
       <div className="max-w-4xl">

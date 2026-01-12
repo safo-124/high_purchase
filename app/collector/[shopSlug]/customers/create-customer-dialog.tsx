@@ -102,24 +102,24 @@ export function CreateCustomerDialog({ shopSlug }: CreateCustomerDialogProps) {
       </button>
 
       {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-        <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="bg-slate-900 border border-white/10 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg sm:mx-4 shadow-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
           {/* Header */}
-          <div className="sticky top-0 z-10 bg-slate-900 border-b border-white/5 px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/15 border border-emerald-500/30 flex items-center justify-center">
-                <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="sticky top-0 z-10 bg-slate-900 border-b border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 sm:w-10 h-8 sm:h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/15 border border-emerald-500/30 flex items-center justify-center">
+                <svg className="w-4 sm:w-5 h-4 sm:h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                 </svg>
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white">New Customer</h2>
-                <p className="text-xs text-slate-400">Will be assigned to you</p>
+                <h2 className="text-base sm:text-lg font-bold text-white">New Customer</h2>
+                <p className="text-[10px] sm:text-xs text-slate-400">Will be assigned to you</p>
               </div>
             </div>
             <button
               onClick={() => { setOpen(false); resetForm() }}
-              className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-all"
+              className="p-2 rounded-lg hover:bg-white/5 active:bg-white/10 text-slate-400 hover:text-white transition-all"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
@@ -127,31 +127,31 @@ export function CreateCustomerDialog({ shopSlug }: CreateCustomerDialogProps) {
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-3 sm:space-y-4">
             {/* Name Row */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">
                   First Name <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="text"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   placeholder="Kofi"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">
                   Last Name <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="text"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   placeholder="Mensah"
                   required
                 />
@@ -160,14 +160,14 @@ export function CreateCustomerDialog({ shopSlug }: CreateCustomerDialogProps) {
 
             {/* Phone */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">
                 Phone Number <span className="text-red-400">*</span>
               </label>
               <input
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 placeholder="0244123456"
                 required
               />
@@ -175,46 +175,46 @@ export function CreateCustomerDialog({ shopSlug }: CreateCustomerDialogProps) {
 
             {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
+              <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 placeholder="kofi@email.com"
               />
             </div>
 
             {/* Address */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Address</label>
+              <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Address</label>
               <input
                 type="text"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 placeholder="123 Main St, Accra"
               />
             </div>
 
             {/* City & Region */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">City</label>
+                <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">City</label>
                 <input
                   type="text"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   placeholder="Accra"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Region</label>
+                <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Region</label>
                 <select
                   value={region}
                   onChange={(e) => setRegion(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 >
                   <option value="">Select region</option>
                   <option value="Greater Accra">Greater Accra</option>
@@ -232,13 +232,13 @@ export function CreateCustomerDialog({ shopSlug }: CreateCustomerDialogProps) {
             </div>
 
             {/* ID Type & Number */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">ID Type</label>
+                <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">ID Type</label>
                 <select
                   value={idType}
                   onChange={(e) => setIdType(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 >
                   <option value="">Select ID type</option>
                   <option value="Ghana Card">Ghana Card</option>
@@ -248,42 +248,42 @@ export function CreateCustomerDialog({ shopSlug }: CreateCustomerDialogProps) {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">ID Number</label>
+                <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">ID Number</label>
                 <input
                   type="text"
                   value={idNumber}
                   onChange={(e) => setIdNumber(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                  placeholder="GHA-XXXXXXXXX-X"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  placeholder="GHA-XXX..."
                 />
               </div>
             </div>
 
             {/* Notes */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
+              <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Notes</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
                 placeholder="Any additional notes..."
               />
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 pt-3 sm:pt-4 pb-4 sm:pb-0">
               <button
                 type="button"
                 onClick={() => { setOpen(false); resetForm() }}
-                className="px-5 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-all"
+                className="w-full sm:w-auto px-5 py-2.5 sm:py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 active:bg-white/10 text-sm font-medium transition-all"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-medium text-sm shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                className="w-full sm:w-auto px-6 py-3 sm:py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:from-emerald-800 active:to-teal-800 text-white font-medium text-sm shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>

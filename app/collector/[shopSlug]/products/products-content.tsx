@@ -56,15 +56,15 @@ export function ProductsContent({ products }: ProductsContentProps) {
           </svg>
           <input
             type="text"
-            placeholder="Search products by name, SKU, or description..."
+            placeholder="Search products..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 rounded-xl bg-slate-800 border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500/50 transition-all"
+            className="w-full pl-12 pr-4 py-3 rounded-xl bg-slate-800 border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500/50 transition-all text-sm sm:text-base"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -80,14 +80,14 @@ export function ProductsContent({ products }: ProductsContentProps) {
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
                   selectedCategory === category
                     ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                    : "bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10 hover:text-white"
+                    : "bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10 hover:text-white active:bg-white/15"
                 }`}
               >
-                {category === "all" ? "All Products" : category}
-                <span className="ml-2 text-xs opacity-70">
+                {category === "all" ? "All" : category}
+                <span className="ml-1 sm:ml-2 text-[10px] sm:text-xs opacity-70">
                   ({category === "all" 
                     ? products.length 
                     : products.filter((p) => p.category === category).length
@@ -100,7 +100,7 @@ export function ProductsContent({ products }: ProductsContentProps) {
 
         {/* Results count */}
         {(searchQuery || selectedCategory !== "all") && (
-          <p className="text-sm text-slate-400">
+          <p className="text-xs sm:text-sm text-slate-400">
             Showing {filteredProducts.length} of {products.length} products
             {searchQuery && <span> matching &ldquo;{searchQuery}&rdquo;</span>}
             {selectedCategory !== "all" && <span> in {selectedCategory}</span>}
@@ -109,7 +109,7 @@ export function ProductsContent({ products }: ProductsContentProps) {
       </div>
 
       {/* Products Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filteredProducts.map((product) => (
           <div key={product.id} className="glass-card rounded-2xl overflow-hidden">
             {product.imageUrl ? (

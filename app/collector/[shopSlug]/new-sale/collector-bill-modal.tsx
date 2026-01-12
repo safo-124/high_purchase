@@ -107,26 +107,26 @@ export function CollectorBillModal({ shopSlug, purchaseId, onClose }: CollectorB
         }
       `}</style>
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm no-print" onClick={onClose} />
         
-        <div className="relative bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto print-area">
+        <div className="relative bg-slate-900 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto print-area">
           {/* Header Actions */}
-          <div className="sticky top-0 z-10 bg-slate-900 border-b border-white/10 p-4 flex justify-between items-center no-print">
-            <h2 className="text-xl font-bold text-white">Sale Bill</h2>
-            <div className="flex items-center gap-3">
+          <div className="sticky top-0 z-10 bg-slate-900 border-b border-white/10 p-3 sm:p-4 flex justify-between items-center no-print">
+            <h2 className="text-lg sm:text-xl font-bold text-white">Sale Bill</h2>
+            <div className="flex items-center gap-2 sm:gap-3">
               <button
                 onClick={handlePrint}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-all"
+                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 active:bg-emerald-500/40 transition-all text-sm"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                 </svg>
-                Print
+                <span className="hidden sm:inline">Print</span>
               </button>
               <button
                 onClick={onClose}
-                className="p-2 rounded-xl bg-white/10 text-slate-400 hover:bg-white/20 hover:text-white transition-all"
+                className="p-2 rounded-xl bg-white/10 text-slate-400 hover:bg-white/20 hover:text-white active:bg-white/30 transition-all"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -136,49 +136,67 @@ export function CollectorBillModal({ shopSlug, purchaseId, onClose }: CollectorB
           </div>
 
           {/* Bill Content */}
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {/* Business Header */}
-            <div className="text-center mb-6 pb-6 border-b border-white/10">
-              <h1 className="text-2xl font-bold text-white">{bill.shop.name}</h1>
-              {bill.shop.address && <p className="text-slate-400">{bill.shop.address}</p>}
-              {bill.shop.phone && <p className="text-sm text-slate-400">Tel: {bill.shop.phone}</p>}
+            <div className="text-center mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-white/10">
+              <h1 className="text-xl sm:text-2xl font-bold text-white">{bill.shop.name}</h1>
+              {bill.shop.address && <p className="text-slate-400 text-sm sm:text-base">{bill.shop.address}</p>}
+              {bill.shop.phone && <p className="text-xs sm:text-sm text-slate-400">Tel: {bill.shop.phone}</p>}
             </div>
 
             {/* Bill Info */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
               <div>
-                <p className="text-sm text-slate-400">Bill #</p>
-                <p className="text-white font-mono">{bill.purchaseNumber}</p>
+                <p className="text-xs sm:text-sm text-slate-400">Bill #</p>
+                <p className="text-white font-mono text-sm sm:text-base">{bill.purchaseNumber}</p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-slate-400">Date</p>
-                <p className="text-white">{new Date(bill.createdAt).toLocaleDateString()}</p>
+                <p className="text-xs sm:text-sm text-slate-400">Date</p>
+                <p className="text-white text-sm sm:text-base">{new Date(bill.createdAt).toLocaleDateString()}</p>
               </div>
             </div>
 
             {/* Customer Info */}
-            <div className="p-4 rounded-xl bg-white/5 mb-6">
-              <h3 className="text-sm font-medium text-slate-400 mb-2">Customer</h3>
-              <p className="text-white font-medium">{bill.customer.name}</p>
-              <p className="text-slate-400 text-sm">{bill.customer.phone}</p>
+            <div className="p-3 sm:p-4 rounded-xl bg-white/5 mb-4 sm:mb-6">
+              <h3 className="text-xs sm:text-sm font-medium text-slate-400 mb-2">Customer</h3>
+              <p className="text-white font-medium text-sm sm:text-base">{bill.customer.name}</p>
+              <p className="text-slate-400 text-xs sm:text-sm">{bill.customer.phone}</p>
               {bill.customer.address && (
-                <p className="text-slate-400 text-sm">{bill.customer.address}</p>
+                <p className="text-slate-400 text-xs sm:text-sm">{bill.customer.address}</p>
               )}
               {bill.customer.city && bill.customer.region && (
-                <p className="text-slate-400 text-sm">{bill.customer.city}, {bill.customer.region}</p>
+                <p className="text-slate-400 text-xs sm:text-sm">{bill.customer.city}, {bill.customer.region}</p>
               )}
             </div>
 
             {/* Collector Info */}
             {bill.collectorName && (
-              <div className="p-4 rounded-xl bg-white/5 mb-6">
-                <h3 className="text-sm font-medium text-slate-400 mb-2">Collector</h3>
-                <p className="text-white">{bill.collectorName}</p>
+              <div className="p-3 sm:p-4 rounded-xl bg-white/5 mb-4 sm:mb-6">
+                <h3 className="text-xs sm:text-sm font-medium text-slate-400 mb-2">Collector</h3>
+                <p className="text-white text-sm sm:text-base">{bill.collectorName}</p>
               </div>
             )}
 
-            {/* Items */}
-            <div className="mb-6">
+            {/* Items - Mobile Card View */}
+            <div className="mb-4 sm:mb-6 sm:hidden">
+              <h3 className="text-xs font-medium text-slate-400 mb-3">Items</h3>
+              <div className="space-y-2">
+                {bill.items.map((item, idx) => (
+                  <div key={idx} className="p-3 rounded-xl bg-white/5 border border-white/10">
+                    <div className="flex justify-between items-start mb-2">
+                      <p className="text-white font-medium text-sm flex-1 pr-2">{item.productName}</p>
+                      <p className="text-white font-medium text-sm">GHS {item.totalPrice.toLocaleString()}</p>
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-400">
+                      <span>{item.quantity} × GHS {item.unitPrice.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Items - Desktop Table View */}
+            <div className="mb-4 sm:mb-6 hidden sm:block">
               <h3 className="text-sm font-medium text-slate-400 mb-3">Items</h3>
               <div className="rounded-xl border border-white/10 overflow-hidden">
                 <table className="w-full">
@@ -205,38 +223,38 @@ export function CollectorBillModal({ shopSlug, purchaseId, onClose }: CollectorB
             </div>
 
             {/* Totals */}
-            <div className="space-y-2 mb-6">
-              <div className="flex justify-between text-sm">
+            <div className="space-y-2 mb-4 sm:mb-6">
+              <div className="flex justify-between text-xs sm:text-sm">
                 <span className="text-slate-400">Subtotal</span>
                 <span className="text-white">GHS {bill.subtotal.toLocaleString()}</span>
               </div>
               {bill.interestAmount > 0 && (
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-xs sm:text-sm">
                   <span className="text-slate-400">Interest ({bill.interestRate}%)</span>
                   <span className="text-white">GHS {bill.interestAmount.toLocaleString()}</span>
                 </div>
               )}
-              <div className="flex justify-between text-sm border-t border-white/10 pt-2">
+              <div className="flex justify-between text-xs sm:text-sm border-t border-white/10 pt-2">
                 <span className="text-slate-400">Total Amount</span>
                 <span className="text-white font-bold">GHS {bill.totalAmount.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-xs sm:text-sm">
                 <span className="text-slate-400">Down Payment</span>
                 <span className="text-green-400">- GHS {bill.downPayment.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-xs sm:text-sm">
                 <span className="text-slate-400">Amount Paid</span>
                 <span className="text-green-400">- GHS {bill.amountPaid.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-lg border-t border-white/10 pt-2">
-                <span className="text-white font-semibold">Outstanding Balance</span>
+              <div className="flex justify-between text-base sm:text-lg border-t border-white/10 pt-2">
+                <span className="text-white font-semibold">Outstanding</span>
                 <span className="text-emerald-400 font-bold">GHS {bill.outstandingBalance.toLocaleString()}</span>
               </div>
             </div>
 
             {/* Payment Info */}
-            <div className="p-4 rounded-xl bg-white/5 mb-6">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="p-3 sm:p-4 rounded-xl bg-white/5 mb-4 sm:mb-6">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
                 <div>
                   <span className="text-slate-400">Payment Type</span>
                   <p className="text-white font-medium">{bill.purchaseType}</p>
@@ -259,7 +277,7 @@ export function CollectorBillModal({ shopSlug, purchaseId, onClose }: CollectorB
             </div>
 
             {/* Footer */}
-            <div className="text-center text-sm text-slate-400 pt-6 border-t border-white/10">
+            <div className="text-center text-xs sm:text-sm text-slate-400 pt-4 sm:pt-6 border-t border-white/10 pb-4 sm:pb-0">
               <p>Thank you for your business!</p>
               <p className="mt-1">This is a computer-generated bill.</p>
             </div>
