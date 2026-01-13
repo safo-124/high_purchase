@@ -130,7 +130,6 @@ export default async function CustomersPage({ params }: CustomersPageProps) {
         <CustomersTable 
           customers={customers} 
           shopSlug={shopSlug} 
-          collectors={activeCollectors}
           products={activeProducts}
         />
       </div>

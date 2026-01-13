@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { CustomerSummary, DebtCollectorData, ProductData, toggleCustomerStatus } from "../../actions"
+import { CustomerSummary, ProductData, toggleCustomerStatus } from "../../actions"
 import { CreatePurchaseDialog } from "./create-purchase-dialog"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -9,11 +9,10 @@ import Link from "next/link"
 interface CustomersTableProps {
   customers: CustomerSummary[]
   shopSlug: string
-  collectors: DebtCollectorData[]
   products: ProductData[]
 }
 
-export function CustomersTable({ customers, shopSlug, collectors, products }: CustomersTableProps) {
+export function CustomersTable({ customers, shopSlug, products }: CustomersTableProps) {
   const [customerList, setCustomerList] = useState(customers)
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
