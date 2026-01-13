@@ -903,6 +903,66 @@ export async function updateBusinessCustomer(
 }
 
 /**
+ * Delete a customer (Business Admin only)
+ */
+export async function deleteBusinessCustomer(
+  businessSlug: string,
+  customerId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, shop: { businessId: business.id } },
+      include: {
+        shop: true,
+        purchases: {
+          where: { status: { in: ["ACTIVE", "PENDING"] } },
+        },
+      },
+    })
+
+    if (!customer) {
+      return { success: false, error: "Customer not found in this business" }
+    }
+
+    // Prevent deletion if customer has active purchases
+    if (customer.purchases.length > 0) {
+      return {
+        success: false,
+        error: `Cannot delete customer with ${customer.purchases.length} active purchase(s). Please complete or cancel all purchases first.`,
+      }
+    }
+
+    // Delete the customer (cascades to related records)
+    await prisma.customer.delete({
+      where: { id: customerId },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CUSTOMER_DELETED",
+      entityType: "Customer",
+      entityId: customerId,
+      metadata: {
+        shopId: customer.shopId,
+        shopName: customer.shop.name,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        customerPhone: customer.phone,
+        deletedByBusinessAdmin: true,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/customers`)
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting business customer:", error)
+    return { success: false, error: "Failed to delete customer" }
+  }
+}
+
+/**
  * Get all purchases across the business
  */
 export async function getBusinessPurchases(businessSlug: string) {

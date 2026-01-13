@@ -1,8 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { CustomerSummary, DebtCollectorData, ProductData, toggleCustomerStatus, deleteCustomer } from "../../actions"
-import { EditCustomerDialog } from "./edit-customer-dialog"
+import { CustomerSummary, DebtCollectorData, ProductData, toggleCustomerStatus } from "../../actions"
 import { CreatePurchaseDialog } from "./create-purchase-dialog"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -17,11 +16,6 @@ interface CustomersTableProps {
 export function CustomersTable({ customers, shopSlug, collectors, products }: CustomersTableProps) {
   const [customerList, setCustomerList] = useState(customers)
   const [togglingId, setTogglingId] = useState<string | null>(null)
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; customer: CustomerSummary | null }>({
-    open: false,
-    customer: null,
-  })
-  const [isDeleting, setIsDeleting] = useState(false)
 
   const handleToggleStatus = async (customerId: string) => {
     setTogglingId(customerId)
@@ -36,22 +30,6 @@ export function CustomersTable({ customers, shopSlug, collectors, products }: Cu
       toast.error(result.error || "Failed to update status")
     }
     setTogglingId(null)
-  }
-
-  const handleDelete = async () => {
-    if (!deleteModal.customer) return
-    setIsDeleting(true)
-    
-    const result = await deleteCustomer(shopSlug, deleteModal.customer.id)
-    
-    if (result.success) {
-      setCustomerList(prev => prev.filter(c => c.id !== deleteModal.customer!.id))
-      toast.success("Customer deleted successfully")
-      setDeleteModal({ open: false, customer: null })
-    } else {
-      toast.error(result.error || "Failed to delete customer")
-    }
-    setIsDeleting(false)
   }
 
   if (customerList.length === 0) {
@@ -183,16 +161,6 @@ export function CustomersTable({ customers, shopSlug, collectors, products }: Cu
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
                         </Link>
-                        {/* Delete */}
-                        <button
-                          onClick={() => setDeleteModal({ open: true, customer })}
-                          className="p-2 rounded-lg bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-all"
-                          title="Delete customer"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -202,56 +170,6 @@ export function CustomersTable({ customers, shopSlug, collectors, products }: Cu
           </table>
         </div>
       </div>
-
-      {/* Delete Confirmation Modal */}
-      {deleteModal.open && deleteModal.customer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center">
-                <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">Delete Customer</h3>
-                <p className="text-sm text-slate-400">This action cannot be undone</p>
-              </div>
-            </div>
-            
-            <p className="text-slate-300 text-sm mb-6">
-              Are you sure you want to delete <span className="font-semibold text-white">{deleteModal.customer.firstName} {deleteModal.customer.lastName}</span>? 
-              All associated data will be permanently removed.
-            </p>
-            
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteModal({ open: false, customer: null })}
-                className="px-4 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium text-sm shadow-lg disabled:opacity-50 transition-all flex items-center gap-2"
-              >
-                {isDeleting ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Deleting...
-                  </>
-                ) : (
-                  <>Delete Customer</>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }
