@@ -824,6 +824,200 @@ export async function toggleDebtCollectorStatus(
 }
 
 /**
+ * Interface for collector's assigned customer data
+ */
+export interface CollectorAssignedCustomer {
+  id: string
+  firstName: string
+  lastName: string
+  phone: string
+  email: string | null
+  address: string | null
+  isActive: boolean
+  activePurchases: number
+  outstandingBalance: number
+}
+
+/**
+ * Interface for collector's payment history
+ */
+export interface CollectorPaymentHistory {
+  id: string
+  amount: number
+  paymentMethod: string
+  status: string
+  isConfirmed: boolean
+  customerName: string
+  customerPhone: string
+  purchaseNumber: string
+  paidAt: Date | null
+  createdAt: Date
+}
+
+/**
+ * Interface for comprehensive collector performance data
+ */
+export interface CollectorPerformanceData {
+  // Summary stats
+  totalCollected: number
+  totalPending: number
+  totalProductsSold: number
+  totalPaymentsCount: number
+  confirmedPaymentsCount: number
+  pendingPaymentsCount: number
+  // Assigned customers
+  assignedCustomers: CollectorAssignedCustomer[]
+  // Payment history
+  paymentHistory: CollectorPaymentHistory[]
+}
+
+/**
+ * Get comprehensive performance data for a specific debt collector
+ */
+export async function getCollectorPerformanceData(
+  shopSlug: string,
+  collectorId: string
+): Promise<{ success: boolean; data?: CollectorPerformanceData; error?: string }> {
+  try {
+    const { shop } = await requireShopAdminForShop(shopSlug)
+
+    // Verify the collector belongs to this shop
+    const collector = await prisma.shopMember.findFirst({
+      where: {
+        id: collectorId,
+        shopId: shop.id,
+        role: "DEBT_COLLECTOR",
+      },
+    })
+
+    if (!collector) {
+      return { success: false, error: "Collector not found" }
+    }
+
+    // Get all payments made by this collector
+    const payments = await prisma.payment.findMany({
+      where: {
+        collectorId: collectorId,
+        purchase: { customer: { shopId: shop.id } },
+      },
+      include: {
+        purchase: {
+          include: {
+            customer: true,
+            items: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    })
+
+    // Get assigned customers with their purchase data
+    const customers = await prisma.customer.findMany({
+      where: {
+        assignedCollectorId: collectorId,
+        shopId: shop.id,
+      },
+      include: {
+        purchases: {
+          where: { status: { in: ["ACTIVE", "OVERDUE"] } },
+          select: {
+            id: true,
+            outstandingBalance: true,
+          },
+        },
+      },
+      orderBy: { firstName: "asc" },
+    })
+
+    // Calculate stats
+    const confirmedPayments = payments.filter(p => p.isConfirmed && p.status === "COMPLETED")
+    const pendingPayments = payments.filter(p => !p.isConfirmed || p.status === "PENDING")
+
+    const totalCollected = confirmedPayments.reduce(
+      (sum, p) => sum + Number(p.amount),
+      0
+    )
+    const totalPending = pendingPayments.reduce(
+      (sum, p) => sum + Number(p.amount),
+      0
+    )
+
+    // Count products sold (from purchases with confirmed payments by this collector)
+    const purchaseIdsWithConfirmedPayments = new Set(
+      confirmedPayments.map(p => p.purchaseId)
+    )
+    const totalProductsSold = payments
+      .filter(p => purchaseIdsWithConfirmedPayments.has(p.purchaseId))
+      .reduce((sum, p) => {
+        // Count items in the purchase (only count once per unique purchase)
+        return sum
+      }, 0)
+
+    // Get unique purchases with confirmed payments and count their items
+    const uniquePurchasesWithItems = new Map<string, number>()
+    for (const payment of confirmedPayments) {
+      if (!uniquePurchasesWithItems.has(payment.purchaseId)) {
+        uniquePurchasesWithItems.set(
+          payment.purchaseId,
+          payment.purchase.items.reduce((sum, item) => sum + item.quantity, 0)
+        )
+      }
+    }
+    const productsSoldCount = Array.from(uniquePurchasesWithItems.values()).reduce(
+      (sum, qty) => sum + qty,
+      0
+    )
+
+    // Map assigned customers
+    const assignedCustomers: CollectorAssignedCustomer[] = customers.map((c) => ({
+      id: c.id,
+      firstName: c.firstName,
+      lastName: c.lastName,
+      phone: c.phone,
+      email: c.email,
+      address: c.address,
+      isActive: c.isActive,
+      activePurchases: c.purchases.length,
+      outstandingBalance: c.purchases.reduce(
+        (sum, p) => sum + Number(p.outstandingBalance),
+        0
+      ),
+    }))
+
+    // Map payment history
+    const paymentHistory: CollectorPaymentHistory[] = payments.map((p) => ({
+      id: p.id,
+      amount: Number(p.amount),
+      paymentMethod: p.paymentMethod,
+      status: p.status,
+      isConfirmed: p.isConfirmed,
+      customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
+      customerPhone: p.purchase.customer.phone,
+      purchaseNumber: p.purchase.purchaseNumber,
+      paidAt: p.paidAt,
+      createdAt: p.createdAt,
+    }))
+
+    return {
+      success: true,
+      data: {
+        totalCollected,
+        totalPending,
+        totalProductsSold: productsSoldCount,
+        totalPaymentsCount: payments.length,
+        confirmedPaymentsCount: confirmedPayments.length,
+        pendingPaymentsCount: pendingPayments.length,
+        assignedCustomers,
+        paymentHistory,
+      },
+    }
+  } catch (error) {
+    console.error("Error getting collector performance data:", error)
+    return { success: false, error: "Failed to load performance data" }
+  }
+}
+
+/**
  * Delete a debt collector (removes membership, not user)
  */
 export async function deleteDebtCollector(
