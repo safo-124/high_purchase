@@ -2300,6 +2300,523 @@ export async function deleteBusinessBrand(
   }
 }
 
+// ===== TAX MANAGEMENT =====
+
+export interface TaxData {
+  id: string
+  name: string
+  description: string | null
+  rate: number
+  isCompound: boolean
+  isActive: boolean
+  createdAt: Date
+  // Assignment counts
+  productCount: number
+  categoryCount: number
+  brandCount: number
+  shopCount: number
+}
+
+export interface TaxPayload {
+  name: string
+  description?: string | null
+  rate: number
+  isCompound?: boolean
+  isActive?: boolean
+}
+
+/**
+ * Get all taxes for the business
+ */
+export async function getBusinessTaxes(businessSlug: string): Promise<TaxData[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const taxes = await prisma.tax.findMany({
+    where: { businessId: business.id },
+    include: {
+      products: { select: { id: true } },
+      categories: { select: { id: true } },
+      brands: { select: { id: true } },
+      shops: { select: { id: true } },
+    },
+    orderBy: { name: "asc" },
+  })
+
+  return taxes.map((tax) => ({
+    id: tax.id,
+    name: tax.name,
+    description: tax.description,
+    rate: Number(tax.rate),
+    isCompound: tax.isCompound,
+    isActive: tax.isActive,
+    createdAt: tax.createdAt,
+    productCount: tax.products.length,
+    categoryCount: tax.categories.length,
+    brandCount: tax.brands.length,
+    shopCount: tax.shops.length,
+  }))
+}
+
+/**
+ * Create a new tax
+ */
+export async function createTax(
+  businessSlug: string,
+  payload: TaxPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Validate
+    if (!payload.name.trim()) {
+      return { success: false, error: "Tax name is required" }
+    }
+    if (payload.rate < 0 || payload.rate > 100) {
+      return { success: false, error: "Tax rate must be between 0 and 100" }
+    }
+
+    // Check for duplicate
+    const existing = await prisma.tax.findFirst({
+      where: {
+        businessId: business.id,
+        name: { equals: payload.name.trim(), mode: "insensitive" },
+      },
+    })
+    if (existing) {
+      return { success: false, error: "A tax with this name already exists" }
+    }
+
+    const tax = await prisma.tax.create({
+      data: {
+        businessId: business.id,
+        name: payload.name.trim(),
+        description: payload.description?.trim() || null,
+        rate: payload.rate,
+        isCompound: payload.isCompound ?? false,
+        isActive: payload.isActive ?? true,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "TAX_CREATED",
+      entityType: "Tax",
+      entityId: tax.id,
+      metadata: { name: tax.name, rate: Number(tax.rate) },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/taxes`)
+    return { success: true, data: { id: tax.id } }
+  } catch (error) {
+    console.error("Error creating tax:", error)
+    return { success: false, error: "Failed to create tax" }
+  }
+}
+
+/**
+ * Update an existing tax
+ */
+export async function updateTax(
+  businessSlug: string,
+  taxId: string,
+  payload: TaxPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const tax = await prisma.tax.findFirst({
+      where: { id: taxId, businessId: business.id },
+    })
+    if (!tax) {
+      return { success: false, error: "Tax not found" }
+    }
+
+    // Validate
+    if (!payload.name.trim()) {
+      return { success: false, error: "Tax name is required" }
+    }
+    if (payload.rate < 0 || payload.rate > 100) {
+      return { success: false, error: "Tax rate must be between 0 and 100" }
+    }
+
+    // Check for duplicate
+    const existing = await prisma.tax.findFirst({
+      where: {
+        businessId: business.id,
+        name: { equals: payload.name.trim(), mode: "insensitive" },
+        id: { not: taxId },
+      },
+    })
+    if (existing) {
+      return { success: false, error: "A tax with this name already exists" }
+    }
+
+    await prisma.tax.update({
+      where: { id: taxId },
+      data: {
+        name: payload.name.trim(),
+        description: payload.description?.trim() || null,
+        rate: payload.rate,
+        isCompound: payload.isCompound ?? tax.isCompound,
+        isActive: payload.isActive ?? tax.isActive,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "TAX_UPDATED",
+      entityType: "Tax",
+      entityId: taxId,
+      metadata: { name: payload.name, rate: payload.rate },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/taxes`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error updating tax:", error)
+    return { success: false, error: "Failed to update tax" }
+  }
+}
+
+/**
+ * Delete a tax
+ */
+export async function deleteTax(
+  businessSlug: string,
+  taxId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const tax = await prisma.tax.findFirst({
+      where: { id: taxId, businessId: business.id },
+    })
+    if (!tax) {
+      return { success: false, error: "Tax not found" }
+    }
+
+    await prisma.tax.delete({ where: { id: taxId } })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "TAX_DELETED",
+      entityType: "Tax",
+      entityId: taxId,
+      metadata: { name: tax.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/taxes`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting tax:", error)
+    return { success: false, error: "Failed to delete tax" }
+  }
+}
+
+/**
+ * Assign tax to products
+ */
+export async function assignTaxToProducts(
+  businessSlug: string,
+  taxId: string,
+  productIds: string[]
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const tax = await prisma.tax.findFirst({
+      where: { id: taxId, businessId: business.id },
+    })
+    if (!tax) {
+      return { success: false, error: "Tax not found" }
+    }
+
+    // Remove existing assignments for this tax
+    await prisma.productTax.deleteMany({ where: { taxId } })
+
+    // Create new assignments
+    if (productIds.length > 0) {
+      await prisma.productTax.createMany({
+        data: productIds.map((productId) => ({ productId, taxId })),
+        skipDuplicates: true,
+      })
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "TAX_PRODUCTS_ASSIGNED",
+      entityType: "Tax",
+      entityId: taxId,
+      metadata: { taxName: tax.name, productCount: productIds.length },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/taxes`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error assigning tax to products:", error)
+    return { success: false, error: "Failed to assign tax" }
+  }
+}
+
+/**
+ * Assign tax to categories
+ */
+export async function assignTaxToCategories(
+  businessSlug: string,
+  taxId: string,
+  categoryIds: string[]
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const tax = await prisma.tax.findFirst({
+      where: { id: taxId, businessId: business.id },
+    })
+    if (!tax) {
+      return { success: false, error: "Tax not found" }
+    }
+
+    // Remove existing assignments for this tax
+    await prisma.categoryTax.deleteMany({ where: { taxId } })
+
+    // Create new assignments
+    if (categoryIds.length > 0) {
+      await prisma.categoryTax.createMany({
+        data: categoryIds.map((categoryId) => ({ categoryId, taxId })),
+        skipDuplicates: true,
+      })
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "TAX_CATEGORIES_ASSIGNED",
+      entityType: "Tax",
+      entityId: taxId,
+      metadata: { taxName: tax.name, categoryCount: categoryIds.length },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/taxes`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error assigning tax to categories:", error)
+    return { success: false, error: "Failed to assign tax" }
+  }
+}
+
+/**
+ * Assign tax to brands
+ */
+export async function assignTaxToBrands(
+  businessSlug: string,
+  taxId: string,
+  brandIds: string[]
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const tax = await prisma.tax.findFirst({
+      where: { id: taxId, businessId: business.id },
+    })
+    if (!tax) {
+      return { success: false, error: "Tax not found" }
+    }
+
+    // Remove existing assignments for this tax
+    await prisma.brandTax.deleteMany({ where: { taxId } })
+
+    // Create new assignments
+    if (brandIds.length > 0) {
+      await prisma.brandTax.createMany({
+        data: brandIds.map((brandId) => ({ brandId, taxId })),
+        skipDuplicates: true,
+      })
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "TAX_BRANDS_ASSIGNED",
+      entityType: "Tax",
+      entityId: taxId,
+      metadata: { taxName: tax.name, brandCount: brandIds.length },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/taxes`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error assigning tax to brands:", error)
+    return { success: false, error: "Failed to assign tax" }
+  }
+}
+
+/**
+ * Assign tax to shops
+ */
+export async function assignTaxToShops(
+  businessSlug: string,
+  taxId: string,
+  shopIds: string[]
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const tax = await prisma.tax.findFirst({
+      where: { id: taxId, businessId: business.id },
+    })
+    if (!tax) {
+      return { success: false, error: "Tax not found" }
+    }
+
+    // Remove existing assignments for this tax
+    await prisma.shopTax.deleteMany({ where: { taxId } })
+
+    // Create new assignments
+    if (shopIds.length > 0) {
+      await prisma.shopTax.createMany({
+        data: shopIds.map((shopId) => ({ shopId, taxId })),
+        skipDuplicates: true,
+      })
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "TAX_SHOPS_ASSIGNED",
+      entityType: "Tax",
+      entityId: taxId,
+      metadata: { taxName: tax.name, shopCount: shopIds.length },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/taxes`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error assigning tax to shops:", error)
+    return { success: false, error: "Failed to assign tax" }
+  }
+}
+
+/**
+ * Get tax assignments for a specific tax
+ */
+export async function getTaxAssignments(businessSlug: string, taxId: string) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const tax = await prisma.tax.findFirst({
+    where: { id: taxId, businessId: business.id },
+    include: {
+      products: { select: { productId: true } },
+      categories: { select: { categoryId: true } },
+      brands: { select: { brandId: true } },
+      shops: { select: { shopId: true } },
+    },
+  })
+
+  if (!tax) return null
+
+  return {
+    productIds: tax.products.map((p) => p.productId),
+    categoryIds: tax.categories.map((c) => c.categoryId),
+    brandIds: tax.brands.map((b) => b.brandId),
+    shopIds: tax.shops.map((s) => s.shopId),
+  }
+}
+
+/**
+ * Calculate applicable taxes for a product in a shop
+ * Taxes can come from: product, category, brand, or shop assignments
+ */
+export async function getApplicableTaxes(
+  businessId: string,
+  productId: string,
+  shopId: string
+): Promise<{ id: string; name: string; rate: number; isCompound: boolean }[]> {
+  // Get product details
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { categoryId: true, brandId: true },
+  })
+
+  if (!product) return []
+
+  // Find all applicable taxes (active only, no duplicates)
+  const applicableTaxIds = new Set<string>()
+  const taxMap = new Map<string, { id: string; name: string; rate: number; isCompound: boolean }>()
+
+  // 1. Product-level taxes
+  const productTaxes = await prisma.productTax.findMany({
+    where: { productId },
+    include: { tax: true },
+  })
+  for (const pt of productTaxes) {
+    if (pt.tax.isActive) {
+      applicableTaxIds.add(pt.tax.id)
+      taxMap.set(pt.tax.id, {
+        id: pt.tax.id,
+        name: pt.tax.name,
+        rate: Number(pt.tax.rate),
+        isCompound: pt.tax.isCompound,
+      })
+    }
+  }
+
+  // 2. Category-level taxes
+  if (product.categoryId) {
+    const categoryTaxes = await prisma.categoryTax.findMany({
+      where: { categoryId: product.categoryId },
+      include: { tax: true },
+    })
+    for (const ct of categoryTaxes) {
+      if (ct.tax.isActive && !applicableTaxIds.has(ct.tax.id)) {
+        applicableTaxIds.add(ct.tax.id)
+        taxMap.set(ct.tax.id, {
+          id: ct.tax.id,
+          name: ct.tax.name,
+          rate: Number(ct.tax.rate),
+          isCompound: ct.tax.isCompound,
+        })
+      }
+    }
+  }
+
+  // 3. Brand-level taxes
+  if (product.brandId) {
+    const brandTaxes = await prisma.brandTax.findMany({
+      where: { brandId: product.brandId },
+      include: { tax: true },
+    })
+    for (const bt of brandTaxes) {
+      if (bt.tax.isActive && !applicableTaxIds.has(bt.tax.id)) {
+        applicableTaxIds.add(bt.tax.id)
+        taxMap.set(bt.tax.id, {
+          id: bt.tax.id,
+          name: bt.tax.name,
+          rate: Number(bt.tax.rate),
+          isCompound: bt.tax.isCompound,
+        })
+      }
+    }
+  }
+
+  // 4. Shop-level taxes
+  const shopTaxes = await prisma.shopTax.findMany({
+    where: { shopId },
+    include: { tax: true },
+  })
+  for (const st of shopTaxes) {
+    if (st.tax.isActive && !applicableTaxIds.has(st.tax.id)) {
+      applicableTaxIds.add(st.tax.id)
+      taxMap.set(st.tax.id, {
+        id: st.tax.id,
+        name: st.tax.name,
+        rate: Number(st.tax.rate),
+        isCompound: st.tax.isCompound,
+      })
+    }
+  }
+
+  // Return taxes sorted: non-compound first, then compound
+  const taxes = Array.from(taxMap.values())
+  return taxes.sort((a, b) => (a.isCompound === b.isCompound ? 0 : a.isCompound ? 1 : -1))
+}
+
 // ===== PRODUCT MANAGEMENT =====
 
 export interface ProductPayload {

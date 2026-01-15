@@ -38,6 +38,7 @@ model Business {
   products      Product[]        @relation("BusinessProducts")
   shops         Shop[]           @relation("BusinessShops")
   smsSettings   SmsSettings?     @relation("BusinessSmsSettings")
+  taxes         Tax[]            @relation("BusinessTaxes")
 }
 
 model BusinessPolicy {
@@ -52,6 +53,82 @@ model BusinessPolicy {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   business     Business     @relation("BusinessPolicy", fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+// Tax configuration - optional taxes that can be assigned to products, categories, brands, or shops
+model Tax {
+  id          String        @id @default(cuid())
+  businessId  String
+  name        String        // e.g., "VAT", "Sales Tax", "Excise Duty"
+  description String?
+  rate        Decimal       @db.Decimal(5, 2) // Tax rate as percentage (e.g., 12.50 for 12.5%)
+  isCompound  Boolean       @default(false) // If true, applies after other taxes
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  business    Business      @relation("BusinessTaxes", fields: [businessId], references: [id], onDelete: Cascade)
+  // Many-to-many relationships for flexible assignment
+  products    ProductTax[]
+  categories  CategoryTax[]
+  brands      BrandTax[]
+  shops       ShopTax[]
+
+  @@unique([businessId, name])
+  @@index([businessId])
+  @@index([isActive])
+}
+
+// Junction tables for tax assignments
+model ProductTax {
+  id        String   @id @default(cuid())
+  productId String
+  taxId     String
+  createdAt DateTime @default(now())
+  product   Product  @relation("ProductTaxes", fields: [productId], references: [id], onDelete: Cascade)
+  tax       Tax      @relation(fields: [taxId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, taxId])
+  @@index([productId])
+  @@index([taxId])
+}
+
+model CategoryTax {
+  id         String   @id @default(cuid())
+  categoryId String
+  taxId      String
+  createdAt  DateTime @default(now())
+  category   Category @relation("CategoryTaxes", fields: [categoryId], references: [id], onDelete: Cascade)
+  tax        Tax      @relation(fields: [taxId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, taxId])
+  @@index([categoryId])
+  @@index([taxId])
+}
+
+model BrandTax {
+  id        String   @id @default(cuid())
+  brandId   String
+  taxId     String
+  createdAt DateTime @default(now())
+  brand     Brand    @relation("BrandTaxes", fields: [brandId], references: [id], onDelete: Cascade)
+  tax       Tax      @relation(fields: [taxId], references: [id], onDelete: Cascade)
+
+  @@unique([brandId, taxId])
+  @@index([brandId])
+  @@index([taxId])
+}
+
+model ShopTax {
+  id        String   @id @default(cuid())
+  shopId    String
+  taxId     String
+  createdAt DateTime @default(now())
+  shop      Shop     @relation("ShopTaxes", fields: [shopId], references: [id], onDelete: Cascade)
+  tax       Tax      @relation(fields: [taxId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, taxId])
+  @@index([shopId])
+  @@index([taxId])
 }
 
 model BusinessMember {
@@ -85,21 +162,23 @@ model Shop {
   members      ShopMember[]  @relation("ShopMembers")
   policy       ShopPolicy?   @relation("ShopPolicy")
   shopProducts ShopProduct[] @relation("ShopProductInventory")
+  taxes        ShopTax[]     @relation("ShopTaxes")
 
   @@index([businessId])
 }
 
 model Category {
-  id          String    @id @default(cuid())
+  id          String        @id @default(cuid())
   businessId  String
   name        String
   description String?
-  color       String?   @default("#6366f1")
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  business    Business  @relation("BusinessCategories", fields: [businessId], references: [id], onDelete: Cascade)
-  products    Product[] @relation("CategoryProducts")
+  color       String?       @default("#6366f1")
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  business    Business      @relation("BusinessCategories", fields: [businessId], references: [id], onDelete: Cascade)
+  products    Product[]     @relation("CategoryProducts")
+  taxes       CategoryTax[] @relation("CategoryTaxes")
 
   @@unique([businessId, name])
   @@index([businessId])
@@ -107,16 +186,17 @@ model Category {
 }
 
 model Brand {
-  id          String    @id @default(cuid())
+  id          String     @id @default(cuid())
   businessId  String
   name        String
   description String?
   logoUrl     String?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  business    Business  @relation("BusinessBrands", fields: [businessId], references: [id], onDelete: Cascade)
-  products    Product[] @relation("BrandProducts")
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  business    Business   @relation("BusinessBrands", fields: [businessId], references: [id], onDelete: Cascade)
+  products    Product[]  @relation("BrandProducts")
+  taxes       BrandTax[] @relation("BrandTaxes")
 
   @@unique([businessId, name])
   @@index([businessId])
@@ -183,6 +263,7 @@ model Product {
   category          Category?      @relation("CategoryProducts", fields: [categoryId], references: [id])
   purchaseItems     PurchaseItem[] @relation("ProductPurchaseItems")
   shopProducts      ShopProduct[]  @relation("ProductShopInventory")
+  taxes             ProductTax[]   @relation("ProductTaxes")
 
   @@unique([businessId, sku])
   @@index([businessId])

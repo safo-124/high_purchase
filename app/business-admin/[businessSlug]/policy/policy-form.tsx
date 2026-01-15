@@ -151,7 +151,7 @@ export function PolicyForm({ businessSlug, initialPolicy }: PolicyFormProps) {
               id="graceDays"
               type="number"
               min="0"
-              max="60"
+              max="365"
               value={graceDays}
               onChange={(e) => setGraceDays(e.target.value)}
               required
@@ -160,7 +160,7 @@ export function PolicyForm({ businessSlug, initialPolicy }: PolicyFormProps) {
             />
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">days</span>
           </div>
-          <p className="text-xs text-slate-500">Days before late fees apply (0-60)</p>
+          <p className="text-xs text-slate-500">Days before late fees apply</p>
         </div>
 
         <div className="space-y-2">
@@ -168,14 +168,14 @@ export function PolicyForm({ businessSlug, initialPolicy }: PolicyFormProps) {
             <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            Max Tenor (days)
+            Max Repayment Period (days)
           </label>
           <div className="relative">
             <input
               id="maxTenorDays"
               type="number"
               min="1"
-              max="365"
+              max="730"
               value={maxTenorDays}
               onChange={(e) => setMaxTenorDays(e.target.value)}
               required
@@ -184,7 +184,7 @@ export function PolicyForm({ businessSlug, initialPolicy }: PolicyFormProps) {
             />
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">days</span>
           </div>
-          <p className="text-xs text-slate-500">Maximum repayment period (1-365)</p>
+          <p className="text-xs text-slate-500">Maximum time to complete repayment (up to 2 years)</p>
         </div>
       </div>
 

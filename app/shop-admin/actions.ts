@@ -1907,7 +1907,7 @@ export async function createPurchase(
       return { success: false, error: "At least one item is required" }
     }
 
-    // Get business policy for interest calculation
+    // Get business policy for interest calculation (optional - use defaults if not configured)
     const policy = await prisma.businessPolicy.findFirst({
       where: { 
         business: { 
@@ -1916,8 +1916,12 @@ export async function createPurchase(
       },
     })
 
-    if (!policy) {
-      return { success: false, error: "Business policy not configured. Please contact your administrator." }
+    // Default policy values if no policy is configured
+    const defaultPolicy = {
+      interestRate: 0,
+      interestType: "FLAT" as const,
+      maxTenorDays: 60,
+      graceDays: 3,
     }
 
     // Calculate subtotal
@@ -1926,10 +1930,10 @@ export async function createPurchase(
       0
     )
 
-    // Calculate interest based on policy
+    // Calculate interest based on policy (use defaults if no policy)
     let interestAmount = 0
-    const interestRate = policy ? Number(policy.interestRate) : 0
-    const interestType = policy?.interestType || "FLAT"
+    const interestRate = policy ? Number(policy.interestRate) : defaultPolicy.interestRate
+    const interestType = policy?.interestType || defaultPolicy.interestType
 
     if (interestRate > 0) {
       if (interestType === "FLAT") {
@@ -1946,8 +1950,8 @@ export async function createPurchase(
     const downPayment = payload.downPayment || 0
     const outstandingBalance = totalAmount - downPayment
 
-    // Calculate due date based on policy maxTenorDays
-    const maxDays = policy?.maxTenorDays || 60
+    // Calculate due date based on policy maxTenorDays (use default if no policy)
+    const maxDays = policy?.maxTenorDays || defaultPolicy.maxTenorDays
     const dueDate = new Date()
     dueDate.setDate(dueDate.getDate() + maxDays)
 
