@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { requireShopAdminForShop } from "@/lib/auth"
-import { getCustomerPurchases, PurchaseData } from "../../../actions"
+import { getCustomerPurchases, PurchaseData, getProductsForSale, ProductForSale } from "../../../actions"
 import prisma from "@/lib/prisma"
 import { PurchasesSection } from "./purchases-section"
 
@@ -54,6 +54,7 @@ export default async function CustomerDetailPage({ params }: CustomerDetailPageP
   }
 
   const purchases: PurchaseData[] = await getCustomerPurchases(shopSlug, customerId)
+  const products: ProductForSale[] = await getProductsForSale(shopSlug)
 
   // Calculate summary stats
   const activePurchases = purchases.filter((p) => p.status === "ACTIVE" || p.status === "PENDING")
@@ -175,6 +176,7 @@ export default async function CustomerDetailPage({ params }: CustomerDetailPageP
           purchases={purchases} 
           shopSlug={shopSlug} 
           customerId={customer.id}
+          products={products}
         />
       </main>
     </div>

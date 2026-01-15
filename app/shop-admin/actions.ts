@@ -5,7 +5,7 @@ import bcrypt from "bcrypt"
 import prisma from "../../lib/prisma"
 import { requireShopAdminForShop, createAuditLog } from "../../lib/auth"
 import { sendCollectionReceipt } from "../../lib/email"
-import { InterestType, PaymentPreference, PaymentMethod, PurchaseStatus, PaymentStatus, Prisma } from "../generated/prisma/client"
+import { InterestType, PaymentPreference, PaymentMethod, PurchaseStatus, PaymentStatus, PurchaseType, Prisma } from "../generated/prisma/client"
 
 export type ActionResult = {
   success: boolean
@@ -1714,6 +1714,7 @@ export interface PurchaseData {
   customerId: string
   customerName: string
   status: PurchaseStatus
+  purchaseType: PurchaseType
   subtotal: number
   interestAmount: number
   totalAmount: number
@@ -1729,6 +1730,7 @@ export interface PurchaseData {
   createdAt: Date
   items: {
     id: string
+    productId: string | null
     productName: string
     quantity: number
     unitPrice: number
@@ -1790,6 +1792,7 @@ export async function getCustomerPurchases(
     customerId: p.customerId,
     customerName: `${p.customer.firstName} ${p.customer.lastName}`,
     status: p.status,
+    purchaseType: p.purchaseType,
     subtotal: Number(p.subtotal),
     interestAmount: Number(p.interestAmount),
     totalAmount: Number(p.totalAmount),
@@ -1805,6 +1808,7 @@ export async function getCustomerPurchases(
     createdAt: p.createdAt,
     items: p.items.map((item) => ({
       id: item.id,
+      productId: item.productId,
       productName: item.productName,
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
@@ -1847,6 +1851,7 @@ export async function getAllPurchases(shopSlug: string): Promise<PurchaseData[]>
     customerId: p.customerId,
     customerName: `${p.customer.firstName} ${p.customer.lastName}`,
     status: p.status,
+    purchaseType: p.purchaseType,
     subtotal: Number(p.subtotal),
     interestAmount: Number(p.interestAmount),
     totalAmount: Number(p.totalAmount),
@@ -1862,6 +1867,7 @@ export async function getAllPurchases(shopSlug: string): Promise<PurchaseData[]>
     createdAt: p.createdAt,
     items: p.items.map((item) => ({
       id: item.id,
+      productId: item.productId,
       productName: item.productName,
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
@@ -2052,6 +2058,182 @@ export async function createPurchase(
   } catch (error) {
     console.error("Error creating purchase:", error)
     return { success: false, error: "Failed to create purchase" }
+  }
+}
+
+/**
+ * Update purchase items (change products for layaway/credit purchases)
+ */
+export interface UpdatePurchaseItemsPayload {
+  items: PurchaseItemPayload[]
+}
+
+export async function updatePurchaseItems(
+  shopSlug: string,
+  purchaseId: string,
+  payload: UpdatePurchaseItemsPayload
+): Promise<ActionResult> {
+  try {
+    const { user, shop } = await requireShopAdminForShop(shopSlug)
+
+    // Get purchase and verify it belongs to this shop
+    const purchase = await prisma.purchase.findFirst({
+      where: {
+        id: purchaseId,
+        customer: { shopId: shop.id },
+      },
+      include: {
+        customer: true,
+        items: true,
+      },
+    })
+
+    if (!purchase) {
+      return { success: false, error: "Purchase not found" }
+    }
+
+    // Only allow editing of PENDING, ACTIVE, or LAYAWAY purchases (not COMPLETED)
+    if (purchase.status === "COMPLETED") {
+      return { success: false, error: "Cannot edit a completed purchase" }
+    }
+
+    if (payload.items.length === 0) {
+      return { success: false, error: "At least one item is required" }
+    }
+
+    // Validate stock availability for new items
+    for (const item of payload.items) {
+      const shopProduct = await prisma.shopProduct.findFirst({
+        where: { 
+          shopId: shop.id,
+          productId: item.productId 
+        },
+        include: { product: { select: { name: true } } },
+      })
+      
+      if (!shopProduct) {
+        const product = await prisma.product.findUnique({
+          where: { id: item.productId },
+          select: { stockQuantity: true, name: true },
+        })
+        if (!product) {
+          return { success: false, error: `Product not found: ${item.productName}` }
+        }
+        if (product.stockQuantity < item.quantity) {
+          return { 
+            success: false, 
+            error: `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}` 
+          }
+        }
+      } else {
+        if (shopProduct.stockQuantity < item.quantity) {
+          return { 
+            success: false, 
+            error: `Insufficient stock for ${shopProduct.product.name}. Available: ${shopProduct.stockQuantity}, Requested: ${item.quantity}` 
+          }
+        }
+      }
+    }
+
+    // Get business policy for recalculating interest
+    const policy = await prisma.businessPolicy.findFirst({
+      where: { 
+        business: { 
+          shops: { some: { id: shop.id } } 
+        } 
+      },
+    })
+
+    // Calculate new subtotal
+    const subtotal = payload.items.reduce(
+      (sum, item) => sum + item.unitPrice * item.quantity,
+      0
+    )
+
+    // Calculate interest based on policy
+    let interestAmount = 0
+    const interestRate = policy ? Number(policy.interestRate) : Number(purchase.interestRate)
+    const interestType = policy?.interestType || purchase.interestType
+
+    if (interestRate > 0) {
+      if (interestType === "FLAT") {
+        interestAmount = subtotal * (interestRate / 100)
+      } else {
+        const months = Math.ceil(purchase.installments / 4)
+        interestAmount = subtotal * (interestRate / 100) * months
+      }
+    }
+
+    const totalAmount = subtotal + interestAmount
+    const amountPaid = Number(purchase.amountPaid)
+    const outstandingBalance = Math.max(0, totalAmount - amountPaid)
+
+    // Update purchase in transaction
+    await prisma.$transaction(async (tx) => {
+      // Delete old items
+      await tx.purchaseItem.deleteMany({
+        where: { purchaseId: purchase.id },
+      })
+
+      // Create new items
+      await tx.purchaseItem.createMany({
+        data: payload.items.map((item) => ({
+          purchaseId: purchase.id,
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.unitPrice * item.quantity,
+        })),
+      })
+
+      // Update purchase totals
+      await tx.purchase.update({
+        where: { id: purchase.id },
+        data: {
+          subtotal,
+          interestAmount,
+          totalAmount,
+          outstandingBalance,
+          // Update status based on new balance
+          status: outstandingBalance <= 0 ? "COMPLETED" : purchase.status,
+        },
+      })
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PURCHASE_ITEMS_UPDATED",
+      entityType: "Purchase",
+      entityId: purchase.id,
+      metadata: {
+        purchaseNumber: purchase.purchaseNumber,
+        customerId: purchase.customerId,
+        customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+        oldItems: purchase.items.map(i => ({ productName: i.productName, quantity: i.quantity })),
+        newItems: payload.items.map(i => ({ productName: i.productName, quantity: i.quantity })),
+        oldTotal: Number(purchase.totalAmount),
+        newTotal: totalAmount,
+      },
+    })
+
+    revalidatePath(`/shop-admin/${shopSlug}/customers/${purchase.customerId}`)
+    revalidatePath(`/shop-admin/${shopSlug}/customers`)
+    revalidatePath(`/collector/${shopSlug}`)
+    revalidatePath(`/sales-staff/${shopSlug}`)
+
+    return { 
+      success: true, 
+      data: { 
+        newSubtotal: subtotal,
+        newInterest: interestAmount,
+        newTotal: totalAmount,
+        newOutstanding: outstandingBalance,
+      } 
+    }
+  } catch (error) {
+    console.error("Error updating purchase items:", error)
+    return { success: false, error: "Failed to update purchase" }
   }
 }
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { PurchaseData, recordPayment } from "../../../actions"
+import { PurchaseData, recordPayment, updatePurchaseItems, ProductForSale } from "../../../actions"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
@@ -9,6 +9,15 @@ interface PurchasesSectionProps {
   purchases: PurchaseData[]
   shopSlug: string
   customerId: string
+  products: ProductForSale[]
+}
+
+interface EditCartItem {
+  productId: string
+  productName: string
+  quantity: number
+  unitPrice: number
+  totalPrice: number
 }
 
 const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
@@ -19,7 +28,7 @@ const statusStyles: Record<string, { bg: string; text: string; label: string }> 
   DEFAULTED: { bg: "bg-red-500/20", text: "text-red-400", label: "Defaulted" },
 }
 
-export function PurchasesSection({ purchases, shopSlug }: PurchasesSectionProps) {
+export function PurchasesSection({ purchases, shopSlug, products }: PurchasesSectionProps) {
   const router = useRouter()
   const [expandedPurchase, setExpandedPurchase] = useState<string | null>(null)
   const [paymentModal, setPaymentModal] = useState<{ open: boolean; purchase: PurchaseData | null }>({
@@ -30,6 +39,107 @@ export function PurchasesSection({ purchases, shopSlug }: PurchasesSectionProps)
   const [paymentMethod, setPaymentMethod] = useState("CASH")
   const [paymentReference, setPaymentReference] = useState("")
   const [isRecording, setIsRecording] = useState(false)
+
+  // Edit purchase state
+  const [editModal, setEditModal] = useState<{ open: boolean; purchase: PurchaseData | null }>({
+    open: false,
+    purchase: null,
+  })
+  const [editCart, setEditCart] = useState<EditCartItem[]>([])
+  const [selectedProductId, setSelectedProductId] = useState("")
+  const [quantity, setQuantity] = useState(1)
+  const [isUpdating, setIsUpdating] = useState(false)
+
+  const openEditModal = (purchase: PurchaseData) => {
+    // Initialize cart with current purchase items (filter out items without productId)
+    setEditCart(purchase.items
+      .filter(item => item.productId !== null)
+      .map(item => ({
+        productId: item.productId as string,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+      })))
+    setEditModal({ open: true, purchase })
+    setSelectedProductId("")
+    setQuantity(1)
+  }
+
+  const addToEditCart = () => {
+    if (!selectedProductId) return
+    const product = products.find(p => p.id === selectedProductId)
+    if (!product) return
+
+    // Check if already in cart
+    const existingIndex = editCart.findIndex(item => item.productId === selectedProductId)
+    if (existingIndex >= 0) {
+      // Update quantity
+      const newCart = [...editCart]
+      newCart[existingIndex].quantity += quantity
+      newCart[existingIndex].totalPrice = newCart[existingIndex].unitPrice * newCart[existingIndex].quantity
+      setEditCart(newCart)
+    } else {
+      // Add new item - use the purchase type to determine price
+      const purchaseType = editModal.purchase?.purchaseType || "CREDIT"
+      const unitPrice = purchaseType === "CASH" 
+        ? product.cashPrice 
+        : purchaseType === "LAYAWAY" 
+        ? product.layawayPrice 
+        : product.creditPrice
+      
+      setEditCart([...editCart, {
+        productId: product.id,
+        productName: product.name,
+        quantity,
+        unitPrice,
+        totalPrice: unitPrice * quantity,
+      }])
+    }
+    setSelectedProductId("")
+    setQuantity(1)
+  }
+
+  const removeFromEditCart = (productId: string) => {
+    setEditCart(editCart.filter(item => item.productId !== productId))
+  }
+
+  const updateItemQuantity = (productId: string, newQty: number) => {
+    if (newQty <= 0) return removeFromEditCart(productId)
+    setEditCart(editCart.map(item => 
+      item.productId === productId 
+        ? { ...item, quantity: newQty, totalPrice: item.unitPrice * newQty }
+        : item
+    ))
+  }
+
+  const editCartTotal = editCart.reduce((sum, item) => sum + item.totalPrice, 0)
+
+  const handleUpdatePurchase = async () => {
+    if (!editModal.purchase || editCart.length === 0) return
+
+    setIsUpdating(true)
+    
+    const result = await updatePurchaseItems(shopSlug, editModal.purchase.id, {
+      items: editCart.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+    })
+
+    if (result.success) {
+      toast.success("Purchase items updated successfully")
+      setEditModal({ open: false, purchase: null })
+      setEditCart([])
+      router.refresh()
+    } else {
+      toast.error(result.error || "Failed to update purchase")
+    }
+    
+    setIsUpdating(false)
+  }
 
   const handleRecordPayment = async () => {
     if (!paymentModal.purchase) return
@@ -208,7 +318,19 @@ export function PurchasesSection({ purchases, shopSlug }: PurchasesSectionProps)
 
                     {/* Actions */}
                     {purchase.status !== "COMPLETED" && (
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openEditModal(purchase)
+                          }}
+                          className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium text-sm transition-all flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit Items
+                        </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -320,6 +442,168 @@ export function PurchasesSection({ purchases, shopSlug }: PurchasesSectionProps)
                   </>
                 ) : (
                   <>Record Payment</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Purchase Modal */}
+      {editModal.open && editModal.purchase && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-violet-500/20 flex items-center justify-center">
+                <svg className="w-6 h-6 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Edit Purchase Items</h3>
+                <p className="text-sm text-slate-400">{editModal.purchase.purchaseNumber} • {editModal.purchase.purchaseType}</p>
+              </div>
+            </div>
+
+            {/* Add Product */}
+            <div className="bg-white/5 rounded-xl p-4 mb-4">
+              <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">Add Product</h4>
+              <div className="flex gap-3">
+                <select
+                  value={selectedProductId}
+                  onChange={(e) => setSelectedProductId(e.target.value)}
+                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                >
+                  <option value="">Select a product...</option>
+                  {products.filter(p => p.stockQuantity > 0).map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name} - GHS {
+                        (editModal.purchase?.purchaseType === "CASH" 
+                          ? product.cashPrice 
+                          : editModal.purchase?.purchaseType === "LAYAWAY" 
+                          ? product.layawayPrice 
+                          : product.creditPrice
+                        ).toLocaleString()
+                      } (Stock: {product.stockQuantity})
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                  className="w-20 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                />
+                <button
+                  onClick={addToEditCart}
+                  disabled={!selectedProductId}
+                  className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-medium text-sm transition-all disabled:opacity-50"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {/* Cart Items */}
+            <div className="bg-white/5 rounded-xl p-4 mb-4">
+              <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">Purchase Items</h4>
+              {editCart.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-4">No items in purchase</p>
+              ) : (
+                <div className="space-y-3">
+                  {editCart.map((item) => (
+                    <div key={item.productId} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-white">{item.productName}</p>
+                        <p className="text-xs text-slate-400">GHS {item.unitPrice.toLocaleString()} each</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => updateItemQuantity(item.productId, item.quantity - 1)}
+                            className="p-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 12H4" />
+                            </svg>
+                          </button>
+                          <span className="w-8 text-center text-sm text-white">{item.quantity}</span>
+                          <button
+                            onClick={() => updateItemQuantity(item.productId, item.quantity + 1)}
+                            className="p-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m6-6H6" />
+                            </svg>
+                          </button>
+                        </div>
+                        <span className="w-24 text-right text-sm font-medium text-white">
+                          GHS {item.totalPrice.toLocaleString()}
+                        </span>
+                        <button
+                          onClick={() => removeFromEditCart(item.productId)}
+                          className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Summary */}
+            <div className="bg-white/5 rounded-xl p-4 mb-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-xs text-slate-400 uppercase tracking-wider">New Subtotal</p>
+                  <p className="text-lg font-bold text-white">GHS {editCartTotal.toLocaleString()}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-slate-400 uppercase tracking-wider">Previous Subtotal</p>
+                  <p className="text-lg font-medium text-slate-400">GHS {editModal.purchase.subtotal.toLocaleString()}</p>
+                </div>
+              </div>
+              {editCartTotal !== editModal.purchase.subtotal && (
+                <p className={`text-sm mt-2 ${editCartTotal > editModal.purchase.subtotal ? 'text-orange-400' : 'text-emerald-400'}`}>
+                  {editCartTotal > editModal.purchase.subtotal 
+                    ? `+GHS ${(editCartTotal - editModal.purchase.subtotal).toLocaleString()} increase`
+                    : `-GHS ${(editModal.purchase.subtotal - editCartTotal).toLocaleString()} decrease`
+                  }
+                </p>
+              )}
+              <p className="text-xs text-slate-500 mt-2">Interest will be recalculated based on the new subtotal</p>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setEditModal({ open: false, purchase: null })
+                  setEditCart([])
+                }}
+                className="px-4 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdatePurchase}
+                disabled={isUpdating || editCart.length === 0}
+                className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-medium text-sm shadow-lg disabled:opacity-50 transition-all flex items-center gap-2"
+              >
+                {isUpdating ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Updating...
+                  </>
+                ) : (
+                  <>Update Purchase</>
                 )}
               </button>
             </div>

@@ -4125,6 +4125,10 @@ export interface BusinessQuickCustomerPayload {
   preferredPayment?: "ONLINE" | "DEBT_COLLECTOR" | "BOTH"
   assignedCollectorId?: string | null
   notes?: string | null
+  // Account creation fields
+  createAccount?: boolean
+  accountEmail?: string
+  accountPassword?: string
 }
 
 export async function createBusinessCustomer(
@@ -4163,6 +4167,37 @@ export async function createBusinessCustomer(
       return { success: false, error: "A customer with this phone number already exists" }
     }
 
+    // If creating account, validate and check email uniqueness
+    let userAccount = null
+    if (payload.createAccount) {
+      if (!payload.accountEmail || payload.accountEmail.trim().length === 0) {
+        return { success: false, error: "Email is required for account creation" }
+      }
+      if (!payload.accountPassword || payload.accountPassword.length < 8) {
+        return { success: false, error: "Password must be at least 8 characters" }
+      }
+
+      const existingUser = await prisma.user.findUnique({
+        where: { email: payload.accountEmail.trim().toLowerCase() },
+      })
+
+      if (existingUser) {
+        return { success: false, error: "An account with this email already exists" }
+      }
+
+      // Hash password
+      const passwordHash = await bcrypt.hash(payload.accountPassword, 12)
+
+      userAccount = await prisma.user.create({
+        data: {
+          email: payload.accountEmail.trim().toLowerCase(),
+          name: `${payload.firstName.trim()} ${payload.lastName.trim()}`,
+          passwordHash,
+          role: "CUSTOMER",
+        },
+      })
+    }
+
     // Create the customer
     const customer = await prisma.customer.create({
       data: {
@@ -4170,7 +4205,9 @@ export async function createBusinessCustomer(
         firstName: payload.firstName.trim(),
         lastName: payload.lastName.trim(),
         phone: payload.phone.trim(),
-        email: payload.email || null,
+        email: payload.createAccount 
+          ? payload.accountEmail?.trim().toLowerCase() 
+          : (payload.email || null),
         idType: payload.idType || null,
         idNumber: payload.idNumber || null,
         address: payload.address || null,
@@ -4179,6 +4216,7 @@ export async function createBusinessCustomer(
         preferredPayment: payload.preferredPayment || "BOTH",
         assignedCollectorId: payload.assignedCollectorId || null,
         notes: payload.notes || null,
+        userId: userAccount?.id || null,
       },
     })
 
@@ -4193,6 +4231,7 @@ export async function createBusinessCustomer(
         customerName: `${customer.firstName} ${customer.lastName}`,
         phone: customer.phone,
         createdByBusinessAdmin: true,
+        hasAccount: !!userAccount,
       },
     })
 
@@ -4206,6 +4245,7 @@ export async function createBusinessCustomer(
         firstName: customer.firstName,
         lastName: customer.lastName,
         phone: customer.phone,
+        hasAccount: !!userAccount,
       },
     }
   } catch (error) {
@@ -4992,5 +5032,334 @@ export async function getBusinessProgressInvoice(businessSlug: string, invoiceId
       unitPrice: Number(item.unitPrice),
       totalPrice: Number(item.totalPrice),
     })),
+  }
+}
+
+// ==========================================
+// EDIT PURCHASE ITEMS
+// ==========================================
+
+export interface BusinessPurchaseItemPayload {
+  productId: string
+  productName: string
+  quantity: number
+  unitPrice: number
+}
+
+export interface UpdateBusinessPurchaseItemsPayload {
+  items: BusinessPurchaseItemPayload[]
+}
+
+/**
+ * Update purchase items as Business Admin (change products for layaway/credit purchases)
+ */
+export async function updateBusinessPurchaseItems(
+  businessSlug: string,
+  purchaseId: string,
+  payload: UpdateBusinessPurchaseItemsPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Get purchase and verify it belongs to this business
+    const purchase = await prisma.purchase.findFirst({
+      where: {
+        id: purchaseId,
+        customer: {
+          shop: { businessId: business.id },
+        },
+      },
+      include: {
+        customer: {
+          include: {
+            shop: true,
+          },
+        },
+        items: true,
+      },
+    })
+
+    if (!purchase) {
+      return { success: false, error: "Purchase not found" }
+    }
+
+    // Only allow editing of PENDING, ACTIVE, or LAYAWAY purchases (not COMPLETED)
+    if (purchase.status === "COMPLETED") {
+      return { success: false, error: "Cannot edit a completed purchase" }
+    }
+
+    if (payload.items.length === 0) {
+      return { success: false, error: "At least one item is required" }
+    }
+
+    const shopId = purchase.customer.shopId
+
+    // Validate stock availability for new items
+    for (const item of payload.items) {
+      const shopProduct = await prisma.shopProduct.findFirst({
+        where: { 
+          shopId: shopId,
+          productId: item.productId 
+        },
+        include: { product: { select: { name: true } } },
+      })
+      
+      if (!shopProduct) {
+        const product = await prisma.product.findUnique({
+          where: { id: item.productId },
+          select: { stockQuantity: true, name: true },
+        })
+        if (!product) {
+          return { success: false, error: `Product not found: ${item.productName}` }
+        }
+        if (product.stockQuantity < item.quantity) {
+          return { 
+            success: false, 
+            error: `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}` 
+          }
+        }
+      } else {
+        if (shopProduct.stockQuantity < item.quantity) {
+          return { 
+            success: false, 
+            error: `Insufficient stock for ${shopProduct.product.name}. Available: ${shopProduct.stockQuantity}, Requested: ${item.quantity}` 
+          }
+        }
+      }
+    }
+
+    // Get business policy for recalculating interest
+    const policy = await prisma.businessPolicy.findFirst({
+      where: { businessId: business.id },
+    })
+
+    // Calculate new subtotal
+    const subtotal = payload.items.reduce(
+      (sum, item) => sum + item.unitPrice * item.quantity,
+      0
+    )
+
+    // Calculate interest based on policy
+    let interestAmount = 0
+    const interestRate = policy ? Number(policy.interestRate) : Number(purchase.interestRate)
+    const interestType = policy?.interestType || purchase.interestType
+
+    if (interestRate > 0) {
+      if (interestType === "FLAT") {
+        interestAmount = subtotal * (interestRate / 100)
+      } else {
+        const months = Math.ceil(purchase.installments / 4)
+        interestAmount = subtotal * (interestRate / 100) * months
+      }
+    }
+
+    const totalAmount = subtotal + interestAmount
+    const amountPaid = Number(purchase.amountPaid)
+    const outstandingBalance = Math.max(0, totalAmount - amountPaid)
+
+    // Update purchase in transaction
+    await prisma.$transaction(async (tx) => {
+      // Delete old items
+      await tx.purchaseItem.deleteMany({
+        where: { purchaseId: purchase.id },
+      })
+
+      // Create new items
+      await tx.purchaseItem.createMany({
+        data: payload.items.map((item) => ({
+          purchaseId: purchase.id,
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.unitPrice * item.quantity,
+        })),
+      })
+
+      // Update purchase totals
+      await tx.purchase.update({
+        where: { id: purchase.id },
+        data: {
+          subtotal,
+          interestAmount,
+          totalAmount,
+          outstandingBalance,
+          // Update status based on new balance
+          status: outstandingBalance <= 0 ? "COMPLETED" : purchase.status,
+        },
+      })
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PURCHASE_ITEMS_UPDATED",
+      entityType: "Purchase",
+      entityId: purchase.id,
+      metadata: {
+        purchaseNumber: purchase.purchaseNumber,
+        customerId: purchase.customerId,
+        customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+        shopId: shopId,
+        shopName: purchase.customer.shop.name,
+        oldItems: purchase.items.map(i => ({ productName: i.productName, quantity: i.quantity })),
+        newItems: payload.items.map(i => ({ productName: i.productName, quantity: i.quantity })),
+        oldTotal: Number(purchase.totalAmount),
+        newTotal: totalAmount,
+        updatedByBusinessAdmin: true,
+      },
+    })
+
+    const shopSlug = purchase.customer.shop.shopSlug
+    revalidatePath(`/business-admin/${businessSlug}/shops/${shopSlug}/customers`)
+    revalidatePath(`/shop-admin/${shopSlug}/customers/${purchase.customerId}`)
+    revalidatePath(`/shop-admin/${shopSlug}/customers`)
+    revalidatePath(`/collector/${shopSlug}`)
+    revalidatePath(`/sales-staff/${shopSlug}`)
+
+    return { 
+      success: true, 
+      data: { 
+        newSubtotal: subtotal,
+        newInterest: interestAmount,
+        newTotal: totalAmount,
+        newOutstanding: outstandingBalance,
+      } 
+    }
+  } catch (error) {
+    console.error("Error updating purchase items:", error)
+    return { success: false, error: "Failed to update purchase" }
+  }
+}
+
+/**
+ * Get shop products for editing a purchase (Business Admin)
+ */
+export interface BusinessShopProduct {
+  id: string
+  name: string
+  cashPrice: number
+  layawayPrice: number
+  creditPrice: number
+  stockQuantity: number
+}
+
+export async function getBusinessShopProducts(
+  businessSlug: string,
+  shopSlug: string
+): Promise<ActionResult> {
+  try {
+    const { business } = await requireBusinessAdmin(businessSlug)
+
+    const shop = await prisma.shop.findUnique({
+      where: { shopSlug },
+    })
+
+    if (!shop || shop.businessId !== business.id) {
+      return { success: false, error: "Shop not found" }
+    }
+
+    const shopProducts = await prisma.shopProduct.findMany({
+      where: {
+        shopId: shop.id,
+        isActive: true,
+        product: { isActive: true },
+      },
+      include: {
+        product: true,
+      },
+      orderBy: { product: { name: "asc" } },
+    })
+
+    return {
+      success: true,
+      data: shopProducts.map((sp) => ({
+        id: sp.product.id,
+        name: sp.product.name,
+        cashPrice: Number(sp.cashPrice ?? sp.product.cashPrice),
+        layawayPrice: Number(sp.layawayPrice ?? sp.product.layawayPrice),
+        creditPrice: Number(sp.creditPrice ?? sp.product.creditPrice),
+        stockQuantity: sp.stockQuantity,
+      })),
+    }
+  } catch (error) {
+    console.error("Error fetching shop products:", error)
+    return { success: false, error: "Failed to fetch products" }
+  }
+}
+
+/**
+ * Get full purchase details for editing (Business Admin)
+ */
+export interface BusinessPurchaseDetails {
+  id: string
+  purchaseNumber: string
+  purchaseType: string
+  status: string
+  subtotal: number
+  interestAmount: number
+  totalAmount: number
+  amountPaid: number
+  outstandingBalance: number
+  shopSlug: string
+  items: {
+    productId: string
+    productName: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+  }[]
+}
+
+export async function getBusinessPurchaseDetails(
+  businessSlug: string,
+  purchaseId: string
+): Promise<ActionResult> {
+  try {
+    const { business } = await requireBusinessAdmin(businessSlug)
+
+    const purchase = await prisma.purchase.findFirst({
+      where: {
+        id: purchaseId,
+        customer: {
+          shop: { businessId: business.id },
+        },
+      },
+      include: {
+        customer: {
+          include: { shop: true },
+        },
+        items: true,
+      },
+    })
+
+    if (!purchase) {
+      return { success: false, error: "Purchase not found" }
+    }
+
+    return {
+      success: true,
+      data: {
+        id: purchase.id,
+        purchaseNumber: purchase.purchaseNumber,
+        purchaseType: purchase.purchaseType,
+        status: purchase.status,
+        subtotal: Number(purchase.subtotal),
+        interestAmount: Number(purchase.interestAmount),
+        totalAmount: Number(purchase.totalAmount),
+        amountPaid: Number(purchase.amountPaid),
+        outstandingBalance: Number(purchase.outstandingBalance),
+        shopSlug: purchase.customer.shop.shopSlug,
+        items: purchase.items.map((item) => ({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          totalPrice: Number(item.totalPrice),
+        })),
+      },
+    }
+  } catch (error) {
+    console.error("Error fetching purchase details:", error)
+    return { success: false, error: "Failed to fetch purchase details" }
   }
 }
