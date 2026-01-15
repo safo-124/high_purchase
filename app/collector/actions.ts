@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import prisma from "../../lib/prisma"
 import { requireCollectorForShop, createAuditLog } from "../../lib/auth"
+import { sendCollectionReceipt } from "../../lib/email"
 import { PaymentPreference, PaymentMethod, PurchaseStatus, Prisma, Role } from "../generated/prisma/client"
 
 export type ActionResult = {
@@ -1294,3 +1295,82 @@ export async function getCollectorProgressInvoice(shopSlug: string, invoiceId: s
     })),
   }
 }
+// ============================================
+// COLLECTION RECEIPTS
+// ============================================
+
+export interface CollectionReceiptData {
+  id: string
+  receiptNumber: string
+  amount: number
+  paymentMethod: string
+  reference: string | null
+  notes: string | null
+  paidAt: Date | null
+  createdAt: Date
+  isConfirmed: boolean
+  rejectedAt: Date | null
+  customerId: string
+  customerName: string
+  customerPhone: string
+  purchaseId: string
+  purchaseNumber: string
+  outstandingBalance: number
+}
+
+export async function getCollectorReceipts(shopSlug: string): Promise<CollectionReceiptData[]> {
+  const { user, shop, membership } = await requireCollectorForShop(shopSlug)
+
+  if (!membership?.id) {
+    return []
+  }
+
+  const payments = await prisma.payment.findMany({
+    where: {
+      collectorId: membership.id,
+      purchase: {
+        customer: {
+          shopId: shop.id,
+        },
+      },
+    },
+    include: {
+      purchase: {
+        include: {
+          customer: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return payments.map((payment) => {
+    const dateStr = payment.paidAt
+      ? payment.paidAt.toISOString().split("T")[0].replace(/-/g, "")
+      : payment.createdAt.toISOString().split("T")[0].replace(/-/g, "")
+    const receiptNumber = `RCP-${dateStr}-${payment.id.slice(-6).toUpperCase()}`
+
+    return {
+      id: payment.id,
+      receiptNumber,
+      amount: Number(payment.amount),
+      paymentMethod: payment.paymentMethod,
+      reference: payment.reference,
+      notes: payment.notes,
+      paidAt: payment.paidAt,
+      createdAt: payment.createdAt,
+      isConfirmed: payment.isConfirmed,
+      rejectedAt: payment.rejectedAt,
+      customerId: payment.purchase.customer.id,
+      customerName: `${payment.purchase.customer.firstName} ${payment.purchase.customer.lastName}`,
+      customerPhone: payment.purchase.customer.phone,
+      purchaseId: payment.purchase.id,
+      purchaseNumber: payment.purchase.purchaseNumber,
+      outstandingBalance: Number(payment.purchase.outstandingBalance),
+    }
+  })
+}
+
+
+
+

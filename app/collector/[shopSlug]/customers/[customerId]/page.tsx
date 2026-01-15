@@ -148,6 +148,7 @@ export default async function CollectorCustomerDetailPage({ params }: CollectorC
           purchases={purchases} 
           shopSlug={shopSlug} 
           customerId={customer.id}
+          customerName={`${customer.firstName} ${customer.lastName}`}
         />
     </div>
   )

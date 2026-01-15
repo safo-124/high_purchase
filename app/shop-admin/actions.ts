@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import bcrypt from "bcrypt"
 import prisma from "../../lib/prisma"
 import { requireShopAdminForShop, createAuditLog } from "../../lib/auth"
+import { sendCollectionReceipt } from "../../lib/email"
 import { InterestType, PaymentPreference, PaymentMethod, PurchaseStatus, PaymentStatus, Prisma } from "../generated/prisma/client"
 
 export type ActionResult = {

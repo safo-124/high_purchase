@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { PurchaseData, recordPaymentAsCollector } from "../../../actions"
+import { PaymentReceiptDialog } from "./payment-receipt-dialog"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
@@ -9,6 +10,7 @@ interface CollectorPurchasesSectionProps {
   purchases: PurchaseData[]
   shopSlug: string
   customerId: string
+customerName?: string
 }
 
 const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
@@ -19,7 +21,7 @@ const statusStyles: Record<string, { bg: string; text: string; label: string }> 
   DEFAULTED: { bg: "bg-red-500/20", text: "text-red-400", label: "Defaulted" },
 }
 
-export function CollectorPurchasesSection({ purchases, shopSlug }: CollectorPurchasesSectionProps) {
+export function CollectorPurchasesSection({ purchases, shopSlug, customerName }: CollectorPurchasesSectionProps) {
   const router = useRouter()
   const [expandedPurchase, setExpandedPurchase] = useState<string | null>(null)
   const [paymentModal, setPaymentModal] = useState<{ open: boolean; purchase: PurchaseData | null }>({
@@ -273,7 +275,7 @@ export function CollectorPurchasesSection({ purchases, shopSlug }: CollectorPurc
                                   {payment.reference && <span className="text-slate-500">({payment.reference})</span>}
                                 </div>
                                 <span className={`font-medium ${payment.status === 'COMPLETED' ? 'text-emerald-400' : 'text-yellow-400'}`}>
-                                  +GHS {payment.amount.toLocaleString()}
+                                  <PaymentReceiptDialog payment={payment} customerName={customerName || purchase.customerName} purchaseNumber={purchase.purchaseNumber} outstandingBalance={purchase.outstandingBalance} totalAmount={purchase.totalAmount} amountPaid={purchase.amountPaid} />
                                 </span>
                               </div>
                             ))}
@@ -482,3 +484,6 @@ export function CollectorPurchasesSection({ purchases, shopSlug }: CollectorPurc
     </>
   )
 }
+
+
+
