@@ -35,7 +35,8 @@ export function InvoicesContent({ invoices, shopSlug }: InvoicesContentProps) {
     const matchesSearch =
       inv.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inv.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      inv.purchaseNumber.toLowerCase().includes(searchQuery.toLowerCase())
+      inv.purchaseNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (inv.collectorName && inv.collectorName.toLowerCase().includes(searchQuery.toLowerCase()))
     
     const matchesStatus =
       statusFilter === "all" ||
@@ -44,6 +45,24 @@ export function InvoicesContent({ invoices, shopSlug }: InvoicesContentProps) {
     
     return matchesSearch && matchesStatus
   })
+
+  // Helper to get who collected the payment
+  const getCollectedBy = (invoice: ProgressInvoiceData) => {
+    if (invoice.recordedByRole === "COLLECTOR" && invoice.collectorName) {
+      return { name: invoice.collectorName, role: "Collector" }
+    }
+    if (invoice.recordedByRole === "SHOP_ADMIN" && invoice.recordedByName) {
+      return { name: invoice.recordedByName, role: "Shop Admin" }
+    }
+    if (invoice.recordedByRole === "BUSINESS_ADMIN" && invoice.recordedByName) {
+      return { name: invoice.recordedByName, role: "Business Admin" }
+    }
+    // Fallback to collectorName if recordedByRole is not set
+    if (invoice.collectorName) {
+      return { name: invoice.collectorName, role: "Collector" }
+    }
+    return { name: "N/A", role: "" }
+  }
 
   // Stats
   const totalInvoices = invoices.length
@@ -56,8 +75,8 @@ export function InvoicesContent({ invoices, shopSlug }: InvoicesContentProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Progress Invoices</h1>
-          <p className="text-slate-400 mt-1">Track all payment invoices and their status</p>
+          <h1 className="text-2xl font-bold text-white">Payment Receipts</h1>
+          <p className="text-slate-400 mt-1">Track all confirmed payment receipts</p>
         </div>
       </div>
 
@@ -69,7 +88,7 @@ export function InvoicesContent({ invoices, shopSlug }: InvoicesContentProps) {
               <FileText className="w-5 h-5 text-indigo-400" />
             </div>
             <div>
-              <p className="text-xs text-slate-400 uppercase">Total Invoices</p>
+              <p className="text-xs text-slate-400 uppercase">Total Receipts</p>
               <p className="text-2xl font-bold text-white">{totalInvoices}</p>
             </div>
           </div>
@@ -160,23 +179,23 @@ export function InvoicesContent({ invoices, shopSlug }: InvoicesContentProps) {
         </div>
       </div>
 
-      {/* Invoices Table */}
+      {/* Receipts Table */}
       <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden">
         {filteredInvoices.length === 0 ? (
           <div className="text-center py-16">
             <FileText className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-            <p className="text-slate-400">No invoices found</p>
-            <p className="text-sm text-slate-500 mt-1">Invoices are generated when payments are confirmed</p>
+            <p className="text-slate-400">No receipts found</p>
+            <p className="text-sm text-slate-500 mt-1">Receipts are generated when payments are confirmed</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-white/10 bg-white/[0.02]">
-                  <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">Invoice #</th>
+                  <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">Receipt #</th>
                   <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">Customer</th>
-                  <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">Purchase #</th>
-                  <th className="text-right text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">Payment</th>
+                  <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">Collected By</th>
+                  <th className="text-right text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">Amount</th>
                   <th className="text-right text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">Balance</th>
                   <th className="text-center text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">Status</th>
                   <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">Date</th>
@@ -184,10 +203,13 @@ export function InvoicesContent({ invoices, shopSlug }: InvoicesContentProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {filteredInvoices.map((invoice) => (
+                {filteredInvoices.map((invoice) => {
+                  const collectedBy = getCollectedBy(invoice)
+                  return (
                   <tr key={invoice.id} className="hover:bg-white/[0.02] transition-colors">
                     <td className="px-6 py-4">
                       <span className="text-cyan-400 font-mono text-sm">{invoice.invoiceNumber}</span>
+                      <p className="text-xs text-slate-500">{invoice.paymentMethod}</p>
                     </td>
                     <td className="px-6 py-4">
                       <div>
@@ -196,7 +218,18 @@ export function InvoicesContent({ invoices, shopSlug }: InvoicesContentProps) {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-slate-300 font-mono text-sm">{invoice.purchaseNumber}</span>
+                      <p className="text-white">{collectedBy.name}</p>
+                      {collectedBy.role && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          collectedBy.role === "Collector" 
+                            ? "bg-blue-500/20 text-blue-400" 
+                            : collectedBy.role === "Shop Admin"
+                              ? "bg-emerald-500/20 text-emerald-400"
+                              : "bg-purple-500/20 text-purple-400"
+                        }`}>
+                          {collectedBy.role}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <span className="text-green-400 font-medium">{formatCurrency(invoice.paymentAmount)}</span>
@@ -248,7 +281,7 @@ export function InvoicesContent({ invoices, shopSlug }: InvoicesContentProps) {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>

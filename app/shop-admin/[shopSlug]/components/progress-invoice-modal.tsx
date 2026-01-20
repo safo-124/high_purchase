@@ -284,7 +284,30 @@ export function ProgressInvoiceModal({ shopSlug, invoiceId, onClose, onViewWaybi
                   {invoice.collectorName && (
                     <div className="info-row flex justify-between py-1 text-sm">
                       <span className="info-label text-gray-500">Collected By</span>
-                      <span className="info-value font-medium">{invoice.collectorName}</span>
+                      <span className="info-value font-medium">
+                        {invoice.collectorName}
+                        {invoice.recordedByRole && (
+                          <span className="ml-1 text-xs text-gray-400">
+                            ({invoice.recordedByRole === "COLLECTOR" ? "Collector" : 
+                              invoice.recordedByRole === "SHOP_ADMIN" ? "Shop Admin" : 
+                              invoice.recordedByRole === "BUSINESS_ADMIN" ? "Business Admin" : ""})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {!invoice.collectorName && invoice.recordedByName && (
+                    <div className="info-row flex justify-between py-1 text-sm">
+                      <span className="info-label text-gray-500">Recorded By</span>
+                      <span className="info-value font-medium">
+                        {invoice.recordedByName}
+                        {invoice.recordedByRole && (
+                          <span className="ml-1 text-xs text-gray-400">
+                            ({invoice.recordedByRole === "SHOP_ADMIN" ? "Shop Admin" : 
+                              invoice.recordedByRole === "BUSINESS_ADMIN" ? "Business Admin" : ""})
+                          </span>
+                        )}
+                      </span>
                     </div>
                   )}
                   {invoice.confirmedByName && (

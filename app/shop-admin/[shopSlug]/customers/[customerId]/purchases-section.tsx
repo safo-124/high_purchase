@@ -302,14 +302,33 @@ export function PurchasesSection({ purchases, shopSlug, products }: PurchasesSec
                         <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">Payments</h4>
                         <div className="space-y-2">
                           {purchase.payments.map((payment) => (
-                            <div key={payment.id} className="flex justify-between items-center text-sm">
-                              <div>
-                                <span className="text-white">{payment.paidAt ? new Date(payment.paidAt).toLocaleDateString() : 'Pending'}</span>
-                                <span className="text-slate-400 ml-2">• {payment.paymentMethod.replace('_', ' ')}</span>
+                            <div key={payment.id} className="text-sm">
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <span className="text-white">{payment.paidAt ? new Date(payment.paidAt).toLocaleDateString() : 'Pending'}</span>
+                                  <span className="text-slate-400 ml-2">• {payment.paymentMethod.replace('_', ' ')}</span>
+                                  {payment.rejectedAt && (
+                                    <span className="ml-2 px-2 py-0.5 text-xs bg-red-500/20 text-red-400 rounded-full">Rejected</span>
+                                  )}
+                                  {!payment.isConfirmed && !payment.rejectedAt && (
+                                    <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-500/20 text-yellow-400 rounded-full">Pending Confirmation</span>
+                                  )}
+                                </div>
+                                <span className={`font-medium ${
+                                  payment.rejectedAt 
+                                    ? 'text-red-400 line-through' 
+                                    : payment.status === 'COMPLETED' 
+                                      ? 'text-emerald-400' 
+                                      : 'text-yellow-400'
+                                }`}>
+                                  GHS {payment.amount.toLocaleString()}
+                                </span>
                               </div>
-                              <span className={`font-medium ${payment.status === 'COMPLETED' ? 'text-emerald-400' : 'text-yellow-400'}`}>
-                                GHS {payment.amount.toLocaleString()}
-                              </span>
+                              {payment.rejectionReason && (
+                                <div className="mt-1 text-xs text-red-400 bg-red-500/10 rounded-lg px-3 py-2">
+                                  <span className="font-medium">Reason:</span> {payment.rejectionReason}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

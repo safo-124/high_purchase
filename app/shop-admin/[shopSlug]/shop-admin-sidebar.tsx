@@ -91,7 +91,7 @@ export function ShopAdminSidebar({ shopSlug, shopName, userName, userEmail }: Sh
       ),
     },
     {
-      name: "Invoices",
+      name: "Receipts",
       href: `/shop-admin/${shopSlug}/invoices`,
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

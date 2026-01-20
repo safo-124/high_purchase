@@ -452,6 +452,11 @@ model ProgressInvoice {
   // Who confirmed the payment (for collector payments)
   confirmedById         String?
   confirmedByName       String?
+  // Who actually recorded the payment (role info)
+  recordedByRole        String?  // "COLLECTOR", "SHOP_ADMIN", "BUSINESS_ADMIN"
+  recordedByName        String?
+  // Shop admin info
+  shopAdminName         String?
   // Payment method used
   paymentMethod         String
   // Customer info snapshot

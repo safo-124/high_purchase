@@ -23,7 +23,8 @@ export function InvoicesContent({ invoices, shops, businessSlug }: InvoicesConte
       inv.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
       inv.customerName.toLowerCase().includes(search.toLowerCase()) ||
       inv.purchaseNumber.toLowerCase().includes(search.toLowerCase()) ||
-      inv.customerPhone.includes(search)
+      inv.customerPhone.includes(search) ||
+      (inv.collectorName && inv.collectorName.toLowerCase().includes(search.toLowerCase()))
 
     const matchesShop = shopFilter === "all" || inv.shopName === shopFilter
 
@@ -47,6 +48,24 @@ export function InvoicesContent({ invoices, shops, businessSlug }: InvoicesConte
       hour: "2-digit",
       minute: "2-digit",
     }).format(new Date(date))
+
+  // Helper to get who collected the payment
+  const getCollectedBy = (invoice: BusinessInvoiceData) => {
+    if (invoice.recordedByRole === "COLLECTOR" && invoice.collectorName) {
+      return { name: invoice.collectorName, role: "Collector" }
+    }
+    if (invoice.recordedByRole === "SHOP_ADMIN" && invoice.recordedByName) {
+      return { name: invoice.recordedByName, role: "Shop Admin" }
+    }
+    if (invoice.recordedByRole === "BUSINESS_ADMIN" && invoice.recordedByName) {
+      return { name: invoice.recordedByName, role: "Business Admin" }
+    }
+    // Fallback to collectorName if recordedByRole is not set
+    if (invoice.collectorName) {
+      return { name: invoice.collectorName, role: "Collector" }
+    }
+    return { name: "N/A", role: "" }
+  }
 
   return (
     <>
@@ -107,23 +126,23 @@ export function InvoicesContent({ invoices, shops, businessSlug }: InvoicesConte
         </div>
       </div>
 
-      {/* Invoices Table */}
+      {/* Receipts Table */}
       <div className="glass-card rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/10">
                 <th className="text-left px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Invoice
-                </th>
-                <th className="text-left px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Shop
+                  Receipt #
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Customer
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Purchase
+                  Collected By
+                </th>
+                <th className="text-left px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  Branch (Shop)
                 </th>
                 <th className="text-right px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Amount
@@ -146,26 +165,41 @@ export function InvoicesContent({ invoices, shops, businessSlug }: InvoicesConte
               {filteredInvoices.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-6 py-12 text-center text-slate-500">
-                    No invoices found
+                    No receipts found
                   </td>
                 </tr>
               ) : (
-                filteredInvoices.map((invoice) => (
+                filteredInvoices.map((invoice) => {
+                  const collectedBy = getCollectedBy(invoice)
+                  return (
                   <tr key={invoice.id} className="hover:bg-white/[0.02] transition-colors">
                     <td className="px-6 py-4">
                       <p className="text-white font-medium">{invoice.invoiceNumber}</p>
                       <p className="text-xs text-slate-500">{invoice.paymentMethod}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-white">{invoice.shopName}</p>
-                    </td>
-                    <td className="px-6 py-4">
                       <p className="text-white">{invoice.customerName}</p>
                       <p className="text-xs text-slate-500">{invoice.customerPhone}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-white font-mono text-sm">{invoice.purchaseNumber}</p>
-                      <p className="text-xs text-slate-500">{invoice.purchaseType}</p>
+                      <p className="text-white">{collectedBy.name}</p>
+                      {collectedBy.role && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          collectedBy.role === "Collector" 
+                            ? "bg-blue-500/20 text-blue-400" 
+                            : collectedBy.role === "Shop Admin"
+                              ? "bg-emerald-500/20 text-emerald-400"
+                              : "bg-purple-500/20 text-purple-400"
+                        }`}>
+                          {collectedBy.role}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-white">{invoice.shopName}</p>
+                      {invoice.shopAdminName && (
+                        <p className="text-xs text-slate-500">Admin: {invoice.shopAdminName}</p>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <p className="text-green-400 font-medium">
@@ -215,7 +249,7 @@ export function InvoicesContent({ invoices, shops, businessSlug }: InvoicesConte
                       </button>
                     </td>
                   </tr>
-                ))
+                )})
               )}
             </tbody>
           </table>

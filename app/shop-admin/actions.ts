@@ -1743,6 +1743,9 @@ export interface PurchaseData {
     status: PaymentStatus
     paidAt: Date | null
     reference: string | null
+    isConfirmed: boolean
+    rejectedAt: Date | null
+    rejectionReason: string | null
   }[]
 }
 
@@ -1821,6 +1824,9 @@ export async function getCustomerPurchases(
       status: pay.status,
       paidAt: pay.paidAt,
       reference: pay.reference,
+      isConfirmed: pay.isConfirmed,
+      rejectedAt: pay.rejectedAt,
+      rejectionReason: pay.rejectionReason,
     })),
   }))
 }
@@ -1880,6 +1886,9 @@ export async function getAllPurchases(shopSlug: string): Promise<PurchaseData[]>
       status: pay.status,
       paidAt: pay.paidAt,
       reference: pay.reference,
+      isConfirmed: pay.isConfirmed,
+      rejectedAt: pay.rejectedAt,
+      rejectionReason: pay.rejectionReason,
     })),
   }))
 }
@@ -3715,6 +3724,9 @@ export interface ProgressInvoiceData {
   totalAmountPaid: number
   collectorName: string | null
   confirmedByName: string | null
+  recordedByRole: string | null
+  recordedByName: string | null
+  shopAdminName: string | null
   paymentMethod: string
   customerName: string
   customerPhone: string
@@ -3768,6 +3780,9 @@ export async function getShopInvoices(shopSlug: string): Promise<ProgressInvoice
     totalAmountPaid: Number(inv.totalAmountPaid),
     collectorName: inv.collectorName,
     confirmedByName: inv.confirmedByName,
+    recordedByRole: inv.recordedByRole,
+    recordedByName: inv.recordedByName,
+    shopAdminName: inv.shopAdminName,
     paymentMethod: inv.paymentMethod,
     customerName: inv.customerName,
     customerPhone: inv.customerPhone,
@@ -3824,6 +3839,9 @@ export async function getProgressInvoice(shopSlug: string, invoiceId: string): P
     totalAmountPaid: Number(invoice.totalAmountPaid),
     collectorName: invoice.collectorName,
     confirmedByName: invoice.confirmedByName,
+    recordedByRole: invoice.recordedByRole,
+    recordedByName: invoice.recordedByName,
+    shopAdminName: invoice.shopAdminName,
     paymentMethod: invoice.paymentMethod,
     customerName: invoice.customerName,
     customerPhone: invoice.customerPhone,
@@ -3879,6 +3897,9 @@ export async function getPurchaseInvoices(shopSlug: string, purchaseId: string):
     totalAmountPaid: Number(inv.totalAmountPaid),
     collectorName: inv.collectorName,
     confirmedByName: inv.confirmedByName,
+    recordedByRole: inv.recordedByRole,
+    recordedByName: inv.recordedByName,
+    shopAdminName: inv.shopAdminName,
     paymentMethod: inv.paymentMethod,
     customerName: inv.customerName,
     customerPhone: inv.customerPhone,

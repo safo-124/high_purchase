@@ -10,7 +10,8 @@ import {
   LogOut, 
   User,
   Menu,
-  X
+  X,
+  FileText
 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -42,6 +43,11 @@ export function CustomerNavbar({
       href: `/customer/${shopSlug}/purchases`,
       label: "My Purchases",
       icon: ShoppingBag,
+    },
+    {
+      href: `/customer/${shopSlug}/receipts`,
+      label: "Receipts",
+      icon: FileText,
     },
     {
       href: `/customer/${shopSlug}/notifications`,

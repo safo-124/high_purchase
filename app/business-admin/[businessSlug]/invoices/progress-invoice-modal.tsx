@@ -121,6 +121,9 @@ export function ProgressInvoiceModal({ businessSlug, invoiceId, onClose }: Progr
               <div className="text-center border-b-2 border-purple-600 pb-5 mb-5">
                 <p className="text-2xl font-bold text-purple-600">{invoice.businessName}</p>
                 <p className="text-sm text-gray-600">{invoice.shopName}</p>
+                {invoice.shopAdminName && (
+                  <p className="text-xs text-gray-500">Shop Admin: {invoice.shopAdminName}</p>
+                )}
                 <p className="text-xl font-bold mt-4 uppercase tracking-widest text-gray-800">
                   Progress Invoice
                 </p>
@@ -185,7 +188,27 @@ export function ProgressInvoiceModal({ businessSlug, invoiceId, onClose }: Progr
                     {invoice.collectorName && (
                       <div>
                         <label className="text-xs text-gray-500 uppercase">Collected By</label>
-                        <p className="font-medium text-gray-900">{invoice.collectorName}</p>
+                        <p className="font-medium text-gray-900">
+                          {invoice.collectorName}
+                          {invoice.recordedByRole && (
+                            <span className="ml-1 text-xs text-gray-400">
+                              ({invoice.recordedByRole === "COLLECTOR" ? "Collector" : 
+                                invoice.recordedByRole === "SHOP_ADMIN" ? "Shop Admin" : 
+                                invoice.recordedByRole === "BUSINESS_ADMIN" ? "Business Admin" : ""})
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    {invoice.recordedByRole && invoice.recordedByRole !== "COLLECTOR" && invoice.recordedByName && (
+                      <div>
+                        <label className="text-xs text-gray-500 uppercase">Recorded By</label>
+                        <p className="font-medium text-gray-900">
+                          {invoice.recordedByName}
+                          <span className="ml-1 text-xs text-gray-400">
+                            ({invoice.recordedByRole === "SHOP_ADMIN" ? "Shop Admin" : "Business Admin"})
+                          </span>
+                        </p>
                       </div>
                     )}
                   </div>

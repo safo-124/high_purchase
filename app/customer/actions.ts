@@ -508,3 +508,146 @@ export async function getCustomerNotifications(): Promise<CustomerNotification[]
 export async function checkCustomerSession(): Promise<CustomerSession | null> {
   return await getCustomerSession()
 }
+
+// ============================================
+// CUSTOMER RECEIPTS
+// ============================================
+
+export interface CustomerReceiptData {
+  id: string
+  invoiceNumber: string
+  paymentAmount: number
+  previousBalance: number
+  newBalance: number
+  totalPurchaseAmount: number
+  totalAmountPaid: number
+  collectorName: string | null
+  paymentMethod: string
+  purchaseNumber: string
+  purchaseType: string
+  shopName: string
+  businessName: string
+  isPurchaseCompleted: boolean
+  generatedAt: Date
+  items: {
+    productName: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+  }[]
+}
+
+/**
+ * Get all receipts for the logged-in customer
+ */
+export async function getCustomerReceipts(): Promise<CustomerReceiptData[]> {
+  try {
+    const session = await requireCustomerAuth()
+
+    // Get all purchases for this customer
+    const purchases = await prisma.purchase.findMany({
+      where: { customerId: session.customerId },
+      select: { id: true },
+    })
+
+    const purchaseIds = purchases.map((p) => p.id)
+
+    // Get all invoices for these purchases
+    const invoices = await prisma.progressInvoice.findMany({
+      where: { purchaseId: { in: purchaseIds } },
+      include: {
+        purchase: {
+          include: {
+            items: true,
+          },
+        },
+      },
+      orderBy: { generatedAt: "desc" },
+    })
+
+    return invoices.map((inv) => ({
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      paymentAmount: Number(inv.paymentAmount),
+      previousBalance: Number(inv.previousBalance),
+      newBalance: Number(inv.newBalance),
+      totalPurchaseAmount: Number(inv.totalPurchaseAmount),
+      totalAmountPaid: Number(inv.totalAmountPaid),
+      collectorName: inv.collectorName,
+      paymentMethod: inv.paymentMethod,
+      purchaseNumber: inv.purchaseNumber,
+      purchaseType: inv.purchaseType,
+      shopName: inv.shopName,
+      businessName: inv.businessName,
+      isPurchaseCompleted: inv.isPurchaseCompleted,
+      generatedAt: inv.generatedAt,
+      items: inv.purchase.items.map((item) => ({
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice),
+        totalPrice: Number(item.totalPrice),
+      })),
+    }))
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Get a single receipt by ID for the logged-in customer
+ */
+export async function getCustomerReceiptById(receiptId: string): Promise<CustomerReceiptData | null> {
+  try {
+    const session = await requireCustomerAuth()
+
+    // Get all purchases for this customer to verify ownership
+    const purchases = await prisma.purchase.findMany({
+      where: { customerId: session.customerId },
+      select: { id: true },
+    })
+
+    const purchaseIds = purchases.map((p) => p.id)
+
+    const invoice = await prisma.progressInvoice.findFirst({
+      where: { 
+        id: receiptId,
+        purchaseId: { in: purchaseIds },
+      },
+      include: {
+        purchase: {
+          include: {
+            items: true,
+          },
+        },
+      },
+    })
+
+    if (!invoice) return null
+
+    return {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      paymentAmount: Number(invoice.paymentAmount),
+      previousBalance: Number(invoice.previousBalance),
+      newBalance: Number(invoice.newBalance),
+      totalPurchaseAmount: Number(invoice.totalPurchaseAmount),
+      totalAmountPaid: Number(invoice.totalAmountPaid),
+      collectorName: invoice.collectorName,
+      paymentMethod: invoice.paymentMethod,
+      purchaseNumber: invoice.purchaseNumber,
+      purchaseType: invoice.purchaseType,
+      shopName: invoice.shopName,
+      businessName: invoice.businessName,
+      isPurchaseCompleted: invoice.isPurchaseCompleted,
+      generatedAt: invoice.generatedAt,
+      items: invoice.purchase.items.map((item) => ({
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice),
+        totalPrice: Number(item.totalPrice),
+      })),
+    }
+  } catch {
+    return null
+  }
+}

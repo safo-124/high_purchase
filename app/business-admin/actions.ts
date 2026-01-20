@@ -5574,6 +5574,9 @@ export interface BusinessInvoiceData {
   totalAmountPaid: number
   collectorName: string | null
   confirmedByName: string | null
+  recordedByRole: string | null
+  recordedByName: string | null
+  shopAdminName: string | null
   paymentMethod: string
   customerName: string
   customerPhone: string
@@ -5627,6 +5630,9 @@ export async function getBusinessInvoices(businessSlug: string): Promise<Busines
     totalAmountPaid: Number(inv.totalAmountPaid),
     collectorName: inv.collectorName,
     confirmedByName: inv.confirmedByName,
+    recordedByRole: inv.recordedByRole,
+    recordedByName: inv.recordedByName,
+    shopAdminName: inv.shopAdminName,
     paymentMethod: inv.paymentMethod,
     customerName: inv.customerName,
     customerPhone: inv.customerPhone,
@@ -5684,6 +5690,9 @@ export async function getBusinessProgressInvoice(businessSlug: string, invoiceId
     totalAmountPaid: Number(invoice.totalAmountPaid),
     collectorName: invoice.collectorName,
     confirmedByName: invoice.confirmedByName,
+    recordedByRole: invoice.recordedByRole,
+    recordedByName: invoice.recordedByName,
+    shopAdminName: invoice.shopAdminName,
     paymentMethod: invoice.paymentMethod,
     customerName: invoice.customerName,
     customerPhone: invoice.customerPhone,
