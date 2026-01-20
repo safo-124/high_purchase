@@ -399,12 +399,12 @@ export function PurchasesSection({ purchases, shopSlug, products }: PurchasesSec
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 >
-                  <option value="CASH">Cash</option>
-                  <option value="MOBILE_MONEY">Mobile Money</option>
-                  <option value="BANK_TRANSFER">Bank Transfer</option>
-                  <option value="CARD">Card</option>
+                  <option value="CASH" className="bg-slate-800 text-white">Cash</option>
+                  <option value="MOBILE_MONEY" className="bg-slate-800 text-white">Mobile Money</option>
+                  <option value="BANK_TRANSFER" className="bg-slate-800 text-white">Bank Transfer</option>
+                  <option value="CARD" className="bg-slate-800 text-white">Card</option>
                 </select>
               </div>
 

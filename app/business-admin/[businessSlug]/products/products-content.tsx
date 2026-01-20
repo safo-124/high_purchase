@@ -1003,11 +1003,11 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                   <select
                     value={formData.categoryId}
                     onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                    className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
                   >
-                    <option value="">No category</option>
+                    <option value="" className="bg-slate-800 text-white">No category</option>
                     {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
+                      <option key={cat.id} value={cat.id} className="bg-slate-800 text-white">
                         {cat.name}
                       </option>
                     ))}
@@ -1018,11 +1018,11 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                   <select
                     value={formData.brandId}
                     onChange={(e) => setFormData({ ...formData, brandId: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                    className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
                   >
-                    <option value="">No brand</option>
+                    <option value="" className="bg-slate-800 text-white">No brand</option>
                     {brands.map((brand) => (
-                      <option key={brand.id} value={brand.id}>
+                      <option key={brand.id} value={brand.id} className="bg-slate-800 text-white">
                         {brand.name}
                       </option>
                     ))}
@@ -1267,11 +1267,11 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                   <select
                     value={formData.categoryId}
                     onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                    className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
                   >
-                    <option value="">No category</option>
+                    <option value="" className="bg-slate-800 text-white">No category</option>
                     {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
+                      <option key={cat.id} value={cat.id} className="bg-slate-800 text-white">
                         {cat.name}
                       </option>
                     ))}
@@ -1282,11 +1282,11 @@ export function ProductsContent({ products, shops, categories, brands, categoryN
                   <select
                     value={formData.brandId}
                     onChange={(e) => setFormData({ ...formData, brandId: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                    className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
                   >
-                    <option value="">No brand</option>
+                    <option value="" className="bg-slate-800 text-white">No brand</option>
                     {brands.map((brand) => (
-                      <option key={brand.id} value={brand.id}>
+                      <option key={brand.id} value={brand.id} className="bg-slate-800 text-white">
                         {brand.name}
                       </option>
                     ))}

@@ -384,6 +384,14 @@ export async function createShop(businessSlug: string, formData: FormData): Prom
     const adminName = formData.get("adminName") as string | null
     const adminEmail = formData.get("adminEmail") as string | null
     const adminPassword = formData.get("adminPassword") as string | null
+    const adminPhone = formData.get("adminPhone") as string | null
+    const adminGender = formData.get("adminGender") as string | null
+    const adminIdCardType = formData.get("adminIdCardType") as string | null
+    const adminIdCardNumber = formData.get("adminIdCardNumber") as string | null
+    const adminGuarantorName = formData.get("adminGuarantorName") as string | null
+    const adminGuarantorPhone = formData.get("adminGuarantorPhone") as string | null
+    const adminGuarantorRelationship = formData.get("adminGuarantorRelationship") as string | null
+    const adminAddress = formData.get("adminAddress") as string | null
 
     // Validation
     if (!name || name.trim().length === 0) {
@@ -413,7 +421,19 @@ export async function createShop(businessSlug: string, formData: FormData): Prom
     }
 
     // Validate shop admin fields if creating admin
-    let shopAdminData = null
+    let shopAdminData: {
+      name: string
+      email: string
+      password: string
+      phone: string
+      gender: "MALE" | "FEMALE" | "OTHER"
+      idCardType: "GHANA_CARD" | "VOTER_ID" | "PASSPORT" | "DRIVERS_LICENSE" | "OTHER"
+      idCardNumber: string
+      guarantorName: string
+      guarantorPhone: string
+      guarantorRelationship: string | null
+      address: string | null
+    } | null = null
     if (createAdmin) {
       if (!adminName || adminName.trim().length === 0) {
         return { success: false, error: "Shop admin name is required" }
@@ -423,6 +443,24 @@ export async function createShop(businessSlug: string, formData: FormData): Prom
       }
       if (!adminPassword || adminPassword.length < 8) {
         return { success: false, error: "Password must be at least 8 characters" }
+      }
+      if (!adminPhone || adminPhone.trim().length === 0) {
+        return { success: false, error: "Phone number is required" }
+      }
+      if (!adminGender || !["MALE", "FEMALE", "OTHER"].includes(adminGender)) {
+        return { success: false, error: "Gender is required" }
+      }
+      if (!adminIdCardType || !["GHANA_CARD", "VOTER_ID", "PASSPORT", "DRIVERS_LICENSE", "OTHER"].includes(adminIdCardType)) {
+        return { success: false, error: "ID card type is required" }
+      }
+      if (!adminIdCardNumber || adminIdCardNumber.trim().length === 0) {
+        return { success: false, error: "ID card number is required" }
+      }
+      if (!adminGuarantorName || adminGuarantorName.trim().length === 0) {
+        return { success: false, error: "Guarantor name is required" }
+      }
+      if (!adminGuarantorPhone || adminGuarantorPhone.trim().length === 0) {
+        return { success: false, error: "Guarantor phone is required" }
       }
       
       // Check if email already exists
@@ -437,6 +475,14 @@ export async function createShop(businessSlug: string, formData: FormData): Prom
         name: adminName.trim(),
         email: adminEmail.toLowerCase().trim(),
         password: adminPassword,
+        phone: adminPhone.trim(),
+        gender: adminGender as "MALE" | "FEMALE" | "OTHER",
+        idCardType: adminIdCardType as "GHANA_CARD" | "VOTER_ID" | "PASSPORT" | "DRIVERS_LICENSE" | "OTHER",
+        idCardNumber: adminIdCardNumber.trim(),
+        guarantorName: adminGuarantorName.trim(),
+        guarantorPhone: adminGuarantorPhone.trim(),
+        guarantorRelationship: adminGuarantorRelationship?.trim() || null,
+        address: adminAddress?.trim() || null,
       }
     }
 
@@ -460,6 +506,14 @@ export async function createShop(businessSlug: string, formData: FormData): Prom
           name: shopAdminData.name,
           passwordHash,
           role: "SHOP_ADMIN",
+          phone: shopAdminData.phone,
+          gender: shopAdminData.gender,
+          idCardType: shopAdminData.idCardType,
+          idCardNumber: shopAdminData.idCardNumber,
+          guarantorName: shopAdminData.guarantorName,
+          guarantorPhone: shopAdminData.guarantorPhone,
+          guarantorRelationship: shopAdminData.guarantorRelationship,
+          address: shopAdminData.address,
           memberships: {
             create: {
               shopId: shop.id,

@@ -395,6 +395,24 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                               )}
                             </div>
                             <p className="text-xs text-slate-500">{member.userEmail}</p>
+                            <div className="flex items-center gap-3 mt-0.5">
+                              {member.userPhone && (
+                                <p className="text-xs text-slate-500 flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                  </svg>
+                                  {member.userPhone}
+                                </p>
+                              )}
+                              {member.userIdCardNumber && (
+                                <p className="text-xs text-slate-500 flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0" />
+                                  </svg>
+                                  {member.userIdCardNumber}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -544,13 +562,13 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                     <select
                       value={formData.gender}
                       onChange={(e) => setFormData({ ...formData, gender: e.target.value as typeof formData.gender })}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
                       required
                     >
-                      <option value="">Select Gender</option>
-                      <option value="MALE">Male</option>
-                      <option value="FEMALE">Female</option>
-                      <option value="OTHER">Other</option>
+                      <option value="" className="bg-slate-800 text-white">Select Gender</option>
+                      <option value="MALE" className="bg-slate-800 text-white">Male</option>
+                      <option value="FEMALE" className="bg-slate-800 text-white">Female</option>
+                      <option value="OTHER" className="bg-slate-800 text-white">Other</option>
                     </select>
                   </div>
 
@@ -596,15 +614,15 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                     <select
                       value={formData.idCardType}
                       onChange={(e) => setFormData({ ...formData, idCardType: e.target.value as typeof formData.idCardType })}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
                       required
                     >
-                      <option value="">Select ID Type</option>
-                      <option value="GHANA_CARD">Ghana Card</option>
-                      <option value="VOTER_ID">Voter ID</option>
-                      <option value="PASSPORT">Passport</option>
-                      <option value="DRIVERS_LICENSE">Driver&apos;s License</option>
-                      <option value="OTHER">Other</option>
+                      <option value="" className="bg-slate-800 text-white">Select ID Type</option>
+                      <option value="GHANA_CARD" className="bg-slate-800 text-white">Ghana Card</option>
+                      <option value="VOTER_ID" className="bg-slate-800 text-white">Voter ID</option>
+                      <option value="PASSPORT" className="bg-slate-800 text-white">Passport</option>
+                      <option value="DRIVERS_LICENSE" className="bg-slate-800 text-white">Driver&apos;s License</option>
+                      <option value="OTHER" className="bg-slate-800 text-white">Other</option>
                     </select>
                   </div>
 
@@ -682,11 +700,11 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                     <select
                       value={formData.role}
                       onChange={(e) => setFormData({ ...formData, role: e.target.value as typeof formData.role })}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
                     >
-                      <option value="SHOP_ADMIN">Shop Admin</option>
-                      <option value="SALES_STAFF">Sales Staff</option>
-                      <option value="DEBT_COLLECTOR">Collector</option>
+                      <option value="SHOP_ADMIN" className="bg-slate-800 text-white">Shop Admin</option>
+                      <option value="SALES_STAFF" className="bg-slate-800 text-white">Sales Staff</option>
+                      <option value="DEBT_COLLECTOR" className="bg-slate-800 text-white">Collector</option>
                     </select>
                   </div>
 
@@ -695,11 +713,11 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                     <select
                       value={formData.shopId}
                       onChange={(e) => setFormData({ ...formData, shopId: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
                       required
                     >
                       {shops.map((shop) => (
-                        <option key={shop.id} value={shop.id}>
+                        <option key={shop.id} value={shop.id} className="bg-slate-800 text-white">
                           {shop.name}
                         </option>
                       ))}
