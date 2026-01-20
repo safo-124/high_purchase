@@ -1120,6 +1120,14 @@ export async function getBusinessStaff(businessSlug: string) {
     userId: member.userId,
     userName: member.user.name,
     userEmail: member.user.email,
+    userPhone: member.user.phone,
+    userGender: member.user.gender,
+    userIdCardType: member.user.idCardType,
+    userIdCardNumber: member.user.idCardNumber,
+    userGuarantorName: member.user.guarantorName,
+    userGuarantorPhone: member.user.guarantorPhone,
+    userGuarantorRelationship: member.user.guarantorRelationship,
+    userAddress: member.user.address,
     role: member.role,
     isActive: member.isActive,
     shopName: member.shop.name,
@@ -1234,6 +1242,14 @@ export async function createStaffMember(
     const email = formData.get("email") as string
     const password = formData.get("password") as string
     const role = formData.get("role") as "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR"
+    const phone = formData.get("phone") as string
+    const gender = formData.get("gender") as string
+    const idCardType = formData.get("idCardType") as string
+    const idCardNumber = formData.get("idCardNumber") as string
+    const guarantorName = formData.get("guarantorName") as string
+    const guarantorPhone = formData.get("guarantorPhone") as string
+    const guarantorRelationship = formData.get("guarantorRelationship") as string
+    const address = formData.get("address") as string
 
     // Validation
     if (!shopId) {
@@ -1254,6 +1270,30 @@ export async function createStaffMember(
 
     if (!role || !["SHOP_ADMIN", "SALES_STAFF", "DEBT_COLLECTOR"].includes(role)) {
       return { success: false, error: "Valid role is required" }
+    }
+
+    if (!phone || phone.trim().length === 0) {
+      return { success: false, error: "Phone number is required" }
+    }
+
+    if (!gender || !["MALE", "FEMALE", "OTHER"].includes(gender)) {
+      return { success: false, error: "Gender is required" }
+    }
+
+    if (!idCardType || !["GHANA_CARD", "VOTER_ID", "PASSPORT", "DRIVERS_LICENSE", "OTHER"].includes(idCardType)) {
+      return { success: false, error: "ID card type is required" }
+    }
+
+    if (!idCardNumber || idCardNumber.trim().length === 0) {
+      return { success: false, error: "ID card number is required" }
+    }
+
+    if (!guarantorName || guarantorName.trim().length === 0) {
+      return { success: false, error: "Guarantor name is required" }
+    }
+
+    if (!guarantorPhone || guarantorPhone.trim().length === 0) {
+      return { success: false, error: "Guarantor phone is required" }
     }
 
     // Verify shop belongs to this business
@@ -1307,6 +1347,14 @@ export async function createStaffMember(
           name: name.trim(),
           passwordHash: hashedPassword,
           role: (role === "SHOP_ADMIN" ? "SHOP_ADMIN" : role === "DEBT_COLLECTOR" ? "DEBT_COLLECTOR" : "SALES_STAFF") as Role,
+          phone: phone.trim(),
+          gender: gender as "MALE" | "FEMALE" | "OTHER",
+          idCardType: idCardType as "GHANA_CARD" | "VOTER_ID" | "PASSPORT" | "DRIVERS_LICENSE" | "OTHER",
+          idCardNumber: idCardNumber.trim(),
+          guarantorName: guarantorName.trim(),
+          guarantorPhone: guarantorPhone.trim(),
+          guarantorRelationship: guarantorRelationship?.trim() || null,
+          address: address?.trim() || null,
         },
       })
 
@@ -1353,6 +1401,14 @@ export async function updateStaffMember(
     const role = formData.get("role") as "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR"
     const isActive = formData.get("isActive") === "true"
     const shopId = formData.get("shopId") as string | null
+    const phone = formData.get("phone") as string
+    const gender = formData.get("gender") as string
+    const idCardType = formData.get("idCardType") as string
+    const idCardNumber = formData.get("idCardNumber") as string
+    const guarantorName = formData.get("guarantorName") as string
+    const guarantorPhone = formData.get("guarantorPhone") as string
+    const guarantorRelationship = formData.get("guarantorRelationship") as string
+    const address = formData.get("address") as string
 
     // Validation
     if (!name || name.trim().length === 0) {
@@ -1365,6 +1421,30 @@ export async function updateStaffMember(
 
     if (!role || !["SHOP_ADMIN", "SALES_STAFF", "DEBT_COLLECTOR"].includes(role)) {
       return { success: false, error: "Valid role is required" }
+    }
+
+    if (!phone || phone.trim().length === 0) {
+      return { success: false, error: "Phone number is required" }
+    }
+
+    if (!gender || !["MALE", "FEMALE", "OTHER"].includes(gender)) {
+      return { success: false, error: "Gender is required" }
+    }
+
+    if (!idCardType || !["GHANA_CARD", "VOTER_ID", "PASSPORT", "DRIVERS_LICENSE", "OTHER"].includes(idCardType)) {
+      return { success: false, error: "ID card type is required" }
+    }
+
+    if (!idCardNumber || idCardNumber.trim().length === 0) {
+      return { success: false, error: "ID card number is required" }
+    }
+
+    if (!guarantorName || guarantorName.trim().length === 0) {
+      return { success: false, error: "Guarantor name is required" }
+    }
+
+    if (!guarantorPhone || guarantorPhone.trim().length === 0) {
+      return { success: false, error: "Guarantor phone is required" }
     }
 
     // Get the member and verify it belongs to this business
@@ -1403,10 +1483,31 @@ export async function updateStaffMember(
     }
 
     // Update user
-    const userData: { name: string; email: string; passwordHash?: string; role: Role } = {
+    const userData: {
+      name: string
+      email: string
+      passwordHash?: string
+      role: Role
+      phone: string
+      gender: "MALE" | "FEMALE" | "OTHER"
+      idCardType: "GHANA_CARD" | "VOTER_ID" | "PASSPORT" | "DRIVERS_LICENSE" | "OTHER"
+      idCardNumber: string
+      guarantorName: string
+      guarantorPhone: string
+      guarantorRelationship: string | null
+      address: string | null
+    } = {
       name: name.trim(),
       email: email.toLowerCase(),
       role: (role === "SHOP_ADMIN" ? "SHOP_ADMIN" : role === "DEBT_COLLECTOR" ? "DEBT_COLLECTOR" : "SALES_STAFF") as Role,
+      phone: phone.trim(),
+      gender: gender as "MALE" | "FEMALE" | "OTHER",
+      idCardType: idCardType as "GHANA_CARD" | "VOTER_ID" | "PASSPORT" | "DRIVERS_LICENSE" | "OTHER",
+      idCardNumber: idCardNumber.trim(),
+      guarantorName: guarantorName.trim(),
+      guarantorPhone: guarantorPhone.trim(),
+      guarantorRelationship: guarantorRelationship?.trim() || null,
+      address: address?.trim() || null,
     }
 
     if (password && password.length >= 6) {

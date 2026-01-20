@@ -1,7 +1,6 @@
 import { requireShopAdminForShop } from "../../../../lib/auth"
 import { getSalesStaff } from "../../actions"
 import { StaffTable } from "./staff-table"
-import { CreateStaffDialog } from "./create-staff-dialog"
 
 export default async function StaffPage({
   params,
@@ -25,10 +24,9 @@ export default async function StaffPage({
             Sales Staff
           </h2>
           <p className="text-slate-400">
-            Manage your sales team members who make purchases for customers.
+            View your sales team members and their performance.
           </p>
         </div>
-        <CreateStaffDialog shopSlug={shopSlug} />
       </div>
 
       {/* Stats Cards */}
@@ -66,7 +64,7 @@ export default async function StaffPage({
 
       {/* Staff Table */}
       <div className="glass-card rounded-2xl overflow-hidden">
-        <StaffTable staff={staff} shopSlug={shopSlug} />
+        <StaffTable staff={staff} />
       </div>
     </div>
   )

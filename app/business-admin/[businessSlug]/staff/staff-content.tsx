@@ -16,6 +16,14 @@ interface StaffMember {
   userId: string
   userName: string | null
   userEmail: string
+  userPhone: string | null
+  userGender: string | null
+  userIdCardType: string | null
+  userIdCardNumber: string | null
+  userGuarantorName: string | null
+  userGuarantorPhone: string | null
+  userGuarantorRelationship: string | null
+  userAddress: string | null
   role: string
   isActive: boolean
   shopName: string
@@ -71,6 +79,14 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
     name: "",
     email: "",
     password: "",
+    phone: "",
+    gender: "" as "" | "MALE" | "FEMALE" | "OTHER",
+    idCardType: "" as "" | "GHANA_CARD" | "VOTER_ID" | "PASSPORT" | "DRIVERS_LICENSE" | "OTHER",
+    idCardNumber: "",
+    guarantorName: "",
+    guarantorPhone: "",
+    guarantorRelationship: "",
+    address: "",
     role: "SALES_STAFF" as "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR",
     shopId: "",
     isActive: true,
@@ -113,6 +129,14 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
       name: "",
       email: "",
       password: "",
+      phone: "",
+      gender: "",
+      idCardType: "",
+      idCardNumber: "",
+      guarantorName: "",
+      guarantorPhone: "",
+      guarantorRelationship: "",
+      address: "",
       role: "SALES_STAFF",
       shopId: shops[0]?.id || "",
       isActive: true,
@@ -128,6 +152,14 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
       name: member.userName || "",
       email: member.userEmail,
       password: "",
+      phone: member.userPhone || "",
+      gender: (member.userGender as "" | "MALE" | "FEMALE" | "OTHER") || "",
+      idCardType: (member.userIdCardType as "" | "GHANA_CARD" | "VOTER_ID" | "PASSPORT" | "DRIVERS_LICENSE" | "OTHER") || "",
+      idCardNumber: member.userIdCardNumber || "",
+      guarantorName: member.userGuarantorName || "",
+      guarantorPhone: member.userGuarantorPhone || "",
+      guarantorRelationship: member.userGuarantorRelationship || "",
+      address: member.userAddress || "",
       role: member.role as "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR",
       shopId: shop?.id || "",
       isActive: member.isActive,
@@ -150,6 +182,14 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
     form.set("name", formData.name)
     form.set("email", formData.email)
     form.set("password", formData.password)
+    form.set("phone", formData.phone)
+    form.set("gender", formData.gender)
+    form.set("idCardType", formData.idCardType)
+    form.set("idCardNumber", formData.idCardNumber)
+    form.set("guarantorName", formData.guarantorName)
+    form.set("guarantorPhone", formData.guarantorPhone)
+    form.set("guarantorRelationship", formData.guarantorRelationship)
+    form.set("address", formData.address)
     form.set("role", formData.role)
     form.set("shopId", formData.shopId)
     form.set("isActive", formData.isActive.toString())
@@ -442,7 +482,7 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
       {modalMode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative w-full max-w-lg glass-card p-6">
+          <div className="relative w-full max-w-3xl glass-card p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-white mb-6">
               {modalMode === "create" ? "Add New Staff Member" : "Edit Staff Member"}
             </h3>
@@ -453,76 +493,223 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Basic Information Section */}
               <div>
-                <label className="block text-sm text-slate-400 mb-2">Name</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
-                  required
-                />
-              </div>
+                <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Basic Information
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Full Name *</label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      placeholder="John Doe"
+                      required
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-sm text-slate-400 mb-2">Email</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
-                  required
-                />
-              </div>
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Email *</label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      placeholder="john@example.com"
+                      required
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-sm text-slate-400 mb-2">
-                  Password {modalMode === "edit" && "(leave blank to keep current)"}
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
-                  minLength={modalMode === "create" ? 6 : 0}
-                  required={modalMode === "create"}
-                />
-              </div>
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Phone Number *</label>
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      placeholder="0241234567"
+                      required
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-slate-400 mb-2">Role</label>
-                  <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as typeof formData.role })}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
-                  >
-                    <option value="SHOP_ADMIN">Shop Admin</option>
-                    <option value="SALES_STAFF">Sales Staff</option>
-                    <option value="DEBT_COLLECTOR">Collector</option>
-                  </select>
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Gender *</label>
+                    <select
+                      value={formData.gender}
+                      onChange={(e) => setFormData({ ...formData, gender: e.target.value as typeof formData.gender })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      required
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="MALE">Male</option>
+                      <option value="FEMALE">Female</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">
+                      Password {modalMode === "edit" && "(leave blank to keep current)"} *
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      placeholder="Min 6 characters"
+                      minLength={modalMode === "create" ? 6 : 0}
+                      required={modalMode === "create"}
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm text-slate-400 mb-2">Address</label>
+                    <input
+                      type="text"
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      placeholder="123 Main Street, Accra"
+                    />
+                  </div>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-sm text-slate-400 mb-2">Shop</label>
-                  <select
-                    value={formData.shopId}
-                    onChange={(e) => setFormData({ ...formData, shopId: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
-                    required
-                  >
-                    {shops.map((shop) => (
-                      <option key={shop.id} value={shop.id}>
-                        {shop.name}
-                      </option>
-                    ))}
-                  </select>
+              {/* ID Card Information Section */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                  </svg>
+                  ID Card Information
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">ID Card Type *</label>
+                    <select
+                      value={formData.idCardType}
+                      onChange={(e) => setFormData({ ...formData, idCardType: e.target.value as typeof formData.idCardType })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      required
+                    >
+                      <option value="">Select ID Type</option>
+                      <option value="GHANA_CARD">Ghana Card</option>
+                      <option value="VOTER_ID">Voter ID</option>
+                      <option value="PASSPORT">Passport</option>
+                      <option value="DRIVERS_LICENSE">Driver&apos;s License</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">ID Card Number *</label>
+                    <input
+                      type="text"
+                      value={formData.idCardNumber}
+                      onChange={(e) => setFormData({ ...formData, idCardNumber: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      placeholder="GHA-123456789-0"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Guarantor Information Section */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Guarantor Information
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Guarantor Name *</label>
+                    <input
+                      type="text"
+                      value={formData.guarantorName}
+                      onChange={(e) => setFormData({ ...formData, guarantorName: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      placeholder="Jane Doe"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Guarantor Phone *</label>
+                    <input
+                      type="tel"
+                      value={formData.guarantorPhone}
+                      onChange={(e) => setFormData({ ...formData, guarantorPhone: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      placeholder="0201234567"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Relationship</label>
+                    <input
+                      type="text"
+                      value={formData.guarantorRelationship}
+                      onChange={(e) => setFormData({ ...formData, guarantorRelationship: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      placeholder="Parent, Spouse, Friend, etc."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Role & Shop Section */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Role & Assignment
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Role *</label>
+                    <select
+                      value={formData.role}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value as typeof formData.role })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                    >
+                      <option value="SHOP_ADMIN">Shop Admin</option>
+                      <option value="SALES_STAFF">Sales Staff</option>
+                      <option value="DEBT_COLLECTOR">Collector</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Shop *</label>
+                    <select
+                      value={formData.shopId}
+                      onChange={(e) => setFormData({ ...formData, shopId: e.target.value })}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                      required
+                    >
+                      {shops.map((shop) => (
+                        <option key={shop.id} value={shop.id}>
+                          {shop.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
               {modalMode === "edit" && (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 pt-2">
                   <input
                     type="checkbox"
                     id="isActive"
@@ -536,7 +723,7 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                 </div>
               )}
 
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-4 border-t border-white/10">
                 <button
                   type="button"
                   onClick={closeModal}

@@ -8,18 +8,26 @@ datasource db {
 }
 
 model User {
-  id                  String           @id @default(cuid())
-  email               String           @unique
-  name                String?
-  passwordHash        String
-  role                Role
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  auditLogs           AuditLog[]       @relation("AuditLogActor")
-  businessMemberships BusinessMember[] @relation("UserBusinessMemberships")
-  customerProfiles    Customer[]       @relation("CustomerUser")
-  sentMessages        Message[]        @relation("MessageSender")
-  memberships         ShopMember[]     @relation("UserMemberships")
+  id                    String           @id @default(cuid())
+  email                 String           @unique
+  name                  String?
+  passwordHash          String
+  role                  Role
+  phone                 String?
+  gender                Gender?
+  idCardType            IdCardType?
+  idCardNumber          String?
+  guarantorName         String?
+  guarantorPhone        String?
+  guarantorRelationship String?
+  address               String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  auditLogs             AuditLog[]       @relation("AuditLogActor")
+  businessMemberships   BusinessMember[] @relation("UserBusinessMemberships")
+  customerProfiles      Customer[]       @relation("CustomerUser")
+  sentMessages          Message[]        @relation("MessageSender")
+  memberships           ShopMember[]     @relation("UserMemberships")
 }
 
 model Business {
@@ -645,6 +653,20 @@ enum Role {
   SALES_STAFF
   DEBT_COLLECTOR
   CUSTOMER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum IdCardType {
+  GHANA_CARD
+  VOTER_ID
+  PASSPORT
+  DRIVERS_LICENSE
+  OTHER
 }
 
 enum InterestType {

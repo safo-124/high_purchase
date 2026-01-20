@@ -1,7 +1,6 @@
 import { requireShopAdminForShop } from "../../../../lib/auth"
 import { getDebtCollectors } from "../../actions"
 import { CollectorsTable } from "./collectors-table"
-import { CreateCollectorDialog } from "./create-collector-dialog"
 
 export default async function CollectorsPage({
   params,
@@ -26,10 +25,9 @@ export default async function CollectorsPage({
             Debt Collectors
           </h2>
           <p className="text-slate-400">
-            Manage your team of debt collectors for in-person payments.
+            View your debt collectors' performance and assign customers.
           </p>
         </div>
-        <CreateCollectorDialog shopSlug={shopSlug} />
       </div>
 
       {/* Stats Cards */}
