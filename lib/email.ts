@@ -594,3 +594,231 @@ export async function sendCollectionReceipt(data: {
     errors,
   }
 }
+
+// ============================================
+// ACCOUNT CREATION EMAIL
+// ============================================
+
+interface AccountCreationEmailParams {
+  businessId: string
+  recipientEmail: string
+  recipientName: string
+  businessName: string
+  businessLogoUrl?: string | null
+  accountEmail: string
+  temporaryPassword: string
+  role: "BUSINESS_ADMIN" | "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR"
+  shopName?: string | null
+  loginUrl?: string
+}
+
+function getRoleDisplayName(role: AccountCreationEmailParams["role"]): string {
+  switch (role) {
+    case "BUSINESS_ADMIN":
+      return "Business Administrator"
+    case "SHOP_ADMIN":
+      return "Shop Administrator"
+    case "SALES_STAFF":
+      return "Sales Staff"
+    case "DEBT_COLLECTOR":
+      return "Debt Collector"
+    default:
+      return "User"
+  }
+}
+
+/**
+ * Send account creation email with login credentials
+ */
+export async function sendAccountCreationEmail(params: AccountCreationEmailParams): Promise<{ success: boolean; error?: string }> {
+  const {
+    businessId,
+    recipientEmail,
+    recipientName,
+    businessName,
+    businessLogoUrl,
+    accountEmail,
+    temporaryPassword,
+    role,
+    shopName,
+    loginUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+  } = params
+
+  const roleDisplay = getRoleDisplayName(role)
+
+  const logoHtml = businessLogoUrl 
+    ? `<img src="${businessLogoUrl}" alt="${businessName}" style="max-width: 120px; max-height: 80px; margin-bottom: 20px; border-radius: 8px;" />`
+    : `<div style="width: 60px; height: 60px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+        <span style="color: white; font-size: 24px; font-weight: bold;">${businessName.charAt(0).toUpperCase()}</span>
+      </div>`
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to ${businessName}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0f172a;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        <table role="presentation" style="max-width: 600px; margin: 0 auto; background: linear-gradient(145deg, #1e293b, #0f172a); border-radius: 16px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
+              ${logoHtml}
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">Welcome to ${businessName}</h1>
+              <p style="margin: 10px 0 0; color: #94a3b8; font-size: 14px;">Your ${roleDisplay} account has been created</p>
+            </td>
+          </tr>
+          
+          <!-- Main Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <p style="margin: 0 0 20px; color: #e2e8f0; font-size: 16px; line-height: 1.6;">
+                Hello <strong style="color: #ffffff;">${recipientName}</strong>,
+              </p>
+              <p style="margin: 0 0 30px; color: #94a3b8; font-size: 15px; line-height: 1.6;">
+                Your account has been created for <strong style="color: #a78bfa;">${businessName}</strong>${shopName ? ` at <strong style="color: #a78bfa;">${shopName}</strong>` : ""}. Please use the credentials below to log in:
+              </p>
+              
+              <!-- Credentials Box -->
+              <table role="presentation" style="width: 100%; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 12px; margin-bottom: 30px;">
+                <tr>
+                  <td style="padding: 24px;">
+                    <table role="presentation" style="width: 100%;">
+                      <tr>
+                        <td style="padding: 8px 0;">
+                          <span style="color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Email Address</span>
+                          <p style="margin: 4px 0 0; color: #ffffff; font-size: 16px; font-weight: 600;">${accountEmail}</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 16px 0 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+                          <span style="color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Temporary Password</span>
+                          <p style="margin: 4px 0 0; color: #fbbf24; font-size: 18px; font-weight: 700; font-family: monospace; letter-spacing: 2px;">${temporaryPassword}</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 16px 0 0; border-top: 1px solid rgba(255,255,255,0.1);">
+                          <span style="color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Role</span>
+                          <p style="margin: 4px 0 0; color: #22c55e; font-size: 14px; font-weight: 600;">${roleDisplay}</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Login Button -->
+              <table role="presentation" style="width: 100%;">
+                <tr>
+                  <td style="text-align: center;">
+                    <a href="${loginUrl}/login" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #ffffff; text-decoration: none; font-weight: 600; font-size: 15px; border-radius: 10px; box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.4);">
+                      Login to Your Account
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Security Notice -->
+              <div style="margin-top: 30px; padding: 16px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px;">
+                <p style="margin: 0; color: #fbbf24; font-size: 13px; line-height: 1.5;">
+                  <strong>⚠️ Security Notice:</strong> For your security, please change your password immediately after your first login.
+                </p>
+              </div>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 30px 40px; border-top: 1px solid rgba(255,255,255,0.1); text-align: center;">
+              <p style="margin: 0 0 10px; color: #64748b; font-size: 12px;">
+                This email was sent by ${businessName}
+              </p>
+              <p style="margin: 0; color: #475569; font-size: 11px;">
+                If you didn't expect this email, please contact your administrator.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`
+
+  const textContent = `
+Welcome to ${businessName}!
+
+Hello ${recipientName},
+
+Your ${roleDisplay} account has been created for ${businessName}${shopName ? ` at ${shopName}` : ""}.
+
+Your Login Credentials:
+-----------------------
+Email: ${accountEmail}
+Temporary Password: ${temporaryPassword}
+Role: ${roleDisplay}
+
+Login URL: ${loginUrl}/login
+
+SECURITY NOTICE: For your security, please change your password immediately after your first login.
+
+If you didn't expect this email, please contact your administrator.
+
+Best regards,
+${businessName}
+`
+
+  try {
+    const result = await sendEmail(businessId, {
+      to: recipientEmail,
+      subject: `Welcome to ${businessName} - Your Account Details`,
+      html: htmlContent,
+      text: textContent,
+    })
+
+    if (result.success) {
+      console.log(`Account creation email sent to ${recipientEmail}`)
+    }
+    
+    return result
+  } catch (error) {
+    console.error("Failed to send account creation email:", error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : "Failed to send email" 
+    }
+  }
+}
+
+/**
+ * Helper function to generate a random password
+ */
+export function generateTemporaryPassword(length: number = 12): string {
+  const uppercase = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+  const lowercase = "abcdefghjkmnpqrstuvwxyz"
+  const numbers = "23456789"
+  const special = "!@#$%&*"
+  
+  const allChars = uppercase + lowercase + numbers + special
+  
+  // Ensure at least one of each type
+  let password = ""
+  password += uppercase.charAt(Math.floor(Math.random() * uppercase.length))
+  password += lowercase.charAt(Math.floor(Math.random() * lowercase.length))
+  password += numbers.charAt(Math.floor(Math.random() * numbers.length))
+  password += special.charAt(Math.floor(Math.random() * special.length))
+  
+  // Fill the rest randomly
+  for (let i = password.length; i < length; i++) {
+    password += allChars.charAt(Math.floor(Math.random() * allChars.length))
+  }
+  
+  // Shuffle the password
+  return password.split("").sort(() => Math.random() - 0.5).join("")
+}

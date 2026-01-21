@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import bcrypt from "bcrypt"
 import prisma from "../../lib/prisma"
 import { requireShopAdminForShop, createAuditLog } from "../../lib/auth"
-import { sendCollectionReceipt } from "../../lib/email"
+import { sendCollectionReceipt, sendAccountCreationEmail } from "../../lib/email"
 import { InterestType, PaymentPreference, PaymentMethod, PurchaseStatus, PaymentStatus, PurchaseType, Prisma } from "../generated/prisma/client"
 
 export type ActionResult = {
@@ -763,6 +763,27 @@ export async function createDebtCollector(
       },
     })
 
+    // Get business details for email
+    const business = await prisma.business.findUnique({
+      where: { id: shop.businessId },
+      select: { name: true, logoUrl: true },
+    })
+
+    // Send account creation email
+    if (business) {
+      await sendAccountCreationEmail({
+        businessId: shop.businessId,
+        recipientEmail: newUser.email,
+        recipientName: payload.name.trim(),
+        businessName: business.name,
+        businessLogoUrl: business.logoUrl,
+        accountEmail: newUser.email,
+        temporaryPassword: payload.password,
+        role: "DEBT_COLLECTOR",
+        shopName: shop.name,
+      })
+    }
+
     revalidatePath(`/shop-admin/${shop.shopSlug}/collectors`)
 
     return {
@@ -1193,6 +1214,27 @@ export async function createSalesStaff(
         staffEmail: newUser.email,
       },
     })
+
+    // Get business details for email
+    const business = await prisma.business.findUnique({
+      where: { id: shop.businessId },
+      select: { name: true, logoUrl: true },
+    })
+
+    // Send account creation email
+    if (business) {
+      await sendAccountCreationEmail({
+        businessId: shop.businessId,
+        recipientEmail: newUser.email,
+        recipientName: payload.name.trim(),
+        businessName: business.name,
+        businessLogoUrl: business.logoUrl,
+        accountEmail: newUser.email,
+        temporaryPassword: payload.password,
+        role: "SALES_STAFF",
+        shopName: shop.name,
+      })
+    }
 
     revalidatePath(`/shop-admin/${shop.shopSlug}/staff`)
 

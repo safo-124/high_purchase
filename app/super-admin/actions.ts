@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import bcrypt from "bcrypt"
 import prisma from "../../lib/prisma"
 import { requireSuperAdmin, createAuditLog } from "../../lib/auth"
+import { sendAccountCreationEmail } from "../../lib/email"
 
 // Validation regex for business slug: lowercase, alphanumeric, hyphens only
 const SLUG_REGEX = /^[a-z0-9-]+$/
@@ -171,6 +172,17 @@ export async function createBusiness(formData: FormData): Promise<ActionResult> 
       },
     })
 
+    // Send account creation email
+    await sendAccountCreationEmail({
+      businessId: business.id,
+      recipientEmail: businessAdmin.email,
+      recipientName: adminName.trim(),
+      businessName: business.name,
+      accountEmail: businessAdmin.email,
+      temporaryPassword: adminPassword,
+      role: "BUSINESS_ADMIN",
+    })
+
     revalidatePath("/super-admin/businesses")
     revalidatePath("/super-admin")
 
@@ -264,6 +276,17 @@ export async function addBusinessAdmin(formData: FormData): Promise<ActionResult
         newAdminEmail: newAdmin.email,
         newAdminName: newAdmin.name,
       },
+    })
+
+    // Send account creation email
+    await sendAccountCreationEmail({
+      businessId: business.id,
+      recipientEmail: newAdmin.email,
+      recipientName: adminName.trim(),
+      businessName: business.name,
+      accountEmail: newAdmin.email,
+      temporaryPassword: adminPassword,
+      role: "BUSINESS_ADMIN",
     })
 
     revalidatePath("/super-admin/businesses")

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import bcrypt from "bcrypt"
 import prisma from "../../lib/prisma"
 import { requireBusinessAdmin, createAuditLog } from "../../lib/auth"
+import { sendAccountCreationEmail } from "../../lib/email"
 import { Role, Prisma, PurchaseStatus, DeliveryStatus } from "../generated/prisma/client"
 
 // Validation regex
@@ -737,6 +738,21 @@ export async function createShop(businessSlug: string, formData: FormData): Prom
         adminEmail: shopAdmin?.email,
       },
     })
+
+    // Send account creation email to shop admin
+    if (shopAdmin && shopAdminData) {
+      await sendAccountCreationEmail({
+        businessId: business.id,
+        recipientEmail: shopAdmin.email,
+        recipientName: shopAdminData.name,
+        businessName: business.name,
+        businessLogoUrl: business.logoUrl,
+        accountEmail: shopAdmin.email,
+        temporaryPassword: shopAdminData.password,
+        role: "SHOP_ADMIN",
+        shopName: shop.name,
+      })
+    }
 
     revalidatePath(`/business-admin/${businessSlug}`)
     revalidatePath(`/business-admin/${businessSlug}/shops`)
@@ -1634,6 +1650,25 @@ export async function createStaffMember(
         entityType: "ShopMember",
         entityId: newUser.id,
         metadata: { shopId, role, email, name },
+      })
+
+      // Send account creation email
+      const emailRole = role === "SHOP_ADMIN" 
+        ? "SHOP_ADMIN" 
+        : role === "DEBT_COLLECTOR" 
+          ? "DEBT_COLLECTOR" 
+          : "SALES_STAFF"
+          
+      await sendAccountCreationEmail({
+        businessId: business.id,
+        recipientEmail: newUser.email,
+        recipientName: name.trim(),
+        businessName: business.name,
+        businessLogoUrl: business.logoUrl,
+        accountEmail: newUser.email,
+        temporaryPassword: password,
+        role: emailRole,
+        shopName: shop.name,
       })
     }
 
