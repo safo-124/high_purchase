@@ -645,11 +645,29 @@ export async function sendAccountCreationEmail(params: AccountCreationEmailParam
   } = params
 
   const roleDisplay = getRoleDisplayName(role)
+  
+  // Get role-specific colors
+  const getRoleColors = (r: string) => {
+    switch (r) {
+      case "BUSINESS_ADMIN":
+        return { primary: "#8b5cf6", secondary: "#a78bfa", gradient: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)" }
+      case "SHOP_ADMIN":
+        return { primary: "#6366f1", secondary: "#818cf8", gradient: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)" }
+      case "SALES_STAFF":
+        return { primary: "#0ea5e9", secondary: "#38bdf8", gradient: "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)" }
+      case "DEBT_COLLECTOR":
+        return { primary: "#10b981", secondary: "#34d399", gradient: "linear-gradient(135deg, #10b981 0%, #059669 100%)" }
+      default:
+        return { primary: "#8b5cf6", secondary: "#a78bfa", gradient: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)" }
+    }
+  }
+  
+  const colors = getRoleColors(role)
 
   const logoHtml = businessLogoUrl 
-    ? `<img src="${businessLogoUrl}" alt="${businessName}" style="max-width: 120px; max-height: 80px; margin-bottom: 20px; border-radius: 8px;" />`
-    : `<div style="width: 60px; height: 60px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
-        <span style="color: white; font-size: 24px; font-weight: bold;">${businessName.charAt(0).toUpperCase()}</span>
+    ? `<img src="${businessLogoUrl}" alt="${businessName}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 20px; border: 3px solid rgba(255,255,255,0.2); box-shadow: 0 8px 32px rgba(0,0,0,0.3);" />`
+    : `<div style="width: 80px; height: 80px; background: ${colors.gradient}; border-radius: 20px; display: inline-block; text-align: center; line-height: 80px; border: 3px solid rgba(255,255,255,0.2); box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+        <span style="color: white; font-size: 32px; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${businessName.charAt(0).toUpperCase()}</span>
       </div>`
 
   const htmlContent = `
@@ -660,89 +678,182 @@ export async function sendAccountCreationEmail(params: AccountCreationEmailParam
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Welcome to ${businessName}</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0f172a;">
-  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: linear-gradient(180deg, #0f172a 0%, #1e1b4b 100%); min-height: 100vh;">
+  <!-- Decorative Background -->
+  <div style="position: absolute; top: 0; left: 0; right: 0; height: 400px; background: ${colors.gradient}; opacity: 0.1;"></div>
+  
+  <table role="presentation" style="width: 100%; border-collapse: collapse; position: relative;">
     <tr>
-      <td style="padding: 40px 20px;">
-        <table role="presentation" style="max-width: 600px; margin: 0 auto; background: linear-gradient(145deg, #1e293b, #0f172a); border-radius: 16px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
-          <!-- Header -->
+      <td style="padding: 60px 20px;">
+        <table role="presentation" style="max-width: 520px; margin: 0 auto;">
+          
+          <!-- Logo Card -->
           <tr>
-            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <td style="text-align: center; padding-bottom: 30px;">
               ${logoHtml}
-              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">Welcome to ${businessName}</h1>
-              <p style="margin: 10px 0 0; color: #94a3b8; font-size: 14px;">Your ${roleDisplay} account has been created</p>
             </td>
           </tr>
           
-          <!-- Main Content -->
+          <!-- Main Card -->
           <tr>
-            <td style="padding: 40px;">
-              <p style="margin: 0 0 20px; color: #e2e8f0; font-size: 16px; line-height: 1.6;">
-                Hello <strong style="color: #ffffff;">${recipientName}</strong>,
-              </p>
-              <p style="margin: 0 0 30px; color: #94a3b8; font-size: 15px; line-height: 1.6;">
-                Your account has been created for <strong style="color: #a78bfa;">${businessName}</strong>${shopName ? ` at <strong style="color: #a78bfa;">${shopName}</strong>` : ""}. Please use the credentials below to log in:
-              </p>
-              
-              <!-- Credentials Box -->
-              <table role="presentation" style="width: 100%; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 12px; margin-bottom: 30px;">
+            <td>
+              <table role="presentation" style="width: 100%; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border-radius: 24px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05);">
+                
+                <!-- Header -->
                 <tr>
-                  <td style="padding: 24px;">
-                    <table role="presentation" style="width: 100%;">
+                  <td style="padding: 40px 40px 30px; text-align: center;">
+                    <h1 style="margin: 0 0 8px; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">Welcome to ${businessName}</h1>
+                    <p style="margin: 0; color: #94a3b8; font-size: 15px;">Your ${roleDisplay} account is ready</p>
+                  </td>
+                </tr>
+                
+                <!-- Greeting -->
+                <tr>
+                  <td style="padding: 0 40px 30px;">
+                    <p style="margin: 0; color: #e2e8f0; font-size: 16px; line-height: 1.7;">
+                      Hello <strong style="color: #ffffff;">${recipientName}</strong>,
+                    </p>
+                    <p style="margin: 12px 0 0; color: #94a3b8; font-size: 15px; line-height: 1.7;">
+                      ${shopName 
+                        ? `You've been added to <strong style="color: ${colors.secondary};">${shopName}</strong> as a ${roleDisplay}. Here are your login credentials:`
+                        : `Your account for <strong style="color: ${colors.secondary};">${businessName}</strong> has been created. Here are your login credentials:`
+                      }
+                    </p>
+                  </td>
+                </tr>
+                
+                <!-- Credentials Card -->
+                <tr>
+                  <td style="padding: 0 40px 30px;">
+                    <table role="presentation" style="width: 100%; background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.08)); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 16px; overflow: hidden;">
+                      
+                      <!-- Email Row -->
                       <tr>
-                        <td style="padding: 8px 0;">
-                          <span style="color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Email Address</span>
-                          <p style="margin: 4px 0 0; color: #ffffff; font-size: 16px; font-weight: 600;">${accountEmail}</p>
+                        <td style="padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                          <table role="presentation" style="width: 100%;">
+                            <tr>
+                              <td style="width: 40px; vertical-align: top;">
+                                <div style="width: 36px; height: 36px; background: rgba(99, 102, 241, 0.15); border-radius: 10px; text-align: center; line-height: 36px;">
+                                  <span style="font-size: 16px;">📧</span>
+                                </div>
+                              </td>
+                              <td style="padding-left: 14px;">
+                                <span style="color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 600;">Email Address</span>
+                                <p style="margin: 4px 0 0; color: #ffffff; font-size: 15px; font-weight: 500; word-break: break-all;">${accountEmail}</p>
+                              </td>
+                            </tr>
+                          </table>
                         </td>
                       </tr>
+                      
+                      <!-- Password Row -->
                       <tr>
-                        <td style="padding: 16px 0 8px; border-top: 1px solid rgba(255,255,255,0.1);">
-                          <span style="color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Temporary Password</span>
-                          <p style="margin: 4px 0 0; color: #fbbf24; font-size: 18px; font-weight: 700; font-family: monospace; letter-spacing: 2px;">${temporaryPassword}</p>
+                        <td style="padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                          <table role="presentation" style="width: 100%;">
+                            <tr>
+                              <td style="width: 40px; vertical-align: top;">
+                                <div style="width: 36px; height: 36px; background: rgba(251, 191, 36, 0.15); border-radius: 10px; text-align: center; line-height: 36px;">
+                                  <span style="font-size: 16px;">🔐</span>
+                                </div>
+                              </td>
+                              <td style="padding-left: 14px;">
+                                <span style="color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 600;">Password</span>
+                                <p style="margin: 6px 0 0; color: #fbbf24; font-size: 20px; font-weight: 700; font-family: 'SF Mono', 'Fira Code', 'Monaco', monospace; letter-spacing: 3px; background: rgba(251, 191, 36, 0.1); padding: 8px 12px; border-radius: 8px; display: inline-block;">${temporaryPassword}</p>
+                              </td>
+                            </tr>
+                          </table>
                         </td>
                       </tr>
+                      
+                      <!-- Role Row -->
                       <tr>
-                        <td style="padding: 16px 0 0; border-top: 1px solid rgba(255,255,255,0.1);">
-                          <span style="color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Role</span>
-                          <p style="margin: 4px 0 0; color: #22c55e; font-size: 14px; font-weight: 600;">${roleDisplay}</p>
+                        <td style="padding: 20px 24px;">
+                          <table role="presentation" style="width: 100%;">
+                            <tr>
+                              <td style="width: 40px; vertical-align: top;">
+                                <div style="width: 36px; height: 36px; background: rgba(16, 185, 129, 0.15); border-radius: 10px; text-align: center; line-height: 36px;">
+                                  <span style="font-size: 16px;">👤</span>
+                                </div>
+                              </td>
+                              <td style="padding-left: 14px;">
+                                <span style="color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 600;">Your Role</span>
+                                <p style="margin: 4px 0 0;">
+                                  <span style="color: ${colors.primary}; font-size: 14px; font-weight: 600; background: ${colors.primary}15; padding: 4px 12px; border-radius: 20px; display: inline-block;">${roleDisplay}</span>
+                                </p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      
+                    </table>
+                  </td>
+                </tr>
+                
+                <!-- Login Button -->
+                <tr>
+                  <td style="padding: 0 40px 30px; text-align: center;">
+                    <a href="${loginUrl}/login" style="display: inline-block; padding: 16px 48px; background: ${colors.gradient}; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 15px; border-radius: 12px; box-shadow: 0 8px 24px ${colors.primary}40, 0 0 0 1px rgba(255,255,255,0.1) inset; transition: all 0.3s ease;">
+                      Login to Your Account →
+                    </a>
+                  </td>
+                </tr>
+                
+                <!-- Security Notice -->
+                <tr>
+                  <td style="padding: 0 40px 30px;">
+                    <table role="presentation" style="width: 100%; background: linear-gradient(135deg, rgba(251, 191, 36, 0.08), rgba(245, 158, 11, 0.05)); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 12px;">
+                      <tr>
+                        <td style="padding: 16px 20px;">
+                          <table role="presentation" style="width: 100%;">
+                            <tr>
+                              <td style="width: 24px; vertical-align: top; padding-top: 2px;">
+                                <span style="font-size: 16px;">⚠️</span>
+                              </td>
+                              <td style="padding-left: 10px;">
+                                <p style="margin: 0; color: #fbbf24; font-size: 13px; line-height: 1.6; font-weight: 500;">
+                                  <strong>Security Notice:</strong> Please change your password immediately after your first login.
+                                </p>
+                              </td>
+                            </tr>
+                          </table>
                         </td>
                       </tr>
                     </table>
                   </td>
                 </tr>
-              </table>
-              
-              <!-- Login Button -->
-              <table role="presentation" style="width: 100%;">
+                
+                <!-- Footer -->
                 <tr>
-                  <td style="text-align: center;">
-                    <a href="${loginUrl}/login" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #ffffff; text-decoration: none; font-weight: 600; font-size: 15px; border-radius: 10px; box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.4);">
-                      Login to Your Account
-                    </a>
+                  <td style="padding: 24px 40px; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.05);">
+                    <table role="presentation" style="width: 100%;">
+                      <tr>
+                        <td style="text-align: center;">
+                          <p style="margin: 0 0 6px; color: #64748b; font-size: 12px;">
+                            Sent with ❤️ by <strong style="color: #94a3b8;">${businessName}</strong>
+                          </p>
+                          <p style="margin: 0; color: #475569; font-size: 11px;">
+                            If you didn't request this, please contact your administrator.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
+                
               </table>
-              
-              <!-- Security Notice -->
-              <div style="margin-top: 30px; padding: 16px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px;">
-                <p style="margin: 0; color: #fbbf24; font-size: 13px; line-height: 1.5;">
-                  <strong>⚠️ Security Notice:</strong> For your security, please change your password immediately after your first login.
-                </p>
-              </div>
             </td>
           </tr>
           
-          <!-- Footer -->
+          <!-- Bottom Branding -->
           <tr>
-            <td style="padding: 30px 40px; border-top: 1px solid rgba(255,255,255,0.1); text-align: center;">
-              <p style="margin: 0 0 10px; color: #64748b; font-size: 12px;">
-                This email was sent by ${businessName}
-              </p>
+            <td style="padding-top: 30px; text-align: center;">
               <p style="margin: 0; color: #475569; font-size: 11px;">
-                If you didn't expect this email, please contact your administrator.
+                Powered by <strong style="color: #64748b;">High Purchase System</strong>
               </p>
             </td>
           </tr>
+          
         </table>
       </td>
     </tr>
