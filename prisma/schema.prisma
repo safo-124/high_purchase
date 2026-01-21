@@ -156,21 +156,31 @@ model BusinessMember {
 }
 
 model Shop {
-  id           String        @id @default(cuid())
-  businessId   String
-  name         String
-  shopSlug     String        @unique
-  country      String        @default("Ghana")
-  isActive     Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  customers    Customer[]    @relation("ShopCustomers")
-  messages     Message[]     @relation("ShopMessages")
-  business     Business      @relation("BusinessShops", fields: [businessId], references: [id], onDelete: Cascade)
-  members      ShopMember[]  @relation("ShopMembers")
-  policy       ShopPolicy?   @relation("ShopPolicy")
-  shopProducts ShopProduct[] @relation("ShopProductInventory")
-  taxes        ShopTax[]     @relation("ShopTaxes")
+  id                  String            @id @default(cuid())
+  businessId          String
+  name                String
+  shopSlug            String            @unique
+  country             String            @default("Ghana")
+  isActive            Boolean           @default(true)
+  // Bank Payment Details
+  bankName            String?
+  bankAccountNumber   String?
+  bankAccountName     String?
+  bankBranch          String?
+  // Mobile Money Details
+  mobileMoneyProvider String?
+  mobileMoneyNumber   String?
+  mobileMoneyName     String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  customers           Customer[]        @relation("ShopCustomers")
+  messages            Message[]         @relation("ShopMessages")
+  business            Business          @relation("BusinessShops", fields: [businessId], references: [id], onDelete: Cascade)
+  members             ShopMember[]      @relation("ShopMembers")
+  policy              ShopPolicy?       @relation("ShopPolicy")
+  shopProducts        ShopProduct[]     @relation("ShopProductInventory")
+  taxes               ShopTax[]         @relation("ShopTaxes")
+  purchaseInvoices    PurchaseInvoice[] @relation("ShopPurchaseInvoices")
 
   @@index([businessId])
 }
@@ -376,6 +386,7 @@ model Purchase {
   updatedAt          DateTime          @updatedAt
   payments           Payment[]         @relation("PurchasePayments")
   invoices           ProgressInvoice[] @relation("PurchaseInvoices")
+  purchaseInvoice    PurchaseInvoice?  @relation("PurchaseInvoiceRecord")
   customer           Customer          @relation("CustomerPurchases", fields: [customerId], references: [id], onDelete: Cascade)
   deliveredBy        ShopMember?       @relation("DeliveredPurchases", fields: [deliveredById], references: [id])
   items              PurchaseItem[]    @relation("PurchaseItems")
@@ -490,6 +501,69 @@ model ProgressInvoice {
   @@index([collectorId])
   @@index([generatedAt])
   @@index([isPurchaseCompleted])
+}
+
+// Purchase Invoice - Generated at time of purchase (before payment)
+// Shows what customer needs to pay, payment methods available, collector assigned
+model PurchaseInvoice {
+  id                  String   @id @default(cuid())
+  invoiceNumber       String   @unique
+  purchaseId          String   @unique
+  // Purchase details
+  purchaseNumber      String
+  purchaseType        String
+  subtotal            Decimal  @db.Decimal(12, 2)
+  interestAmount      Decimal  @db.Decimal(12, 2)
+  totalAmount         Decimal  @db.Decimal(12, 2)
+  downPayment         Decimal  @db.Decimal(12, 2)
+  installments        Int      @default(1)
+  dueDate             DateTime
+  // Customer info
+  customerId          String
+  customerName        String
+  customerPhone       String
+  customerAddress     String?
+  // Assigned collector info
+  collectorId         String?
+  collectorName       String?
+  collectorPhone      String?
+  // Shop info
+  shopId              String
+  shopName            String
+  shopAdminName       String?
+  // Business info
+  businessId          String
+  businessName        String
+  // Payment method options available
+  paymentMethods      String[] // ["CASH", "MOBILE_MONEY", "BANK_TRANSFER"]
+  // Bank details (if bank payment is available)
+  bankName            String?
+  bankAccountNumber   String?
+  bankAccountName     String?
+  bankBranch          String?
+  // Mobile money details (if mobile money is available)
+  mobileMoneyProvider String?
+  mobileMoneyNumber   String?
+  mobileMoneyName     String?
+  // Items snapshot
+  itemsSnapshot       Json     // Array of purchase items
+  // Status
+  status              String   @default("PENDING") // PENDING, PARTIALLY_PAID, FULLY_PAID
+  // Metadata
+  notes               String?
+  generatedAt         DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  // Relations
+  purchase            Purchase @relation("PurchaseInvoiceRecord", fields: [purchaseId], references: [id], onDelete: Cascade)
+  shop                Shop     @relation("ShopPurchaseInvoices", fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([customerId])
+  @@index([shopId])
+  @@index([businessId])
+  @@index([status])
+  @@index([generatedAt])
 }
 
 model Waybill {

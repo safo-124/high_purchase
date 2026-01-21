@@ -27,6 +27,14 @@ export interface ShopData {
   customerCount: number
   adminName: string | null
   adminEmail: string | null
+  // Payment configuration
+  bankName: string | null
+  bankAccountNumber: string | null
+  bankAccountName: string | null
+  bankBranch: string | null
+  mobileMoneyProvider: string | null
+  mobileMoneyNumber: string | null
+  mobileMoneyName: string | null
 }
 
 export interface ShopWithMetrics extends ShopData {
@@ -366,7 +374,63 @@ export async function getBusinessShops(businessSlug: string): Promise<ShopData[]
     customerCount: s._count.customers,
     adminName: s.members[0]?.user.name || null,
     adminEmail: s.members[0]?.user.email || null,
+    // Payment configuration
+    bankName: s.bankName,
+    bankAccountNumber: s.bankAccountNumber,
+    bankAccountName: s.bankAccountName,
+    bankBranch: s.bankBranch,
+    mobileMoneyProvider: s.mobileMoneyProvider,
+    mobileMoneyNumber: s.mobileMoneyNumber,
+    mobileMoneyName: s.mobileMoneyName,
   }))
+}
+
+/**
+ * Update shop payment configuration (bank and mobile money details)
+ */
+export async function updateShopPaymentConfig(
+  businessSlug: string,
+  shopId: string,
+  data: {
+    bankName?: string | null
+    bankAccountNumber?: string | null
+    bankAccountName?: string | null
+    bankBranch?: string | null
+    mobileMoneyProvider?: string | null
+    mobileMoneyNumber?: string | null
+    mobileMoneyName?: string | null
+  }
+): Promise<ActionResult> {
+  try {
+    const { business } = await requireBusinessAdmin(businessSlug)
+
+    // Verify shop belongs to this business
+    const shop = await prisma.shop.findFirst({
+      where: { id: shopId, businessId: business.id },
+    })
+
+    if (!shop) {
+      return { success: false, error: "Shop not found" }
+    }
+
+    await prisma.shop.update({
+      where: { id: shopId },
+      data: {
+        bankName: data.bankName,
+        bankAccountNumber: data.bankAccountNumber,
+        bankAccountName: data.bankAccountName,
+        bankBranch: data.bankBranch,
+        mobileMoneyProvider: data.mobileMoneyProvider,
+        mobileMoneyNumber: data.mobileMoneyNumber,
+        mobileMoneyName: data.mobileMoneyName,
+      },
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error("Failed to update shop payment config:", error)
+    return { success: false, error: "Failed to update payment configuration" }
+  }
 }
 
 /**
@@ -768,6 +832,14 @@ export async function getBusinessShopsWithMetrics(businessSlug: string): Promise
       customerCount: shop._count.customers,
       adminName: admin?.user.name || null,
       adminEmail: admin?.user.email || null,
+      // Payment configuration
+      bankName: shop.bankName,
+      bankAccountNumber: shop.bankAccountNumber,
+      bankAccountName: shop.bankAccountName,
+      bankBranch: shop.bankBranch,
+      mobileMoneyProvider: shop.mobileMoneyProvider,
+      mobileMoneyNumber: shop.mobileMoneyNumber,
+      mobileMoneyName: shop.mobileMoneyName,
       totalSales,
       totalCollected,
       totalOutstanding,
@@ -5591,6 +5663,14 @@ export interface BusinessInvoiceData {
   waybillNumber: string | null
   notes: string | null
   generatedAt: Date
+  // Payment configuration from shop
+  bankName: string | null
+  bankAccountNumber: string | null
+  bankAccountName: string | null
+  bankBranch: string | null
+  mobileMoneyProvider: string | null
+  mobileMoneyNumber: string | null
+  mobileMoneyName: string | null
   items: {
     productName: string
     quantity: number
@@ -5611,6 +5691,11 @@ export async function getBusinessInvoices(businessSlug: string): Promise<Busines
       purchase: {
         include: {
           items: true,
+          customer: {
+            include: {
+              shop: true,
+            },
+          },
         },
       },
     },
@@ -5618,42 +5703,53 @@ export async function getBusinessInvoices(businessSlug: string): Promise<Busines
     take: 200,
   })
 
-  return invoices.map((inv) => ({
-    id: inv.id,
-    invoiceNumber: inv.invoiceNumber,
-    paymentId: inv.paymentId,
-    purchaseId: inv.purchaseId,
-    paymentAmount: Number(inv.paymentAmount),
-    previousBalance: Number(inv.previousBalance),
-    newBalance: Number(inv.newBalance),
-    totalPurchaseAmount: Number(inv.totalPurchaseAmount),
-    totalAmountPaid: Number(inv.totalAmountPaid),
-    collectorName: inv.collectorName,
-    confirmedByName: inv.confirmedByName,
-    recordedByRole: inv.recordedByRole,
-    recordedByName: inv.recordedByName,
-    shopAdminName: inv.shopAdminName,
-    paymentMethod: inv.paymentMethod,
-    customerName: inv.customerName,
-    customerPhone: inv.customerPhone,
-    customerAddress: inv.customerAddress,
-    purchaseNumber: inv.purchaseNumber,
-    purchaseType: inv.purchaseType,
-    shopId: inv.shopId,
-    shopName: inv.shopName,
-    businessName: inv.businessName,
-    isPurchaseCompleted: inv.isPurchaseCompleted,
-    waybillGenerated: inv.waybillGenerated,
-    waybillNumber: inv.waybillNumber,
-    notes: inv.notes,
-    generatedAt: inv.generatedAt,
-    items: inv.purchase.items.map((item) => ({
-      productName: item.productName,
-      quantity: item.quantity,
-      unitPrice: Number(item.unitPrice),
-      totalPrice: Number(item.totalPrice),
-    })),
-  }))
+  return invoices.map((inv) => {
+    const shop = inv.purchase.customer.shop
+    return {
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      paymentId: inv.paymentId,
+      purchaseId: inv.purchaseId,
+      paymentAmount: Number(inv.paymentAmount),
+      previousBalance: Number(inv.previousBalance),
+      newBalance: Number(inv.newBalance),
+      totalPurchaseAmount: Number(inv.totalPurchaseAmount),
+      totalAmountPaid: Number(inv.totalAmountPaid),
+      collectorName: inv.collectorName,
+      confirmedByName: inv.confirmedByName,
+      recordedByRole: inv.recordedByRole,
+      recordedByName: inv.recordedByName,
+      shopAdminName: inv.shopAdminName,
+      paymentMethod: inv.paymentMethod,
+      customerName: inv.customerName,
+      customerPhone: inv.customerPhone,
+      customerAddress: inv.customerAddress,
+      purchaseNumber: inv.purchaseNumber,
+      purchaseType: inv.purchaseType,
+      shopId: inv.shopId,
+      shopName: inv.shopName,
+      businessName: inv.businessName,
+      isPurchaseCompleted: inv.isPurchaseCompleted,
+      waybillGenerated: inv.waybillGenerated,
+      waybillNumber: inv.waybillNumber,
+      notes: inv.notes,
+      generatedAt: inv.generatedAt,
+      // Payment configuration from shop
+      bankName: shop.bankName,
+      bankAccountNumber: shop.bankAccountNumber,
+      bankAccountName: shop.bankAccountName,
+      bankBranch: shop.bankBranch,
+      mobileMoneyProvider: shop.mobileMoneyProvider,
+      mobileMoneyNumber: shop.mobileMoneyNumber,
+      mobileMoneyName: shop.mobileMoneyName,
+      items: inv.purchase.items.map((item) => ({
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice),
+        totalPrice: Number(item.totalPrice),
+      })),
+    }
+  })
 }
 
 /**
@@ -5671,12 +5767,19 @@ export async function getBusinessProgressInvoice(businessSlug: string, invoiceId
       purchase: {
         include: {
           items: true,
+          customer: {
+            include: {
+              shop: true,
+            },
+          },
         },
       },
     },
   })
 
   if (!invoice) return null
+
+  const shop = invoice.purchase.customer.shop
 
   return {
     id: invoice.id,
@@ -5707,6 +5810,14 @@ export async function getBusinessProgressInvoice(businessSlug: string, invoiceId
     waybillNumber: invoice.waybillNumber,
     notes: invoice.notes,
     generatedAt: invoice.generatedAt,
+    // Payment configuration from shop
+    bankName: shop.bankName,
+    bankAccountNumber: shop.bankAccountNumber,
+    bankAccountName: shop.bankAccountName,
+    bankBranch: shop.bankBranch,
+    mobileMoneyProvider: shop.mobileMoneyProvider,
+    mobileMoneyNumber: shop.mobileMoneyNumber,
+    mobileMoneyName: shop.mobileMoneyName,
     items: invoice.purchase.items.map((item) => ({
       productName: item.productName,
       quantity: item.quantity,
@@ -6042,5 +6153,262 @@ export async function getBusinessPurchaseDetails(
   } catch (error) {
     console.error("Error fetching purchase details:", error)
     return { success: false, error: "Failed to fetch purchase details" }
+  }
+}
+
+// ============================================
+// PURCHASE INVOICES (Generated at purchase time)
+// ============================================
+
+export interface PurchaseInvoiceListData {
+  id: string
+  invoiceNumber: string
+  purchaseNumber: string
+  purchaseType: string
+  totalAmount: number
+  downPayment: number
+  customerName: string
+  customerPhone: string
+  shopName: string
+  collectorName: string | null
+  status: string
+  generatedAt: Date
+}
+
+export interface PurchaseInvoiceDetailData {
+  id: string
+  invoiceNumber: string
+  purchaseNumber: string
+  purchaseType: string
+  subtotal: number
+  interestAmount: number
+  totalAmount: number
+  downPayment: number
+  installments: number
+  dueDate: Date
+  customerName: string
+  customerPhone: string
+  customerAddress: string | null
+  collectorName: string | null
+  collectorPhone: string | null
+  shopName: string
+  shopAdminName: string | null
+  businessName: string
+  paymentMethods: string[]
+  bankName: string | null
+  bankAccountNumber: string | null
+  bankAccountName: string | null
+  bankBranch: string | null
+  mobileMoneyProvider: string | null
+  mobileMoneyNumber: string | null
+  mobileMoneyName: string | null
+  status: string
+  generatedAt: Date
+  items: {
+    productName: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+  }[]
+}
+
+/**
+ * Get all purchase invoices across all shops in the business
+ */
+export async function getBusinessPurchaseInvoices(businessSlug: string): Promise<PurchaseInvoiceListData[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const invoices = await prisma.purchaseInvoice.findMany({
+    where: {
+      businessId: business.id,
+    },
+    orderBy: { generatedAt: "desc" },
+  })
+
+  return invoices.map((inv) => ({
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    purchaseNumber: inv.purchaseNumber,
+    purchaseType: inv.purchaseType,
+    totalAmount: Number(inv.totalAmount),
+    downPayment: Number(inv.downPayment),
+    customerName: inv.customerName,
+    customerPhone: inv.customerPhone,
+    shopName: inv.shopName,
+    collectorName: inv.collectorName,
+    status: inv.status,
+    generatedAt: inv.generatedAt,
+  }))
+}
+
+/**
+ * Get a specific purchase invoice
+ */
+export async function getBusinessPurchaseInvoice(
+  businessSlug: string,
+  invoiceId: string
+): Promise<PurchaseInvoiceDetailData | null> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const invoice = await prisma.purchaseInvoice.findFirst({
+    where: {
+      id: invoiceId,
+      businessId: business.id,
+    },
+  })
+
+  if (!invoice) return null
+
+  const items = invoice.itemsSnapshot as { productName: string; quantity: number; unitPrice: number; totalPrice: number }[]
+
+  return {
+    id: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    purchaseNumber: invoice.purchaseNumber,
+    purchaseType: invoice.purchaseType,
+    subtotal: Number(invoice.subtotal),
+    interestAmount: Number(invoice.interestAmount),
+    totalAmount: Number(invoice.totalAmount),
+    downPayment: Number(invoice.downPayment),
+    installments: invoice.installments,
+    dueDate: invoice.dueDate,
+    customerName: invoice.customerName,
+    customerPhone: invoice.customerPhone,
+    customerAddress: invoice.customerAddress,
+    collectorName: invoice.collectorName,
+    collectorPhone: invoice.collectorPhone,
+    shopName: invoice.shopName,
+    shopAdminName: invoice.shopAdminName,
+    businessName: invoice.businessName,
+    paymentMethods: invoice.paymentMethods,
+    bankName: invoice.bankName,
+    bankAccountNumber: invoice.bankAccountNumber,
+    bankAccountName: invoice.bankAccountName,
+    bankBranch: invoice.bankBranch,
+    mobileMoneyProvider: invoice.mobileMoneyProvider,
+    mobileMoneyNumber: invoice.mobileMoneyNumber,
+    mobileMoneyName: invoice.mobileMoneyName,
+    status: invoice.status,
+    generatedAt: invoice.generatedAt,
+    items: items || [],
+  }
+}
+
+/**
+ * Generate a purchase invoice for a purchase
+ */
+export async function generatePurchaseInvoice(
+  businessSlug: string,
+  purchaseId: string
+): Promise<ActionResult> {
+  try {
+    const { business } = await requireBusinessAdmin(businessSlug)
+
+    // Get purchase details
+    const purchase = await prisma.purchase.findFirst({
+      where: {
+        id: purchaseId,
+        customer: {
+          shop: { businessId: business.id },
+        },
+      },
+      include: {
+        customer: {
+          include: {
+            shop: {
+              include: {
+                members: {
+                  where: { role: "SHOP_ADMIN", isActive: true },
+                  include: { user: true },
+                  take: 1,
+                },
+              },
+            },
+            assignedCollector: {
+              include: { user: true },
+            },
+          },
+        },
+        items: true,
+        purchaseInvoice: true,
+      },
+    })
+
+    if (!purchase) {
+      return { success: false, error: "Purchase not found" }
+    }
+
+    // Check if invoice already exists
+    if (purchase.purchaseInvoice) {
+      return { success: false, error: "Invoice already exists for this purchase" }
+    }
+
+    const shop = purchase.customer.shop
+    const shopAdmin = shop.members[0]?.user
+    const collector = purchase.customer.assignedCollector
+
+    // Generate invoice number
+    const invoiceCount = await prisma.purchaseInvoice.count({
+      where: { businessId: business.id },
+    })
+    const invoiceNumber = `INV-${business.businessSlug.toUpperCase().slice(0, 3)}-${String(invoiceCount + 1).padStart(6, "0")}`
+
+    // Determine available payment methods based on shop configuration
+    const paymentMethods: string[] = ["CASH"]
+    if (shop.bankName && shop.bankAccountNumber) {
+      paymentMethods.push("BANK_TRANSFER")
+    }
+    if (shop.mobileMoneyProvider && shop.mobileMoneyNumber) {
+      paymentMethods.push("MOBILE_MONEY")
+    }
+
+    // Create the invoice
+    const invoice = await prisma.purchaseInvoice.create({
+      data: {
+        invoiceNumber,
+        purchaseId: purchase.id,
+        purchaseNumber: purchase.purchaseNumber,
+        purchaseType: purchase.purchaseType,
+        subtotal: purchase.subtotal,
+        interestAmount: purchase.interestAmount,
+        totalAmount: purchase.totalAmount,
+        downPayment: purchase.downPayment,
+        installments: purchase.installments,
+        dueDate: purchase.dueDate,
+        customerId: purchase.customer.id,
+        customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+        customerPhone: purchase.customer.phone,
+        customerAddress: purchase.customer.address,
+        collectorId: collector?.id || null,
+        collectorName: collector?.user.name || null,
+        collectorPhone: collector?.user.phone || null,
+        shopId: shop.id,
+        shopName: shop.name,
+        shopAdminName: shopAdmin?.name || null,
+        businessId: business.id,
+        businessName: business.name,
+        paymentMethods,
+        bankName: shop.bankName,
+        bankAccountNumber: shop.bankAccountNumber,
+        bankAccountName: shop.bankAccountName,
+        bankBranch: shop.bankBranch,
+        mobileMoneyProvider: shop.mobileMoneyProvider,
+        mobileMoneyNumber: shop.mobileMoneyNumber,
+        mobileMoneyName: shop.mobileMoneyName,
+        itemsSnapshot: purchase.items.map((item) => ({
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          totalPrice: Number(item.totalPrice),
+        })),
+        status: purchase.status === "COMPLETED" ? "FULLY_PAID" : 
+                Number(purchase.amountPaid) > 0 ? "PARTIALLY_PAID" : "PENDING",
+      },
+    })
+
+    return { success: true, data: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber } }
+  } catch (error) {
+    console.error("Error generating purchase invoice:", error)
+    return { success: false, error: "Failed to generate invoice" }
   }
 }

@@ -3747,6 +3747,14 @@ export interface ProgressInvoiceData {
     unitPrice: number
     totalPrice: number
   }[]
+  // Payment configuration from shop
+  bankName: string | null
+  bankAccountNumber: string | null
+  bankAccountName: string | null
+  bankBranch: string | null
+  mobileMoneyProvider: string | null
+  mobileMoneyNumber: string | null
+  mobileMoneyName: string | null
 }
 
 /**
@@ -3802,6 +3810,14 @@ export async function getShopInvoices(shopSlug: string): Promise<ProgressInvoice
       unitPrice: Number(item.unitPrice),
       totalPrice: Number(item.totalPrice),
     })),
+    // Payment configuration from shop
+    bankName: shop.bankName,
+    bankAccountNumber: shop.bankAccountNumber,
+    bankAccountName: shop.bankAccountName,
+    bankBranch: shop.bankBranch,
+    mobileMoneyProvider: shop.mobileMoneyProvider,
+    mobileMoneyNumber: shop.mobileMoneyNumber,
+    mobileMoneyName: shop.mobileMoneyName,
   }))
 }
 
@@ -3861,6 +3877,14 @@ export async function getProgressInvoice(shopSlug: string, invoiceId: string): P
       unitPrice: Number(item.unitPrice),
       totalPrice: Number(item.totalPrice),
     })),
+    // Payment configuration from shop
+    bankName: shop.bankName,
+    bankAccountNumber: shop.bankAccountNumber,
+    bankAccountName: shop.bankAccountName,
+    bankBranch: shop.bankBranch,
+    mobileMoneyProvider: shop.mobileMoneyProvider,
+    mobileMoneyNumber: shop.mobileMoneyNumber,
+    mobileMoneyName: shop.mobileMoneyName,
   }
 }
 
@@ -3919,6 +3943,14 @@ export async function getPurchaseInvoices(shopSlug: string, purchaseId: string):
       unitPrice: Number(item.unitPrice),
       totalPrice: Number(item.totalPrice),
     })),
+    // Payment configuration from shop
+    bankName: shop.bankName,
+    bankAccountNumber: shop.bankAccountNumber,
+    bankAccountName: shop.bankAccountName,
+    bankBranch: shop.bankBranch,
+    mobileMoneyProvider: shop.mobileMoneyProvider,
+    mobileMoneyNumber: shop.mobileMoneyNumber,
+    mobileMoneyName: shop.mobileMoneyName,
   }))
 }
 
@@ -4556,5 +4588,268 @@ export async function getBillData(shopSlug: string, purchaseId: string): Promise
     interestRate: Number(purchase.interestRate),
     interestType: purchase.interestType,
     salesStaff: user.name,
+  }
+}
+
+// ===== PURCHASE INVOICE TYPES =====
+
+export interface ShopPurchaseInvoiceListData {
+  id: string
+  invoiceNumber: string
+  purchaseNumber: string
+  purchaseType: string
+  customerName: string
+  customerPhone: string
+  collectorName: string | null
+  totalAmount: number
+  downPayment: number
+  status: string
+  createdAt: Date
+}
+
+export interface ShopPurchaseInvoiceDetailData {
+  id: string
+  invoiceNumber: string
+  purchaseNumber: string
+  purchaseType: string
+  subtotal: number
+  interestAmount: number
+  totalAmount: number
+  downPayment: number
+  installments: number
+  dueDate: Date | null
+  customerId: string
+  customerName: string
+  customerPhone: string
+  customerAddress: string | null
+  collectorId: string | null
+  collectorName: string | null
+  collectorPhone: string | null
+  shopId: string
+  shopName: string
+  shopAdminName: string | null
+  businessId: string
+  businessName: string
+  paymentMethods: string[]
+  bankName: string | null
+  bankAccountNumber: string | null
+  bankAccountName: string | null
+  bankBranch: string | null
+  mobileMoneyProvider: string | null
+  mobileMoneyNumber: string | null
+  mobileMoneyName: string | null
+  itemsSnapshot: {
+    productName: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+  }[]
+  status: string
+  createdAt: Date
+}
+
+/**
+ * Get all purchase invoices for a shop
+ */
+export async function getShopPurchaseInvoices(shopSlug: string): Promise<ShopPurchaseInvoiceListData[]> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const invoices = await prisma.purchaseInvoice.findMany({
+    where: { shopId: shop.id },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  })
+
+  return invoices.map((inv) => ({
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    purchaseNumber: inv.purchaseNumber,
+    purchaseType: inv.purchaseType,
+    customerName: inv.customerName,
+    customerPhone: inv.customerPhone,
+    collectorName: inv.collectorName,
+    totalAmount: Number(inv.totalAmount),
+    downPayment: Number(inv.downPayment),
+    status: inv.status,
+    createdAt: inv.createdAt,
+  }))
+}
+
+/**
+ * Get a single purchase invoice by ID
+ */
+export async function getShopPurchaseInvoice(shopSlug: string, invoiceId: string): Promise<ShopPurchaseInvoiceDetailData | null> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const invoice = await prisma.purchaseInvoice.findFirst({
+    where: {
+      id: invoiceId,
+      shopId: shop.id,
+    },
+  })
+
+  if (!invoice) return null
+
+  return {
+    id: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    purchaseNumber: invoice.purchaseNumber,
+    purchaseType: invoice.purchaseType,
+    subtotal: Number(invoice.subtotal),
+    interestAmount: Number(invoice.interestAmount),
+    totalAmount: Number(invoice.totalAmount),
+    downPayment: Number(invoice.downPayment),
+    installments: invoice.installments,
+    dueDate: invoice.dueDate,
+    customerId: invoice.customerId,
+    customerName: invoice.customerName,
+    customerPhone: invoice.customerPhone,
+    customerAddress: invoice.customerAddress,
+    collectorId: invoice.collectorId,
+    collectorName: invoice.collectorName,
+    collectorPhone: invoice.collectorPhone,
+    shopId: invoice.shopId,
+    shopName: invoice.shopName,
+    shopAdminName: invoice.shopAdminName,
+    businessId: invoice.businessId,
+    businessName: invoice.businessName,
+    paymentMethods: invoice.paymentMethods,
+    bankName: invoice.bankName,
+    bankAccountNumber: invoice.bankAccountNumber,
+    bankAccountName: invoice.bankAccountName,
+    bankBranch: invoice.bankBranch,
+    mobileMoneyProvider: invoice.mobileMoneyProvider,
+    mobileMoneyNumber: invoice.mobileMoneyNumber,
+    mobileMoneyName: invoice.mobileMoneyName,
+    itemsSnapshot: (invoice.itemsSnapshot as { productName: string; quantity: number; unitPrice: number; totalPrice: number }[]) || [],
+    status: invoice.status,
+    createdAt: invoice.createdAt,
+  }
+}
+
+/**
+ * Generate a purchase invoice for a specific purchase (Shop Admin version)
+ */
+export async function generateShopPurchaseInvoice(
+  shopSlug: string,
+  purchaseId: string
+): Promise<ActionResult> {
+  try {
+    const { shop } = await requireShopAdminForShop(shopSlug)
+
+    // Get the business
+    const business = await prisma.business.findUnique({
+      where: { id: shop.businessId },
+    })
+
+    if (!business) {
+      return { success: false, error: "Business not found" }
+    }
+
+    // Get purchase with customer and items
+    const purchase = await prisma.purchase.findFirst({
+      where: {
+        id: purchaseId,
+        customer: { shopId: shop.id },
+      },
+      include: {
+        customer: {
+          include: {
+            shop: {
+              include: {
+                members: {
+                  where: { role: "SHOP_ADMIN", isActive: true },
+                  include: { user: true },
+                  take: 1,
+                },
+              },
+            },
+            assignedCollector: {
+              include: { user: true },
+            },
+          },
+        },
+        items: true,
+        purchaseInvoice: true,
+      },
+    })
+
+    if (!purchase) {
+      return { success: false, error: "Purchase not found" }
+    }
+
+    // Check if invoice already exists
+    if (purchase.purchaseInvoice) {
+      return { success: false, error: "Invoice already exists for this purchase" }
+    }
+
+    // Get shop admin from the included relation
+    const shopWithMembers = purchase.customer.shop
+    const shopAdmin = shopWithMembers.members[0]?.user
+    const collector = purchase.customer.assignedCollector
+
+    // Generate invoice number
+    const invoiceCount = await prisma.purchaseInvoice.count({
+      where: { shopId: shop.id },
+    })
+    const invoiceNumber = `INV-${shop.shopSlug.toUpperCase().slice(0, 3)}-${String(invoiceCount + 1).padStart(6, "0")}`
+
+    // Determine available payment methods based on shop configuration
+    const paymentMethods: string[] = ["CASH"]
+    if (shop.bankName && shop.bankAccountNumber) {
+      paymentMethods.push("BANK_TRANSFER")
+    }
+    if (shop.mobileMoneyProvider && shop.mobileMoneyNumber) {
+      paymentMethods.push("MOBILE_MONEY")
+    }
+
+    // Create the invoice
+    const invoice = await prisma.purchaseInvoice.create({
+      data: {
+        invoiceNumber,
+        purchaseId: purchase.id,
+        purchaseNumber: purchase.purchaseNumber,
+        purchaseType: purchase.purchaseType,
+        subtotal: purchase.subtotal,
+        interestAmount: purchase.interestAmount,
+        totalAmount: purchase.totalAmount,
+        downPayment: purchase.downPayment,
+        installments: purchase.installments,
+        dueDate: purchase.dueDate,
+        customerId: purchase.customer.id,
+        customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+        customerPhone: purchase.customer.phone,
+        customerAddress: purchase.customer.address,
+        collectorId: collector?.id || null,
+        collectorName: collector?.user.name || null,
+        collectorPhone: collector?.user.phone || null,
+        shopId: shop.id,
+        shopName: shop.name,
+        shopAdminName: shopAdmin?.name || null,
+        businessId: business.id,
+        businessName: business.name,
+        paymentMethods,
+        bankName: shop.bankName,
+        bankAccountNumber: shop.bankAccountNumber,
+        bankAccountName: shop.bankAccountName,
+        bankBranch: shop.bankBranch,
+        mobileMoneyProvider: shop.mobileMoneyProvider,
+        mobileMoneyNumber: shop.mobileMoneyNumber,
+        mobileMoneyName: shop.mobileMoneyName,
+        itemsSnapshot: purchase.items.map((item) => ({
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          totalPrice: Number(item.totalPrice),
+        })),
+        status: purchase.status === "COMPLETED" ? "FULLY_PAID" : 
+                Number(purchase.amountPaid) > 0 ? "PARTIALLY_PAID" : "PENDING",
+      },
+    })
+
+    return { success: true, data: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber } }
+  } catch (error) {
+    console.error("Error generating purchase invoice:", error)
+    return { success: false, error: "Failed to generate invoice" }
   }
 }
