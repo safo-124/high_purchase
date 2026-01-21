@@ -775,18 +775,62 @@ ${businessName}
 `
 
   try {
-    const result = await sendEmail(businessId, {
-      to: recipientEmail,
-      subject: `Welcome to ${businessName} - Your Account Details`,
-      html: htmlContent,
-      text: textContent,
-    })
-
-    if (result.success) {
-      console.log(`Account creation email sent to ${recipientEmail}`)
-    }
+    // First try to use business email settings
+    const settings = await getBusinessEmailSettings(businessId)
     
-    return result
+    if (settings && settings.isEnabled) {
+      // Use business-specific email settings
+      const result = await sendEmail(businessId, {
+        to: recipientEmail,
+        subject: `Welcome to ${businessName} - Your Account Details`,
+        html: htmlContent,
+        text: textContent,
+      })
+
+      if (result.success) {
+        console.log(`Account creation email sent to ${recipientEmail} via business settings`)
+      }
+      
+      return result
+    } else {
+      // Fallback to environment variables for SMTP
+      const smtpHost = process.env.SMTP_HOST
+      const smtpPort = parseInt(process.env.SMTP_PORT || "587")
+      const smtpUser = process.env.SMTP_USER
+      const smtpPassword = process.env.SMTP_PASSWORD
+      const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER
+      const fromName = process.env.SMTP_FROM_NAME || "High Purchase System"
+      
+      if (!smtpHost || !smtpUser || !smtpPassword) {
+        console.error("No email settings found for business and no SMTP environment variables configured")
+        return { 
+          success: false, 
+          error: "Email settings not configured. Please configure SMTP settings in environment variables or business email settings." 
+        }
+      }
+      
+      // Create transporter with environment variables
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: process.env.SMTP_SECURE === "true",
+        auth: {
+          user: smtpUser,
+          pass: smtpPassword,
+        },
+      })
+      
+      await transporter.sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
+        to: recipientEmail,
+        subject: `Welcome to ${businessName} - Your Account Details`,
+        html: htmlContent,
+        text: textContent,
+      })
+      
+      console.log(`Account creation email sent to ${recipientEmail} via environment SMTP`)
+      return { success: true }
+    }
   } catch (error) {
     console.error("Failed to send account creation email:", error)
     return { 
