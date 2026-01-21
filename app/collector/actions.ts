@@ -87,6 +87,8 @@ export interface PurchaseData {
 export interface CollectorDashboardData {
   collectorName: string
   shopName: string
+  businessName: string
+  businessLogoUrl: string | null
   assignedCustomers: number
   activeLoans: number
   totalOutstanding: number
@@ -102,6 +104,12 @@ export interface CollectorDashboardData {
 
 export async function getCollectorDashboard(shopSlug: string): Promise<CollectorDashboardData> {
   const { user, shop, membership } = await requireCollectorForShop(shopSlug)
+
+  // Get business details including logo
+  const business = await prisma.business.findUnique({
+    where: { id: shop.businessId },
+    select: { name: true, logoUrl: true },
+  })
 
   // Get collector's member ID (for assigned customers)
   const collectorMemberId = membership?.id
@@ -174,6 +182,8 @@ export async function getCollectorDashboard(shopSlug: string): Promise<Collector
   return {
     collectorName: user.name || "Collector",
     shopName: shop.name,
+    businessName: business?.name || 'Business',
+    businessLogoUrl: business?.logoUrl || null,
     assignedCustomers,
     activeLoans,
     totalOutstanding,

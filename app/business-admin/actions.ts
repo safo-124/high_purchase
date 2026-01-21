@@ -67,6 +67,141 @@ export interface BusinessPolicyPayload {
   lateFeeRate?: number
 }
 
+// Business Profile Types
+export interface BusinessProfileData {
+  id: string
+  name: string
+  businessSlug: string
+  country: string
+  logoUrl: string | null
+  tagline: string | null
+  address: string | null
+  phone: string | null
+  email: string | null
+  website: string | null
+  createdAt: Date
+}
+
+export interface BusinessProfilePayload {
+  name: string
+  tagline?: string | null
+  address?: string | null
+  phone?: string | null
+  email?: string | null
+  website?: string | null
+  logoUrl?: string | null
+}
+
+/**
+ * Get business profile
+ */
+export async function getBusinessProfile(businessSlug: string): Promise<BusinessProfileData | null> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  return {
+    id: business.id,
+    name: business.name,
+    businessSlug: business.businessSlug,
+    country: business.country,
+    logoUrl: business.logoUrl ?? null,
+    tagline: business.tagline ?? null,
+    address: business.address ?? null,
+    phone: business.phone ?? null,
+    email: business.email ?? null,
+    website: business.website ?? null,
+    createdAt: business.createdAt,
+  }
+}
+
+/**
+ * Update business profile
+ */
+export async function updateBusinessProfile(
+  businessSlug: string,
+  payload: BusinessProfilePayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Validation
+    if (!payload.name || payload.name.trim().length < 2) {
+      return { success: false, error: "Business name must be at least 2 characters" }
+    }
+
+    if (payload.email && !EMAIL_REGEX.test(payload.email)) {
+      return { success: false, error: "Invalid email format" }
+    }
+
+    const updatedBusiness = await prisma.business.update({
+      where: { id: business.id },
+      data: {
+        name: payload.name.trim(),
+        tagline: payload.tagline?.trim() || null,
+        address: payload.address?.trim() || null,
+        phone: payload.phone?.trim() || null,
+        email: payload.email?.trim() || null,
+        website: payload.website?.trim() || null,
+        logoUrl: payload.logoUrl || null,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "BUSINESS_PROFILE_UPDATED",
+      entityType: "Business",
+      entityId: business.id,
+      metadata: {
+        businessName: updatedBusiness.name,
+        changes: payload,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}`)
+    revalidatePath(`/business-admin/${businessSlug}/settings`)
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error updating business profile:", error)
+    return { success: false, error: "Failed to update business profile" }
+  }
+}
+
+/**
+ * Update business logo URL
+ */
+export async function updateBusinessLogo(
+  businessSlug: string,
+  logoUrl: string | null
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    await prisma.business.update({
+      where: { id: business.id },
+      data: { logoUrl },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "BUSINESS_LOGO_UPDATED",
+      entityType: "Business",
+      entityId: business.id,
+      metadata: {
+        businessName: business.name,
+        logoUrl,
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}`)
+    revalidatePath(`/business-admin/${businessSlug}/settings`)
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error updating business logo:", error)
+    return { success: false, error: "Failed to update logo" }
+  }
+}
+
 /**
  * Get business policy
  */

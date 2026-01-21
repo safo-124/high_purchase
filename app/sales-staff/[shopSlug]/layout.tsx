@@ -27,6 +27,8 @@ export default async function SalesStaffLayout({ children, params }: SalesStaffL
         shopSlug={shopSlug} 
         shopName={dashboard.shopName} 
         staffName={dashboard.staffName}
+        businessName={dashboard.businessName}
+        businessLogoUrl={dashboard.businessLogoUrl}
       />
 
       {/* Main Content */}

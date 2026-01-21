@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useState, useEffect } from "react"
 
@@ -8,9 +9,11 @@ interface CollectorSidebarProps {
   shopSlug: string
   shopName: string
   collectorName: string
+  businessName: string
+  businessLogoUrl: string | null
 }
 
-export function CollectorSidebar({ shopSlug, shopName, collectorName }: CollectorSidebarProps) {
+export function CollectorSidebar({ shopSlug, shopName, collectorName, businessName, businessLogoUrl }: CollectorSidebarProps) {
   const pathname = usePathname()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
 
@@ -104,14 +107,26 @@ export function CollectorSidebar({ shopSlug, shopName, collectorName }: Collecto
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 glass-card border-b border-white/10">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/15 border border-emerald-500/30 flex items-center justify-center">
-              <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
+            {businessLogoUrl ? (
+              <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10 border border-emerald-500/30">
+                <Image
+                  src={businessLogoUrl}
+                  alt={businessName}
+                  width={36}
+                  height={36}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/15 border border-emerald-500/30 flex items-center justify-center">
+                <span className="text-sm font-bold text-emerald-400">
+                  {businessName.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
             <div>
               <h1 className="text-sm font-bold text-white truncate max-w-[180px]">{shopName}</h1>
-              <p className="text-xs text-slate-400">Collector Portal</p>
+              <p className="text-xs text-slate-400">{businessName}</p>
             </div>
           </div>
           <button
@@ -143,14 +158,26 @@ export function CollectorSidebar({ shopSlug, shopName, collectorName }: Collecto
       {/* Logo/Header */}
       <div className="p-6 border-b border-white/5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/15 border border-emerald-500/30 flex items-center justify-center">
-            <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-          </div>
+          {businessLogoUrl ? (
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/10 border border-emerald-500/30 shadow-lg shadow-emerald-500/10">
+              <Image
+                src={businessLogoUrl}
+                alt={businessName}
+                width={40}
+                height={40}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/15 border border-emerald-500/30 flex items-center justify-center">
+              <span className="text-lg font-bold text-emerald-400">
+                {businessName.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold text-white truncate">{shopName}</h1>
-            <p className="text-xs text-slate-400 truncate">Collector Portal</p>
+            <p className="text-xs text-slate-400 truncate">{businessName}</p>
           </div>
           {/* Close button for mobile */}
           <button

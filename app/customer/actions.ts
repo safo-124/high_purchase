@@ -238,6 +238,8 @@ export interface CustomerDashboardData {
   shop: {
     name: string
     shopSlug: string
+    businessName: string
+    businessLogoUrl: string | null
   }
   stats: {
     totalPurchases: number
@@ -270,7 +272,13 @@ export async function getCustomerDashboard(): Promise<CustomerDashboardData | nu
     const customer = await prisma.customer.findUnique({
       where: { id: session.customerId },
       include: {
-        shop: true,
+        shop: {
+          include: {
+            business: {
+              select: { name: true, logoUrl: true },
+            },
+          },
+        },
         purchases: {
           orderBy: { createdAt: "desc" },
           take: 5,
@@ -307,6 +315,8 @@ export async function getCustomerDashboard(): Promise<CustomerDashboardData | nu
       shop: {
         name: customer.shop.name,
         shopSlug: customer.shop.shopSlug,
+        businessName: customer.shop.business.name,
+        businessLogoUrl: customer.shop.business.logoUrl,
       },
       stats: {
         totalPurchases: allPurchases.length,

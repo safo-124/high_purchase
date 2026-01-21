@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { logoutCustomer } from "@/app/customer/actions"
 import { 
@@ -21,13 +22,17 @@ interface CustomerNavbarProps {
   shopName: string
   customerName: string
   unreadCount?: number
+  businessName: string
+  businessLogoUrl: string | null
 }
 
 export function CustomerNavbar({ 
   shopSlug, 
   shopName, 
   customerName,
-  unreadCount = 0
+  unreadCount = 0,
+  businessName,
+  businessLogoUrl
 }: CustomerNavbarProps) {
   const pathname = usePathname()
   const router = useRouter()
@@ -71,14 +76,26 @@ export function CustomerNavbar({
         <div className="flex items-center justify-between h-16">
           {/* Logo / Shop Name */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-lg">
-                {shopName.charAt(0).toUpperCase()}
-              </span>
-            </div>
+            {businessLogoUrl ? (
+              <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/10 border border-indigo-500/30 shadow-lg shadow-indigo-500/10">
+                <Image
+                  src={businessLogoUrl}
+                  alt={businessName}
+                  width={40}
+                  height={40}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <span className="text-white font-bold text-lg">
+                  {businessName.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
             <div>
               <h1 className="text-lg font-bold text-white">{shopName}</h1>
-              <p className="text-xs text-slate-400">Customer Portal</p>
+              <p className="text-xs text-slate-400">{businessName}</p>
             </div>
           </div>
 

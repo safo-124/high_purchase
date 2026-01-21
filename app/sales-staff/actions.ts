@@ -18,6 +18,8 @@ export type ActionResult = {
 export interface SalesStaffDashboard {
   shopName: string
   staffName: string | null
+  businessName: string
+  businessLogoUrl: string | null
   totalProducts: number
   totalCustomers: number
   totalSalesToday: number
@@ -26,6 +28,12 @@ export interface SalesStaffDashboard {
 
 export async function getSalesStaffDashboard(shopSlug: string): Promise<SalesStaffDashboard> {
   const { user, shop } = await requireSalesStaffForShop(shopSlug)
+
+  // Get business details including logo
+  const business = await prisma.business.findUnique({
+    where: { id: shop.businessId },
+    select: { name: true, logoUrl: true },
+  })
 
   const now = new Date()
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -55,6 +63,8 @@ export async function getSalesStaffDashboard(shopSlug: string): Promise<SalesSta
   return {
     shopName: shop.name,
     staffName: user.name,
+    businessName: business?.name || 'Business',
+    businessLogoUrl: business?.logoUrl || null,
     totalProducts: products,
     totalCustomers: customers,
     totalSalesToday: salesToday,

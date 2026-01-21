@@ -26,7 +26,9 @@ export default async function CollectorLayout({ children, params }: CollectorLay
       <CollectorSidebar 
         shopSlug={shopSlug} 
         shopName={dashboard.shopName} 
-        collectorName={dashboard.collectorName} 
+        collectorName={dashboard.collectorName}
+        businessName={dashboard.businessName}
+        businessLogoUrl={dashboard.businessLogoUrl}
       />
 
       {/* Main Content */}

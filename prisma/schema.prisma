@@ -35,6 +35,12 @@ model Business {
   name          String
   businessSlug  String           @unique
   country       String           @default("Ghana")
+  logoUrl       String?          // Business logo URL
+  tagline       String?          // Business tagline/slogan
+  address       String?          // Business address
+  phone         String?          // Business phone number
+  email         String?          // Business email
+  website       String?          // Business website
   isActive      Boolean          @default(true)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt

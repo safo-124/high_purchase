@@ -53,6 +53,8 @@ export default async function BusinessAdminLayout({ children, params }: LayoutPr
       <BusinessAdminSidebar 
         businessSlug={businessSlug}
         businessName={business.name}
+        businessLogoUrl={business.logoUrl ?? null}
+        businessTagline={business.tagline ?? null}
         userName={user.name || "Admin"}
         userEmail={user.email}
       />

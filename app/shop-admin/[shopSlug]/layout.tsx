@@ -1,5 +1,6 @@
 import { requireShopAdminForShop } from "@/lib/auth"
 import { ShopAdminSidebar } from "./shop-admin-sidebar"
+import prisma from "@/lib/prisma"
 
 interface ShopAdminLayoutProps {
   children: React.ReactNode
@@ -9,6 +10,12 @@ interface ShopAdminLayoutProps {
 export default async function ShopAdminLayout({ children, params }: ShopAdminLayoutProps) {
   const { shopSlug } = await params
   const { user, shop } = await requireShopAdminForShop(shopSlug)
+
+  // Fetch business details for logo
+  const business = await prisma.business.findUnique({
+    where: { id: shop.businessId },
+    select: { name: true, logoUrl: true },
+  })
 
   return (
     <div className="min-h-screen bg-mesh flex">
@@ -35,6 +42,8 @@ export default async function ShopAdminLayout({ children, params }: ShopAdminLay
         shopName={shop.name} 
         userName={user.name || 'Admin'}
         userEmail={user.email}
+        businessName={business?.name || 'Business'}
+        businessLogoUrl={business?.logoUrl || null}
       />
 
       {/* Main Content */}

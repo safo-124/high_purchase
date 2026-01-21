@@ -38,6 +38,8 @@ export default async function CustomerDashboardPage({ params }: CustomerDashboar
           shopName={dashboardData.shop.name}
           customerName={`${dashboardData.customer.firstName} ${dashboardData.customer.lastName}`}
           unreadCount={dashboardData.notifications.length}
+          businessName={dashboardData.shop.businessName}
+          businessLogoUrl={dashboardData.shop.businessLogoUrl}
         />
         
         <main className="w-full px-4 sm:px-6 lg:px-8 py-8">

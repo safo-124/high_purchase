@@ -41,6 +41,8 @@ export default async function CustomerNotificationsPage({ params }: CustomerNoti
           shopName={dashboardData.shop.name}
           customerName={`${dashboardData.customer.firstName} ${dashboardData.customer.lastName}`}
           unreadCount={dashboardData.notifications.length}
+          businessName={dashboardData.shop.businessName}
+          businessLogoUrl={dashboardData.shop.businessLogoUrl}
         />
         
         <main className="w-full px-4 sm:px-6 lg:px-8 py-8">

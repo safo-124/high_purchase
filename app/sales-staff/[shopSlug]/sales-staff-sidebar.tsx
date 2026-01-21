@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useState, useEffect } from "react"
 
@@ -8,9 +9,11 @@ interface SalesStaffSidebarProps {
   shopSlug: string
   shopName: string
   staffName: string | null
+  businessName: string
+  businessLogoUrl: string | null
 }
 
-export function SalesStaffSidebar({ shopSlug, shopName, staffName }: SalesStaffSidebarProps) {
+export function SalesStaffSidebar({ shopSlug, shopName, staffName, businessName, businessLogoUrl }: SalesStaffSidebarProps) {
   const pathname = usePathname()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
 
@@ -104,14 +107,26 @@ export function SalesStaffSidebar({ shopSlug, shopName, staffName }: SalesStaffS
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 glass-card border-b border-white/10">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500/20 to-purple-500/15 border border-indigo-500/30 flex items-center justify-center">
-              <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-              </svg>
-            </div>
+            {businessLogoUrl ? (
+              <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10 border border-indigo-500/30">
+                <Image
+                  src={businessLogoUrl}
+                  alt={businessName}
+                  width={36}
+                  height={36}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500/20 to-purple-500/15 border border-indigo-500/30 flex items-center justify-center">
+                <span className="text-sm font-bold text-indigo-400">
+                  {businessName.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
             <div>
               <h1 className="text-sm font-bold text-white truncate max-w-[180px]">{shopName}</h1>
-              <p className="text-xs text-slate-400">Sales Portal</p>
+              <p className="text-xs text-slate-400">{businessName}</p>
             </div>
           </div>
           <button
@@ -143,14 +158,26 @@ export function SalesStaffSidebar({ shopSlug, shopName, staffName }: SalesStaffS
       {/* Logo/Header */}
       <div className="p-6 border-b border-white/5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/15 border border-indigo-500/30 flex items-center justify-center">
-            <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-            </svg>
-          </div>
+          {businessLogoUrl ? (
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/10 border border-indigo-500/30 shadow-lg shadow-indigo-500/10">
+              <Image
+                src={businessLogoUrl}
+                alt={businessName}
+                width={40}
+                height={40}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/15 border border-indigo-500/30 flex items-center justify-center">
+              <span className="text-lg font-bold text-indigo-400">
+                {businessName.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold text-white truncate">{shopName}</h1>
-            <p className="text-xs text-slate-400 truncate">Sales Portal</p>
+            <p className="text-xs text-slate-400 truncate">{businessName}</p>
           </div>
           {/* Close button for mobile */}
           <button

@@ -1,3 +1,4 @@
+import Image from "next/image"
 import { requireBusinessAdmin } from "../../../lib/auth"
 import { getBusinessStats, getBusinessShops } from "../actions"
 import { CreateShopDialog } from "./create-shop-dialog"
@@ -15,16 +16,86 @@ export default async function BusinessDashboard({ params }: Props) {
 
   return (
     <div className="p-8">
+      {/* Business Header */}
+      <div className="glass-card p-6 mb-8">
+        <div className="flex items-center gap-6">
+          {/* Logo */}
+          {business.logoUrl ? (
+            <div className="w-20 h-20 rounded-2xl overflow-hidden bg-white/10 border-2 border-white/20 shadow-lg shadow-cyan-500/10 flex-shrink-0">
+              <Image
+                src={business.logoUrl}
+                alt={business.name}
+                width={80}
+                height={80}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0">
+              <span className="text-3xl font-bold text-white">
+                {business.name.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
+          
+          {/* Business Info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-3xl font-bold text-white truncate">{business.name}</h1>
+              <div className="flex items-center gap-2 px-3 py-1 bg-green-500/10 border border-green-500/20 rounded-full">
+                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                <span className="text-xs text-green-400 font-medium">Active</span>
+              </div>
+            </div>
+            {business.tagline && (
+              <p className="text-slate-400 text-lg mb-2">{business.tagline}</p>
+            )}
+            <div className="flex items-center gap-4 text-sm text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {business.country}
+              </span>
+              {business.phone && (
+                <span className="flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  {business.phone}
+                </span>
+              )}
+              {business.email && (
+                <span className="flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  {business.email}
+                </span>
+              )}
+            </div>
+          </div>
+          
+          {/* Edit Profile Button */}
+          <a
+            href={`/business-admin/${businessSlug}/settings/profile`}
+            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-all text-sm font-medium"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Edit Profile
+          </a>
+        </div>
+      </div>
+
       {/* Welcome Section */}
       <div className="mb-10">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-sm text-green-400 font-medium">Business Active</span>
-        </div>
-        <h2 className="text-4xl font-bold text-white mb-2 tracking-tight">
+        <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">
             Welcome back, <span className="text-gradient">{user.name?.split(' ')[0]}</span>
           </h2>
-          <p className="text-slate-400 text-lg">
+          <p className="text-slate-400">
             Manage your shops and view business performance.
           </p>
         </div>

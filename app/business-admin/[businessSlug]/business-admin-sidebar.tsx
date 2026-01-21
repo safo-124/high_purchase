@@ -1,12 +1,15 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useState, useEffect } from "react"
 
 interface BusinessAdminSidebarProps {
   businessSlug: string
   businessName: string
+  businessLogoUrl: string | null
+  businessTagline: string | null
   userName: string
   userEmail: string
 }
@@ -14,6 +17,8 @@ interface BusinessAdminSidebarProps {
 export function BusinessAdminSidebar({ 
   businessSlug, 
   businessName, 
+  businessLogoUrl,
+  businessTagline,
   userName, 
   userEmail 
 }: BusinessAdminSidebarProps) {
@@ -225,14 +230,26 @@ export function BusinessAdminSidebar({
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 glass-card border-b border-white/10">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-              <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
+            {businessLogoUrl ? (
+              <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10">
+                <Image
+                  src={businessLogoUrl}
+                  alt={businessName}
+                  width={36}
+                  height={36}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+                <span className="text-sm font-bold text-white">
+                  {businessName.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
             <div>
               <h1 className="text-sm font-bold text-white truncate max-w-[180px]">{businessName}</h1>
-              <p className="text-xs text-slate-400">Business Admin</p>
+              <p className="text-xs text-slate-400">{businessTagline || "Business Admin"}</p>
             </div>
           </div>
           <button
@@ -264,25 +281,26 @@ export function BusinessAdminSidebar({
       {/* Logo & Business Name */}
       <div className="p-6 border-b border-white/10">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6 text-white"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M13 10V3L4 14h7v7l9-11h-7z"
+          {businessLogoUrl ? (
+            <div className="w-11 h-11 rounded-xl overflow-hidden bg-white/10 shadow-lg shadow-cyan-500/10">
+              <Image
+                src={businessLogoUrl}
+                alt={businessName}
+                width={44}
+                height={44}
+                className="w-full h-full object-cover"
               />
-            </svg>
-          </div>
+            </div>
+          ) : (
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+              <span className="text-lg font-bold text-white">
+                {businessName.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold text-white truncate">{businessName}</h1>
-            <p className="text-xs text-slate-400">Business Admin</p>
+            <p className="text-xs text-slate-400 truncate">{businessTagline || "Business Admin"}</p>
           </div>
           {/* Close button for mobile */}
           <button
