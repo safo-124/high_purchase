@@ -977,3 +977,353 @@ export function generateTemporaryPassword(length: number = 12): string {
   // Shuffle the password
   return password.split("").sort(() => Math.random() - 0.5).join("")
 }
+
+// ============================================
+// PURCHASE INVOICE EMAIL
+// ============================================
+
+/**
+ * Email template for purchase invoice (sent when purchase is created)
+ */
+export function getPurchaseInvoiceTemplate(data: {
+  invoiceNumber: string
+  customerName: string
+  customerPhone: string
+  shopName: string
+  businessName: string
+  purchaseNumber: string
+  purchaseType: "CASH" | "LAYAWAY" | "CREDIT"
+  items: Array<{ productName: string; quantity: number; unitPrice: number; totalPrice: number }>
+  subtotal: number
+  interestAmount: number
+  totalAmount: number
+  downPayment: number
+  outstandingBalance: number
+  installments: number
+  dueDate: string
+  purchaseDate: string
+  bankName?: string | null
+  bankAccountName?: string | null
+  bankAccountNumber?: string | null
+  mobileMoneyProvider?: string | null
+  mobileMoneyName?: string | null
+  mobileMoneyNumber?: string | null
+}): { subject: string; html: string } {
+  const formatCurrency = (amount: number) => `GHS ${amount.toLocaleString("en-GH", { minimumFractionDigits: 2 })}`
+  
+  const paymentTypeLabel = {
+    CASH: "Cash Sale",
+    LAYAWAY: "Layaway Purchase",
+    CREDIT: "Credit (BNPL) Purchase",
+  }[data.purchaseType]
+
+  const itemRows = data.items.map(item => `
+    <tr>
+      <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 14px;">${item.productName}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 14px; text-align: center;">${item.quantity}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 14px; text-align: right;">${formatCurrency(item.unitPrice)}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 14px; text-align: right; font-weight: 500;">${formatCurrency(item.totalPrice)}</td>
+    </tr>
+  `).join("")
+
+  const paymentMethodsHtml = (data.bankName || data.mobileMoneyProvider) ? `
+    <div style="background: #fef3c7; border-radius: 12px; padding: 20px; margin-bottom: 25px; border: 1px solid #fcd34d;">
+      <h3 style="color: #92400e; margin: 0 0 15px; font-size: 16px;">💳 Payment Methods</h3>
+      ${data.bankName ? `
+        <div style="background: white; border-radius: 8px; padding: 15px; margin-bottom: 10px;">
+          <p style="color: #64748b; font-size: 12px; margin: 0 0 5px; text-transform: uppercase;">Bank Transfer</p>
+          <p style="color: #0f172a; font-size: 14px; margin: 0; font-weight: 500;">${data.bankName}</p>
+          <p style="color: #64748b; font-size: 14px; margin: 5px 0 0;">${data.bankAccountName}</p>
+          <p style="color: #0891b2; font-size: 16px; margin: 5px 0 0; font-weight: bold; letter-spacing: 1px;">${data.bankAccountNumber}</p>
+        </div>
+      ` : ""}
+      ${data.mobileMoneyProvider ? `
+        <div style="background: white; border-radius: 8px; padding: 15px;">
+          <p style="color: #64748b; font-size: 12px; margin: 0 0 5px; text-transform: uppercase;">Mobile Money (${data.mobileMoneyProvider})</p>
+          <p style="color: #0f172a; font-size: 14px; margin: 0; font-weight: 500;">${data.mobileMoneyName}</p>
+          <p style="color: #0891b2; font-size: 16px; margin: 5px 0 0; font-weight: bold; letter-spacing: 1px;">${data.mobileMoneyNumber}</p>
+        </div>
+      ` : ""}
+    </div>
+  ` : ""
+
+  return {
+    subject: `Invoice #${data.invoiceNumber} - ${data.shopName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 0; background: #f8fafc;">
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); padding: 30px 20px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">Purchase Invoice</h1>
+          <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0; font-size: 14px;">${data.businessName}</p>
+        </div>
+        
+        <!-- Invoice Number -->
+        <div style="background: #0f172a; padding: 15px 20px; text-align: center;">
+          <p style="color: #94a3b8; margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Invoice Number</p>
+          <p style="color: #a78bfa; margin: 5px 0 0; font-size: 20px; font-weight: bold;">${data.invoiceNumber}</p>
+        </div>
+        
+        <!-- Main Content -->
+        <div style="padding: 30px 20px; background: white;">
+          <p style="color: #334155; margin: 0 0 20px;">Dear ${data.customerName},</p>
+          <p style="color: #64748b; margin: 0 0 25px;">Thank you for your purchase! Here is your invoice for the ${paymentTypeLabel.toLowerCase()}.</p>
+          
+          <!-- Purchase Details -->
+          <div style="background: #f1f5f9; border-radius: 12px; padding: 20px; margin-bottom: 25px;">
+            <h3 style="color: #0f172a; margin: 0 0 15px; font-size: 16px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Purchase Details</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Purchase Number</td>
+                <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right; font-weight: 500;">${data.purchaseNumber}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Purchase Date</td>
+                <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right; font-weight: 500;">${data.purchaseDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Payment Type</td>
+                <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right; font-weight: 500;">${paymentTypeLabel}</td>
+              </tr>
+              ${data.purchaseType !== "CASH" ? `
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Number of Installments</td>
+                <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right; font-weight: 500;">${data.installments}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Due Date</td>
+                <td style="padding: 8px 0; color: #ef4444; font-size: 14px; text-align: right; font-weight: 500;">${data.dueDate}</td>
+              </tr>
+              ` : ""}
+            </table>
+          </div>
+          
+          <!-- Items Table -->
+          <div style="background: #f1f5f9; border-radius: 12px; overflow: hidden; margin-bottom: 25px;">
+            <h3 style="color: #0f172a; margin: 0; font-size: 16px; padding: 20px 20px 15px; border-bottom: 1px solid #e2e8f0;">Items</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="background: #e2e8f0;">
+                  <th style="padding: 12px; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase;">Product</th>
+                  <th style="padding: 12px; text-align: center; color: #64748b; font-size: 12px; text-transform: uppercase;">Qty</th>
+                  <th style="padding: 12px; text-align: right; color: #64748b; font-size: 12px; text-transform: uppercase;">Price</th>
+                  <th style="padding: 12px; text-align: right; color: #64748b; font-size: 12px; text-transform: uppercase;">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemRows}
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- Amount Summary -->
+          <div style="background: #f1f5f9; border-radius: 12px; padding: 20px; margin-bottom: 25px;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Subtotal</td>
+                <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${formatCurrency(data.subtotal)}</td>
+              </tr>
+              ${data.interestAmount > 0 ? `
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Interest</td>
+                <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${formatCurrency(data.interestAmount)}</td>
+              </tr>
+              ` : ""}
+              <tr>
+                <td style="padding: 12px 0; color: #0f172a; font-size: 16px; font-weight: bold; border-top: 2px solid #e2e8f0;">Total Amount</td>
+                <td style="padding: 12px 0; color: #0f172a; font-size: 16px; text-align: right; font-weight: bold; border-top: 2px solid #e2e8f0;">${formatCurrency(data.totalAmount)}</td>
+              </tr>
+              ${data.downPayment > 0 ? `
+              <tr>
+                <td style="padding: 8px 0; color: #10b981; font-size: 14px;">Down Payment Made</td>
+                <td style="padding: 8px 0; color: #10b981; font-size: 14px; text-align: right;">- ${formatCurrency(data.downPayment)}</td>
+              </tr>
+              ` : ""}
+            </table>
+          </div>
+          
+          <!-- Outstanding Balance (Highlighted) -->
+          ${data.outstandingBalance > 0 ? `
+          <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 12px; padding: 25px; text-align: center; margin-bottom: 25px;">
+            <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Outstanding Balance</p>
+            <p style="color: white; margin: 10px 0 0; font-size: 32px; font-weight: bold;">${formatCurrency(data.outstandingBalance)}</p>
+          </div>
+          ` : `
+          <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 12px; padding: 25px; text-align: center; margin-bottom: 25px;">
+            <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Payment Status</p>
+            <p style="color: white; margin: 10px 0 0; font-size: 24px; font-weight: bold;">✓ PAID IN FULL</p>
+          </div>
+          `}
+          
+          <!-- Payment Methods -->
+          ${paymentMethodsHtml}
+          
+          <!-- Shop Info -->
+          <div style="background: #f1f5f9; border-radius: 12px; padding: 20px;">
+            <h3 style="color: #0f172a; margin: 0 0 10px; font-size: 14px;">Shop Details</h3>
+            <p style="color: #64748b; margin: 0; font-size: 14px;">${data.shopName}</p>
+          </div>
+        </div>
+        
+        <!-- Footer -->
+        <div style="background: #0f172a; padding: 20px; text-align: center;">
+          <p style="color: #64748b; margin: 0; font-size: 12px;">Thank you for choosing ${data.businessName}</p>
+          <p style="color: #475569; margin: 10px 0 0; font-size: 11px;">This is an automated invoice from High Purchase.</p>
+        </div>
+      </div>
+    `,
+  }
+}
+
+/**
+ * Email template for pending payment notification
+ */
+export function getPendingPaymentNotificationTemplate(data: {
+  customerName: string
+  shopName: string
+  businessName: string
+  collectorName: string
+  amount: number
+  paymentMethod: string
+  reference?: string | null
+  purchaseNumber: string
+  collectionDate: string
+  collectionTime: string
+}): { subject: string; html: string } {
+  const formatCurrency = (amount: number) => `GHS ${amount.toLocaleString("en-GH", { minimumFractionDigits: 2 })}`
+
+  return {
+    subject: `Payment Pending Confirmation - ${data.purchaseNumber}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 0; background: #f8fafc;">
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px 20px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">⏳ Payment Pending</h1>
+          <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0; font-size: 14px;">${data.businessName}</p>
+        </div>
+        
+        <!-- Main Content -->
+        <div style="padding: 30px 20px; background: white;">
+          <p style="color: #334155; margin: 0 0 20px;">Dear ${data.customerName},</p>
+          <p style="color: #64748b; margin: 0 0 25px;">A payment has been collected for your purchase and is currently awaiting confirmation from the shop. Once confirmed, you will receive a receipt.</p>
+          
+          <!-- Payment Details -->
+          <div style="background: #fef3c7; border-radius: 12px; padding: 20px; margin-bottom: 25px; border: 1px solid #fcd34d;">
+            <h3 style="color: #92400e; margin: 0 0 15px; font-size: 16px;">Payment Details</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; color: #78716c; font-size: 14px;">Amount</td>
+                <td style="padding: 8px 0; color: #92400e; font-size: 16px; text-align: right; font-weight: bold;">${formatCurrency(data.amount)}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #78716c; font-size: 14px;">Date</td>
+                <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${data.collectionDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #78716c; font-size: 14px;">Time</td>
+                <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${data.collectionTime}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #78716c; font-size: 14px;">Payment Method</td>
+                <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${data.paymentMethod.replace("_", " ")}</td>
+              </tr>
+              ${data.reference ? `
+              <tr>
+                <td style="padding: 8px 0; color: #78716c; font-size: 14px;">Reference</td>
+                <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${data.reference}</td>
+              </tr>
+              ` : ""}
+              <tr>
+                <td style="padding: 8px 0; color: #78716c; font-size: 14px;">Collected By</td>
+                <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${data.collectorName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #78716c; font-size: 14px;">Purchase</td>
+                <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${data.purchaseNumber}</td>
+              </tr>
+            </table>
+          </div>
+          
+          <!-- Status Badge -->
+          <div style="background: #fef3c7; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 25px;">
+            <p style="color: #92400e; margin: 0; font-size: 14px;">Status</p>
+            <p style="color: #d97706; margin: 10px 0 0; font-size: 18px; font-weight: bold;">⏳ PENDING CONFIRMATION</p>
+            <p style="color: #78716c; margin: 10px 0 0; font-size: 12px;">You will receive a receipt once the payment is confirmed.</p>
+          </div>
+          
+          <!-- Shop Info -->
+          <div style="background: #f1f5f9; border-radius: 12px; padding: 20px;">
+            <p style="color: #64748b; margin: 0; font-size: 14px;">Shop: ${data.shopName}</p>
+          </div>
+        </div>
+        
+        <!-- Footer -->
+        <div style="background: #0f172a; padding: 20px; text-align: center;">
+          <p style="color: #64748b; margin: 0; font-size: 12px;">Thank you for your payment!</p>
+          <p style="color: #475569; margin: 10px 0 0; font-size: 11px;">This is an automated notification from High Purchase.</p>
+        </div>
+      </div>
+    `,
+  }
+}
+
+/**
+ * Send purchase invoice email to customer
+ */
+export async function sendPurchaseInvoice(data: {
+  businessId: string
+  customerEmail: string
+  invoiceNumber: string
+  customerName: string
+  customerPhone: string
+  shopName: string
+  businessName: string
+  purchaseNumber: string
+  purchaseType: "CASH" | "LAYAWAY" | "CREDIT"
+  items: Array<{ productName: string; quantity: number; unitPrice: number; totalPrice: number }>
+  subtotal: number
+  interestAmount: number
+  totalAmount: number
+  downPayment: number
+  outstandingBalance: number
+  installments: number
+  dueDate: string
+  purchaseDate: string
+  bankName?: string | null
+  bankAccountName?: string | null
+  bankAccountNumber?: string | null
+  mobileMoneyProvider?: string | null
+  mobileMoneyName?: string | null
+  mobileMoneyNumber?: string | null
+}): Promise<EmailResult> {
+  const template = getPurchaseInvoiceTemplate(data)
+  return sendEmail(data.businessId, {
+    to: data.customerEmail,
+    subject: template.subject,
+    html: template.html,
+  })
+}
+
+/**
+ * Send pending payment notification to customer
+ */
+export async function sendPendingPaymentNotification(data: {
+  businessId: string
+  customerEmail: string
+  customerName: string
+  shopName: string
+  businessName: string
+  collectorName: string
+  amount: number
+  paymentMethod: string
+  reference?: string | null
+  purchaseNumber: string
+  collectionDate: string
+  collectionTime: string
+}): Promise<EmailResult> {
+  const template = getPendingPaymentNotificationTemplate(data)
+  return sendEmail(data.businessId, {
+    to: data.customerEmail,
+    subject: template.subject,
+    html: template.html,
+  })
+}

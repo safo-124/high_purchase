@@ -230,6 +230,7 @@ export async function logoutCustomer(): Promise<ActionResult> {
 
 export interface CustomerDashboardData {
   customer: {
+    id: string
     firstName: string
     lastName: string
     email: string | null
@@ -307,6 +308,7 @@ export async function getCustomerDashboard(): Promise<CustomerDashboardData | nu
 
     return {
       customer: {
+        id: customer.id,
         firstName: customer.firstName,
         lastName: customer.lastName,
         email: customer.email,

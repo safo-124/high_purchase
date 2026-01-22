@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import bcrypt from "bcrypt"
 import prisma from "../../lib/prisma"
 import { requireBusinessAdmin, createAuditLog } from "../../lib/auth"
-import { sendAccountCreationEmail } from "../../lib/email"
+import { sendAccountCreationEmail, sendCollectionReceipt } from "../../lib/email"
 import { Role, Prisma, PurchaseStatus, DeliveryStatus } from "../generated/prisma/client"
 
 // Validation regex
@@ -4495,6 +4495,54 @@ export async function confirmBusinessPayment(
         purchaseCompleted: isCompleted,
       },
     })
+
+    // Send receipt email to customer when payment is confirmed
+    if (purchase.customer.email) {
+      try {
+        // Get collector info
+        const collector = payment.collectorId ? await prisma.shopMember.findUnique({
+          where: { id: payment.collectorId },
+          include: { user: true },
+        }) : null
+
+        // Get shop admin email
+        const shopAdmin = await prisma.shopMember.findFirst({
+          where: { shopId: shop.id, role: "SHOP_ADMIN", isActive: true },
+          include: { user: true },
+        })
+
+        // Get business admin email (current user)
+        const now = new Date()
+        await sendCollectionReceipt({
+          businessId: business.id,
+          receiptNumber: invoiceNumber,
+          customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+          customerPhone: purchase.customer.phone,
+          customerEmail: purchase.customer.email,
+          shopName: shop.name,
+          businessName: business.name,
+          collectorName: collector?.user?.name || collectorName || "Shop Staff",
+          collectorEmail: collector?.user?.email || "",
+          collectorPhone: collector?.user?.phone || undefined,
+          shopAdminEmail: shopAdmin?.user?.email || null,
+          businessAdminEmail: user.email || null,
+          amount: Number(payment.amount),
+          paymentMethod: payment.paymentMethod,
+          reference: payment.reference,
+          purchaseNumber: purchase.purchaseNumber,
+          totalPurchaseAmount: Number(purchase.totalAmount),
+          previousAmountPaid: previousBalance < Number(purchase.totalAmount) ? Number(purchase.totalAmount) - previousBalance : 0,
+          newAmountPaid: newAmountPaid,
+          outstandingBalance: Math.max(0, newOutstanding),
+          collectionDate: now.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+          collectionTime: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+          notes: payment.notes,
+        })
+      } catch (emailError) {
+        console.error("Failed to send collection receipt email:", emailError)
+        // Don't fail the confirmation if email fails
+      }
+    }
 
     revalidatePath(`/business-admin/${businessSlug}/payments`)
     revalidatePath(`/shop-admin/${payment.purchase.customer.shop.shopSlug}/pending-payments`)

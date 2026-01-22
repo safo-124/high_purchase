@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache"
 import bcrypt from "bcrypt"
 import prisma from "../../lib/prisma"
 import { requireShopAdminForShop, createAuditLog } from "../../lib/auth"
-import { sendCollectionReceipt, sendAccountCreationEmail } from "../../lib/email"
+import { sendCollectionReceipt, sendAccountCreationEmail, sendPurchaseInvoice } from "../../lib/email"
+import { generateInvoicePDF, generateReceiptPDF } from "../../lib/pdf-generator"
+import { 
+  sendPurchaseInvoiceMessage, 
+  sendPendingPaymentMessage, 
+  sendPaymentReceiptMessage 
+} from "../../lib/messaging-actions"
 import { InterestType, PaymentPreference, PaymentMethod, PurchaseStatus, PaymentStatus, PurchaseType, Prisma } from "../generated/prisma/client"
 
 export type ActionResult = {
@@ -2105,6 +2111,102 @@ export async function createPurchase(
       },
     })
 
+    // Get shop payment configuration for invoice
+    const shopWithPayment = await prisma.shop.findUnique({
+      where: { id: shop.id },
+      include: { business: true },
+    })
+
+    // Generate invoice number
+    const invoiceCount = await prisma.purchase.count()
+    const invoiceNumber = `INV-${new Date().getFullYear()}-${String(invoiceCount).padStart(5, "0")}`
+
+    const invoiceData = {
+      invoiceNumber,
+      purchaseNumber,
+      customerName: `${customer.firstName} ${customer.lastName}`,
+      customerPhone: customer.phone,
+      customerEmail: customer.email,
+      customerAddress: customer.address,
+      shopName: shop.name,
+      businessName: shopWithPayment?.business?.name || shop.name,
+      purchaseType: "CREDIT" as const,
+      items: payload.items.map(item => ({
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.unitPrice * item.quantity,
+      })),
+      subtotal,
+      interestAmount,
+      totalAmount,
+      downPayment,
+      amountPaid: downPayment,
+      outstandingBalance,
+      installments: payload.installments,
+      dueDate: dueDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+      purchaseDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+      bankName: shopWithPayment?.bankName,
+      bankAccountName: shopWithPayment?.bankAccountName,
+      bankAccountNumber: shopWithPayment?.bankAccountNumber,
+      mobileMoneyProvider: shopWithPayment?.mobileMoneyProvider,
+      mobileMoneyName: shopWithPayment?.mobileMoneyName,
+      mobileMoneyNumber: shopWithPayment?.mobileMoneyNumber,
+    }
+
+    // Send purchase invoice email to customer if they have an email
+    if (customer.email) {
+      try {
+        await sendPurchaseInvoice({
+          businessId: shop.businessId,
+          customerEmail: customer.email, // Non-null here due to if check
+          invoiceNumber: invoiceData.invoiceNumber,
+          customerName: invoiceData.customerName,
+          customerPhone: invoiceData.customerPhone,
+          shopName: invoiceData.shopName,
+          businessName: invoiceData.businessName,
+          purchaseNumber: invoiceData.purchaseNumber,
+          purchaseType: invoiceData.purchaseType,
+          items: invoiceData.items,
+          subtotal: invoiceData.subtotal,
+          interestAmount: invoiceData.interestAmount,
+          totalAmount: invoiceData.totalAmount,
+          downPayment: invoiceData.downPayment,
+          outstandingBalance: invoiceData.outstandingBalance,
+          installments: invoiceData.installments,
+          dueDate: invoiceData.dueDate,
+          purchaseDate: invoiceData.purchaseDate,
+          bankName: invoiceData.bankName,
+          bankAccountName: invoiceData.bankAccountName,
+          bankAccountNumber: invoiceData.bankAccountNumber,
+          mobileMoneyProvider: invoiceData.mobileMoneyProvider,
+          mobileMoneyName: invoiceData.mobileMoneyName,
+          mobileMoneyNumber: invoiceData.mobileMoneyNumber,
+        })
+      } catch (emailError) {
+        console.error("Failed to send purchase invoice email:", emailError)
+        // Don't fail the purchase if email fails
+      }
+    }
+
+    // Send in-app message with invoice PDF to customer
+    try {
+      const invoicePdfBase64 = await generateInvoicePDF(invoiceData)
+      await sendPurchaseInvoiceMessage({
+        customerId: customer.id,
+        staffUserId: user.id,
+        businessId: shop.businessId,
+        shopId: shop.id,
+        invoicePdfBase64,
+        purchaseNumber,
+        totalAmount,
+        outstandingBalance,
+      })
+    } catch (msgError) {
+      console.error("Failed to send in-app invoice message:", msgError)
+      // Don't fail the purchase if messaging fails
+    }
+
     revalidatePath(`/shop-admin/${shopSlug}/customers`)
     revalidatePath(`/shop-admin/${shopSlug}/purchases`)
     revalidatePath(`/shop-admin/${shopSlug}/products`) // Refresh products to show updated stock
@@ -2389,6 +2491,36 @@ export async function recordPayment(
         awaitingConfirmation: !autoConfirm,
       },
     })
+
+    // Send in-app message to customer about the pending payment
+    if (!autoConfirm) {
+      try {
+        // Get collector name if available
+        let collectorName: string | null = null
+        if (payload.collectorId) {
+          const collector = await prisma.shopMember.findUnique({
+            where: { id: payload.collectorId },
+            include: { user: true },
+          })
+          collectorName = collector?.user?.name || null
+        }
+
+        await sendPendingPaymentMessage({
+          customerId: purchase.customerId,
+          staffUserId: user.id,
+          businessId: shop.businessId,
+          shopId: shop.id,
+          purchaseNumber: purchase.purchaseNumber,
+          paymentAmount: payload.amount,
+          paymentMethod: payload.paymentMethod,
+          reference: payload.reference,
+          collectorName: collectorName || user.name,
+        })
+      } catch (msgError) {
+        console.error("Failed to send pending payment message:", msgError)
+        // Don't fail the payment if messaging fails
+      }
+    }
 
     revalidatePath(`/shop-admin/${shopSlug}/customers`)
     revalidatePath(`/shop-admin/${shopSlug}/purchases`)
@@ -3004,6 +3136,101 @@ export async function confirmPayment(
         purchaseCompleted: isCompleted,
       },
     })
+
+    // Send receipt email to customer when payment is confirmed
+    if (purchase.customer.email) {
+      try {
+        // Get collector info
+        const collector = payment.collectorId ? await prisma.shopMember.findUnique({
+          where: { id: payment.collectorId },
+          include: { user: true },
+        }) : null
+
+        // Get shop admin email
+        const shopAdmin = await prisma.shopMember.findFirst({
+          where: { shopId: shop.id, role: "SHOP_ADMIN", isActive: true },
+          include: { user: true },
+        })
+
+        // Get business admin email
+        const businessAdmin = await prisma.businessMember.findFirst({
+          where: { businessId: shop.businessId, role: "BUSINESS_ADMIN" },
+          include: { user: true },
+        })
+
+        const now = new Date()
+        await sendCollectionReceipt({
+          businessId: shop.businessId,
+          receiptNumber: invoiceNumber,
+          customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+          customerPhone: purchase.customer.phone,
+          customerEmail: purchase.customer.email,
+          shopName: shop.name,
+          businessName: business?.name || shop.name,
+          collectorName: collector?.user?.name || collectorName || "Shop Staff",
+          collectorEmail: collector?.user?.email || "",
+          collectorPhone: collector?.user?.phone || undefined,
+          shopAdminEmail: shopAdmin?.user?.email || null,
+          businessAdminEmail: businessAdmin?.user?.email || null,
+          amount: Number(payment.amount),
+          paymentMethod: payment.paymentMethod,
+          reference: payment.reference,
+          purchaseNumber: purchase.purchaseNumber,
+          totalPurchaseAmount: Number(purchase.totalAmount),
+          previousAmountPaid: previousBalance < Number(purchase.totalAmount) ? Number(purchase.totalAmount) - previousBalance : 0,
+          newAmountPaid: newAmountPaid,
+          outstandingBalance: Math.max(0, newOutstanding),
+          collectionDate: now.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+          collectionTime: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+          notes: payment.notes,
+        })
+      } catch (emailError) {
+        console.error("Failed to send collection receipt email:", emailError)
+        // Don't fail the confirmation if email fails
+      }
+    }
+
+    // Send in-app message with receipt PDF to customer
+    try {
+      const now = new Date()
+      const receiptPdfBase64 = await generateReceiptPDF({
+        receiptNumber: invoiceNumber,
+        purchaseNumber: purchase.purchaseNumber,
+        customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+        customerPhone: purchase.customer.phone,
+        customerEmail: purchase.customer.email,
+        shopName: shop.name,
+        businessName: business?.name || shop.name,
+        paymentAmount: Number(payment.amount),
+        paymentMethod: payment.paymentMethod,
+        reference: payment.reference,
+        previousBalance,
+        newBalance: Math.max(0, newOutstanding),
+        totalPurchaseAmount: Number(purchase.totalAmount),
+        totalAmountPaid: newAmountPaid,
+        collectorName,
+        paymentDate: now.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+        paymentTime: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+        notes: payment.notes,
+        isFullyPaid: isCompleted,
+      })
+
+      await sendPaymentReceiptMessage({
+        customerId: purchase.customerId,
+        staffUserId: user.id,
+        businessId: shop.businessId,
+        shopId: shop.id,
+        receiptPdfBase64,
+        receiptNumber: invoiceNumber,
+        purchaseNumber: purchase.purchaseNumber,
+        paymentAmount: Number(payment.amount),
+        newBalance: Math.max(0, newOutstanding),
+        isFullyPaid: isCompleted,
+      })
+    } catch (msgError) {
+      console.error("Failed to send receipt message:", msgError)
+      // Don't fail the confirmation if messaging fails
+    }
 
     revalidatePath(`/shop-admin/${shopSlug}/pending-payments`)
     revalidatePath(`/shop-admin/${shopSlug}/customers/${purchase.customerId}`)

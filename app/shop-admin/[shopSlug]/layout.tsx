@@ -1,6 +1,7 @@
 import { requireShopAdminForShop } from "@/lib/auth"
 import { ShopAdminSidebar } from "./shop-admin-sidebar"
 import prisma from "@/lib/prisma"
+import { getUnreadMessageCountForShop } from "@/lib/messaging-actions"
 
 interface ShopAdminLayoutProps {
   children: React.ReactNode
@@ -16,6 +17,9 @@ export default async function ShopAdminLayout({ children, params }: ShopAdminLay
     where: { id: shop.businessId },
     select: { name: true, logoUrl: true },
   })
+
+  // Get unread message count
+  const unreadMessageCount = await getUnreadMessageCountForShop(shop.id)
 
   return (
     <div className="min-h-screen bg-mesh flex">
@@ -44,6 +48,7 @@ export default async function ShopAdminLayout({ children, params }: ShopAdminLay
         userEmail={user.email}
         businessName={business?.name || 'Business'}
         businessLogoUrl={business?.logoUrl || null}
+        unreadMessageCount={unreadMessageCount}
       />
 
       {/* Main Content */}

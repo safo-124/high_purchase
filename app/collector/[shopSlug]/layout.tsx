@@ -1,6 +1,7 @@
 import { requireCollectorForShop } from "@/lib/auth"
 import { getCollectorDashboard } from "../actions"
 import { CollectorSidebar } from "./collector-sidebar"
+import { getUnreadMessageCountForShop } from "@/lib/messaging-actions"
 
 interface CollectorLayoutProps {
   children: React.ReactNode
@@ -12,6 +13,9 @@ export default async function CollectorLayout({ children, params }: CollectorLay
   await requireCollectorForShop(shopSlug)
 
   const dashboard = await getCollectorDashboard(shopSlug)
+  
+  // Get unread message count
+  const unreadMessageCount = await getUnreadMessageCountForShop(dashboard.shopId)
 
   return (
     <div className="min-h-screen bg-mesh flex">
@@ -29,6 +33,7 @@ export default async function CollectorLayout({ children, params }: CollectorLay
         collectorName={dashboard.collectorName}
         businessName={dashboard.businessName}
         businessLogoUrl={dashboard.businessLogoUrl}
+        unreadMessageCount={unreadMessageCount}
       />
 
       {/* Main Content */}

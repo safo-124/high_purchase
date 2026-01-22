@@ -8,26 +8,30 @@ datasource db {
 }
 
 model User {
-  id                    String           @id @default(cuid())
-  email                 String           @unique
-  name                  String?
-  passwordHash          String
-  role                  Role
-  phone                 String?
-  gender                Gender?
-  idCardType            IdCardType?
-  idCardNumber          String?
-  guarantorName         String?
-  guarantorPhone        String?
-  guarantorRelationship String?
-  address               String?
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
-  auditLogs             AuditLog[]       @relation("AuditLogActor")
-  businessMemberships   BusinessMember[] @relation("UserBusinessMemberships")
-  customerProfiles      Customer[]       @relation("CustomerUser")
-  sentMessages          Message[]        @relation("MessageSender")
-  memberships           ShopMember[]     @relation("UserMemberships")
+  id                      String           @id @default(cuid())
+  email                   String           @unique
+  name                    String?
+  passwordHash            String
+  role                    Role
+  phone                   String?
+  gender                  Gender?
+  idCardType              IdCardType?
+  idCardNumber            String?
+  guarantorName           String?
+  guarantorPhone          String?
+  guarantorRelationship   String?
+  address                 String?
+  lastSeenAt              DateTime?        // Track last online activity
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  auditLogs               AuditLog[]       @relation("AuditLogActor")
+  businessMemberships     BusinessMember[] @relation("UserBusinessMemberships")
+  customerProfiles        Customer[]       @relation("CustomerUser")
+  sentMessages            Message[]        @relation("MessageSender")
+  memberships             ShopMember[]     @relation("UserMemberships")
+  conversationsAsP1       Conversation[]   @relation("ConversationParticipant1")
+  conversationsAsP2       Conversation[]   @relation("ConversationParticipant2")
+  inAppMessages           InAppMessage[]   @relation("UserInAppMessages")
 }
 
 model Business {
@@ -53,6 +57,7 @@ model Business {
   shops         Shop[]           @relation("BusinessShops")
   smsSettings   SmsSettings?     @relation("BusinessSmsSettings")
   taxes         Tax[]            @relation("BusinessTaxes")
+  conversations Conversation[]   @relation("BusinessConversations")
 }
 
 model BusinessPolicy {
@@ -187,6 +192,7 @@ model Shop {
   shopProducts        ShopProduct[]     @relation("ShopProductInventory")
   taxes               ShopTax[]         @relation("ShopTaxes")
   purchaseInvoices    PurchaseInvoice[] @relation("ShopPurchaseInvoices")
+  conversations       Conversation[]    @relation("ShopConversations")
 
   @@index([businessId])
 }
@@ -246,6 +252,7 @@ model Customer {
   smsNotifications    Boolean           @default(true)
   notes               String?
   isActive            Boolean           @default(true)
+  lastSeenAt          DateTime?         // Track last online activity
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
   assignedCollector   ShopMember?       @relation("AssignedCustomers", fields: [assignedCollectorId], references: [id])
@@ -254,6 +261,8 @@ model Customer {
   messages            Message[]         @relation("CustomerMessages")
   notifications       Notification[]    @relation("CustomerNotifications")
   purchases           Purchase[]        @relation("CustomerPurchases")
+  conversations       Conversation[]    @relation("CustomerConversations")
+  inAppMessages       InAppMessage[]    @relation("CustomerInAppMessages")
 
   @@unique([shopId, phone])
   @@index([shopId])
@@ -595,6 +604,7 @@ model Waybill {
   @@index([purchaseId])
 }
 
+// Legacy Message model for SMS/Email notifications to customers
 model Message {
   id           String        @id @default(cuid())
   shopId       String
@@ -621,6 +631,73 @@ model Message {
   @@index([type])
   @@index([status])
   @@index([createdAt])
+}
+
+// In-App Messaging System - Conversations between users
+model Conversation {
+  id                     String             @id @default(cuid())
+  businessId             String
+  shopId                 String?            // Null for business-level conversations
+  // Participant 1 (can be a User/Staff)
+  participant1Id         String?
+  // Participant 2 (can be a User/Staff)  
+  participant2Id         String?
+  // Customer participant (when conversation involves a customer)
+  customerId             String?
+  // Conversation type for permission filtering
+  conversationType       ConversationType
+  lastMessageAt          DateTime?
+  lastMessagePreview     String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  business               Business           @relation("BusinessConversations", fields: [businessId], references: [id], onDelete: Cascade)
+  shop                   Shop?              @relation("ShopConversations", fields: [shopId], references: [id], onDelete: Cascade)
+  participant1           User?              @relation("ConversationParticipant1", fields: [participant1Id], references: [id], onDelete: Cascade)
+  participant2           User?              @relation("ConversationParticipant2", fields: [participant2Id], references: [id], onDelete: Cascade)
+  customer               Customer?          @relation("CustomerConversations", fields: [customerId], references: [id], onDelete: Cascade)
+  messages               InAppMessage[]     @relation("ConversationMessages")
+
+  @@unique([businessId, participant1Id, participant2Id])
+  @@unique([businessId, participant1Id, customerId])
+  @@index([businessId])
+  @@index([shopId])
+  @@index([participant1Id])
+  @@index([participant2Id])
+  @@index([customerId])
+  @@index([lastMessageAt])
+}
+
+// Individual messages within a conversation
+model InAppMessage {
+  id               String       @id @default(cuid())
+  conversationId   String
+  // Sender can be a User/Staff
+  senderId         String?
+  // Or sender can be a Customer
+  senderCustomerId String?
+  content          String
+  isRead           Boolean      @default(false)
+  readAt           DateTime?
+  // System message flag - cannot be edited/deleted
+  isSystemMessage  Boolean      @default(false)
+  // Editing support
+  isEdited         Boolean      @default(false)
+  editedAt         DateTime?
+  // Soft delete support
+  isDeleted        Boolean      @default(false)
+  deletedAt        DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  conversation     Conversation @relation("ConversationMessages", fields: [conversationId], references: [id], onDelete: Cascade)
+  sender           User?        @relation("UserInAppMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  senderCustomer   Customer?    @relation("CustomerInAppMessages", fields: [senderCustomerId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([senderCustomerId])
+  @@index([createdAt])
+  @@index([isRead])
+  @@index([isDeleted])
 }
 
 model Notification {
@@ -806,6 +883,12 @@ enum MessageType {
   EMAIL
   SMS
   IN_APP
+}
+
+enum ConversationType {
+  STAFF_TO_STAFF         // Between any two staff members
+  STAFF_TO_CUSTOMER      // Between a staff member and a customer
+  BUSINESS_BROADCAST     // Business admin to all
 }
 
 enum MessageStatus {

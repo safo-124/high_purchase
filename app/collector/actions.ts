@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache"
 import prisma from "../../lib/prisma"
 import { requireCollectorForShop, createAuditLog } from "../../lib/auth"
-import { sendCollectionReceipt } from "../../lib/email"
+import { sendCollectionReceipt, sendPendingPaymentNotification } from "../../lib/email"
+import { sendPendingPaymentMessage } from "../../lib/messaging-actions"
 import { PaymentPreference, PaymentMethod, PurchaseStatus, Prisma, Role } from "../generated/prisma/client"
 
 export type ActionResult = {
@@ -85,6 +86,7 @@ export interface PurchaseData {
 // ============================================
 
 export interface CollectorDashboardData {
+  shopId: string
   collectorName: string
   shopName: string
   businessName: string
@@ -180,6 +182,7 @@ export async function getCollectorDashboard(shopSlug: string): Promise<Collector
     : []
 
   return {
+    shopId: shop.id,
     collectorName: user.name || "Collector",
     shopName: shop.name,
     businessName: business?.name || 'Business',
@@ -467,6 +470,52 @@ export async function recordPaymentAsCollector(
         awaitingConfirmation: true,
       },
     })
+
+    // Send pending payment notification email to customer
+    if (purchase.customer.email) {
+      try {
+        const business = await prisma.business.findFirst({
+          where: { shops: { some: { id: shop.id } } },
+        })
+
+        const now = new Date()
+        await sendPendingPaymentNotification({
+          businessId: shop.businessId,
+          customerEmail: purchase.customer.email,
+          customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+          shopName: shop.name,
+          businessName: business?.name || shop.name,
+          collectorName: user.name || "Collector",
+          amount: payload.amount,
+          paymentMethod: payload.paymentMethod,
+          reference: payload.reference,
+          purchaseNumber: purchase.purchaseNumber,
+          collectionDate: now.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+          collectionTime: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+        })
+      } catch (emailError) {
+        console.error("Failed to send pending payment notification:", emailError)
+        // Don't fail the payment if email fails
+      }
+    }
+
+    // Send in-app message to customer about the pending payment
+    try {
+      await sendPendingPaymentMessage({
+        customerId: purchase.customerId,
+        staffUserId: user.id,
+        businessId: shop.businessId,
+        shopId: shop.id,
+        purchaseNumber: purchase.purchaseNumber,
+        paymentAmount: payload.amount,
+        paymentMethod: payload.paymentMethod,
+        reference: payload.reference,
+        collectorName: user.name || "Collector",
+      })
+    } catch (msgError) {
+      console.error("Failed to send pending payment message:", msgError)
+      // Don't fail the payment if messaging fails
+    }
 
     revalidatePath(`/collector/${shopSlug}/customers/${purchase.customerId}`)
     revalidatePath(`/collector/${shopSlug}/dashboard`)

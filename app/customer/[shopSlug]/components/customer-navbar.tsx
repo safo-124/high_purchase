@@ -12,7 +12,8 @@ import {
   User,
   Menu,
   X,
-  FileText
+  FileText,
+  MessageCircle
 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -53,6 +54,11 @@ export function CustomerNavbar({
       href: `/customer/${shopSlug}/receipts`,
       label: "Receipts",
       icon: FileText,
+    },
+    {
+      href: `/customer/${shopSlug}/messages`,
+      label: "Messages",
+      icon: MessageCircle,
     },
     {
       href: `/customer/${shopSlug}/notifications`,

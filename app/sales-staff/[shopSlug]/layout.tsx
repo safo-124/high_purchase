@@ -1,6 +1,7 @@
 import { requireSalesStaffForShop } from "@/lib/auth"
 import { getSalesStaffDashboard } from "../actions"
 import { SalesStaffSidebar } from "./sales-staff-sidebar"
+import { getUnreadMessageCountForShop } from "@/lib/messaging-actions"
 
 interface SalesStaffLayoutProps {
   children: React.ReactNode
@@ -12,6 +13,9 @@ export default async function SalesStaffLayout({ children, params }: SalesStaffL
   await requireSalesStaffForShop(shopSlug)
 
   const dashboard = await getSalesStaffDashboard(shopSlug)
+  
+  // Get unread message count
+  const unreadMessageCount = await getUnreadMessageCountForShop(dashboard.shopId)
 
   return (
     <div className="min-h-screen bg-mesh flex">
@@ -29,6 +33,7 @@ export default async function SalesStaffLayout({ children, params }: SalesStaffL
         staffName={dashboard.staffName}
         businessName={dashboard.businessName}
         businessLogoUrl={dashboard.businessLogoUrl}
+        unreadMessageCount={unreadMessageCount}
       />
 
       {/* Main Content */}

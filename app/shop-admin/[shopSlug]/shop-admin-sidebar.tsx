@@ -12,9 +12,10 @@ interface ShopAdminSidebarProps {
   userEmail: string
   businessName: string
   businessLogoUrl: string | null
+  unreadMessageCount?: number
 }
 
-export function ShopAdminSidebar({ shopSlug, shopName, userName, userEmail, businessName, businessLogoUrl }: ShopAdminSidebarProps) {
+export function ShopAdminSidebar({ shopSlug, shopName, userName, userEmail, businessName, businessLogoUrl, unreadMessageCount = 0 }: ShopAdminSidebarProps) {
   const pathname = usePathname()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
 
@@ -130,7 +131,17 @@ export function ShopAdminSidebar({ shopSlug, shopName, userName, userEmail, busi
       ),
     },
     {
-      name: "Messages",
+      name: "Chat",
+      href: `/shop-admin/${shopSlug}/chat`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      ),
+      badge: unreadMessageCount,
+    },
+    {
+      name: "Notifications",
       href: `/shop-admin/${shopSlug}/messages`,
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -271,8 +282,20 @@ export function ShopAdminSidebar({ shopSlug, shopName, userName, userEmail, busi
                   : "text-slate-400 hover:text-white hover:bg-white/5"
               }`}
             >
-              {item.icon}
-              <span className="font-medium">{item.name}</span>
+              <span className="relative">
+                {item.icon}
+                {item.badge && item.badge > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+                    {item.badge > 99 ? "99+" : item.badge}
+                  </span>
+                )}
+              </span>
+              <span className="font-medium flex-1">{item.name}</span>
+              {item.badge && item.badge > 0 && (
+                <span className="min-w-[20px] h-[20px] flex items-center justify-center rounded-full bg-red-500/20 text-red-400 text-xs font-semibold px-1.5">
+                  {item.badge > 99 ? "99+" : item.badge}
+                </span>
+              )}
             </Link>
           )
         })}

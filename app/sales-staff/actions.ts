@@ -16,6 +16,7 @@ export type ActionResult = {
 // ============================================
 
 export interface SalesStaffDashboard {
+  shopId: string
   shopName: string
   staffName: string | null
   businessName: string
@@ -61,6 +62,7 @@ export async function getSalesStaffDashboard(shopSlug: string): Promise<SalesSta
   ])
 
   return {
+    shopId: shop.id,
     shopName: shop.name,
     staffName: user.name,
     businessName: business?.name || 'Business',
