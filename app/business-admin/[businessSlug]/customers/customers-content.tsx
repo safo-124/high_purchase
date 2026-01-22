@@ -30,6 +30,8 @@ interface Customer {
   totalPaid: number
   outstanding: number
   productNames: string[]
+  hasAccount: boolean
+  accountEmail: string | null
 }
 
 interface Shop {
@@ -394,6 +396,17 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
     notes: "",
     isActive: true,
     assignedCollectorId: "",
+    // Portal account creation
+    createAccount: false,
+    accountEmail: "",
+    accountPassword: "",
+    confirmPassword: "",
+    // Portal account deactivation
+    deactivateAccount: false,
+    // Portal account password reset
+    resetPassword: false,
+    newPassword: "",
+    confirmNewPassword: "",
   })
 
   const openEditModal = (customer: Customer) => {
@@ -410,6 +423,14 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
       notes: customer.notes || "",
       isActive: customer.isActive,
       assignedCollectorId: customer.assignedCollectorId || "",
+      createAccount: false,
+      accountEmail: "",
+      accountPassword: "",
+      confirmPassword: "",
+      deactivateAccount: false,
+      resetPassword: false,
+      newPassword: "",
+      confirmNewPassword: "",
     })
     setEditModal({ open: true, customer })
   }
@@ -432,6 +453,34 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
       return
     }
 
+    // Validate portal account fields if creating account
+    if (editForm.createAccount) {
+      if (!editForm.accountEmail.trim()) {
+        toast.error("Email is required for portal account")
+        return
+      }
+      if (editForm.accountPassword.length < 8) {
+        toast.error("Password must be at least 8 characters")
+        return
+      }
+      if (editForm.accountPassword !== editForm.confirmPassword) {
+        toast.error("Passwords do not match")
+        return
+      }
+    }
+
+    // Validate password reset fields
+    if (editForm.resetPassword) {
+      if (editForm.newPassword.length < 8) {
+        toast.error("New password must be at least 8 characters")
+        return
+      }
+      if (editForm.newPassword !== editForm.confirmNewPassword) {
+        toast.error("New passwords do not match")
+        return
+      }
+    }
+
     startTransition(async () => {
       const result = await updateBusinessCustomer(businessSlug, editModal.customer!.id, {
         firstName: editForm.firstName,
@@ -446,10 +495,26 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
         notes: editForm.notes || null,
         isActive: editForm.isActive,
         assignedCollectorId: editForm.assignedCollectorId || null,
+        // Portal account fields
+        createAccount: editForm.createAccount,
+        accountEmail: editForm.createAccount ? editForm.accountEmail : undefined,
+        accountPassword: editForm.createAccount ? editForm.accountPassword : undefined,
+        // Portal account deactivation
+        deactivateAccount: editForm.deactivateAccount,
+        // Portal account password reset
+        resetPassword: editForm.resetPassword,
+        newPassword: editForm.resetPassword ? editForm.newPassword : undefined,
       })
 
       if (result.success) {
-        toast.success("Customer updated successfully")
+        const message = editForm.deactivateAccount 
+          ? "Customer updated and portal account deactivated" 
+          : editForm.resetPassword
+            ? "Customer updated and password reset"
+            : editForm.createAccount 
+              ? "Customer updated and portal account created" 
+              : "Customer updated successfully"
+        toast.success(message)
         setEditModal({ open: false, customer: null })
         router.refresh()
       } else {
@@ -1081,13 +1146,29 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Region
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={newCustomerForm.region}
                     onChange={(e) => setNewCustomerForm(prev => ({ ...prev, region: e.target.value }))}
-                    placeholder="Region"
-                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
-                  />
+                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
+                  >
+                    <option value="" className="bg-slate-800">Select region...</option>
+                    <option value="Greater Accra" className="bg-slate-800">Greater Accra</option>
+                    <option value="Ashanti" className="bg-slate-800">Ashanti</option>
+                    <option value="Western" className="bg-slate-800">Western</option>
+                    <option value="Central" className="bg-slate-800">Central</option>
+                    <option value="Eastern" className="bg-slate-800">Eastern</option>
+                    <option value="Northern" className="bg-slate-800">Northern</option>
+                    <option value="Volta" className="bg-slate-800">Volta</option>
+                    <option value="Upper East" className="bg-slate-800">Upper East</option>
+                    <option value="Upper West" className="bg-slate-800">Upper West</option>
+                    <option value="Brong Ahafo" className="bg-slate-800">Brong Ahafo</option>
+                    <option value="Savannah" className="bg-slate-800">Savannah</option>
+                    <option value="Bono East" className="bg-slate-800">Bono East</option>
+                    <option value="Ahafo" className="bg-slate-800">Ahafo</option>
+                    <option value="Western North" className="bg-slate-800">Western North</option>
+                    <option value="Oti" className="bg-slate-800">Oti</option>
+                    <option value="North East" className="bg-slate-800">North East</option>
+                  </select>
                 </div>
               </div>
 
@@ -1401,13 +1482,29 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                   />
                 </div>
                 <div>
-                  <input
-                    type="text"
+                  <select
                     value={editForm.region}
                     onChange={(e) => setEditForm(prev => ({ ...prev, region: e.target.value }))}
-                    placeholder="Region"
-                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
-                  />
+                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
+                  >
+                    <option value="" className="bg-slate-800">Select region...</option>
+                    <option value="Greater Accra" className="bg-slate-800">Greater Accra</option>
+                    <option value="Ashanti" className="bg-slate-800">Ashanti</option>
+                    <option value="Western" className="bg-slate-800">Western</option>
+                    <option value="Central" className="bg-slate-800">Central</option>
+                    <option value="Eastern" className="bg-slate-800">Eastern</option>
+                    <option value="Northern" className="bg-slate-800">Northern</option>
+                    <option value="Volta" className="bg-slate-800">Volta</option>
+                    <option value="Upper East" className="bg-slate-800">Upper East</option>
+                    <option value="Upper West" className="bg-slate-800">Upper West</option>
+                    <option value="Brong Ahafo" className="bg-slate-800">Brong Ahafo</option>
+                    <option value="Savannah" className="bg-slate-800">Savannah</option>
+                    <option value="Bono East" className="bg-slate-800">Bono East</option>
+                    <option value="Ahafo" className="bg-slate-800">Ahafo</option>
+                    <option value="Western North" className="bg-slate-800">Western North</option>
+                    <option value="Oti" className="bg-slate-800">Oti</option>
+                    <option value="North East" className="bg-slate-800">North East</option>
+                  </select>
                 </div>
               </div>
 
@@ -1450,6 +1547,183 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                   className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
                 />
               </div>
+
+              {/* Customer Portal Account */}
+              {editModal.customer && !editModal.customer.hasAccount && (
+                <div className="border-t border-white/10 pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium text-white">Customer Portal Account</p>
+                        <p className="text-xs text-slate-400">Allow customer to log in and view their purchases</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm(prev => ({ ...prev, createAccount: !prev.createAccount }))}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        editForm.createAccount ? "bg-cyan-500" : "bg-slate-600"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          editForm.createAccount ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {editForm.createAccount && (
+                    <div className="space-y-3 p-3 bg-cyan-500/5 border border-cyan-500/20 rounded-xl">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Account Email</label>
+                        <input
+                          type="email"
+                          value={editForm.accountEmail}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, accountEmail: e.target.value }))}
+                          placeholder="customer@email.com"
+                          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">Password</label>
+                          <input
+                            type="password"
+                            value={editForm.accountPassword}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, accountPassword: e.target.value }))}
+                            placeholder="••••••••"
+                            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">Confirm Password</label>
+                          <input
+                            type="password"
+                            value={editForm.confirmPassword}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                            placeholder="••••••••"
+                            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500">Password must be at least 8 characters</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Already has portal account - with toggle to deactivate and password reset */}
+              {editModal.customer && editModal.customer.hasAccount && (
+                <div className="border-t border-white/10 pt-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <svg className={`w-5 h-5 ${editForm.deactivateAccount ? "text-red-400" : "text-green-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {editForm.deactivateAccount ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        )}
+                      </svg>
+                      <div>
+                        <p className={`text-sm font-medium ${editForm.deactivateAccount ? "text-red-400" : "text-green-400"}`}>
+                          {editForm.deactivateAccount ? "Portal Account Will Be Deactivated" : "Portal Account Active"}
+                        </p>
+                        <p className="text-xs text-slate-400">{editModal.customer.accountEmail}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm(prev => ({ ...prev, deactivateAccount: !prev.deactivateAccount, resetPassword: false }))}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        !editForm.deactivateAccount ? "bg-green-500" : "bg-red-500"
+                      }`}
+                      title={editForm.deactivateAccount ? "Click to keep account active" : "Click to deactivate account"}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          !editForm.deactivateAccount ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Account details and password reset when active */}
+                  {!editForm.deactivateAccount && (
+                    <div className="mt-3 space-y-3 p-3 bg-green-500/5 border border-green-500/20 rounded-xl">
+                      {/* Email (read-only) */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Account Email</label>
+                        <input
+                          type="email"
+                          value={editModal.customer.accountEmail || ""}
+                          readOnly
+                          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 text-sm cursor-not-allowed"
+                        />
+                      </div>
+
+                      {/* Reset Password Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-white">Reset Password</p>
+                          <p className="text-xs text-slate-400">Set a new password for this account</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditForm(prev => ({ ...prev, resetPassword: !prev.resetPassword, newPassword: "", confirmNewPassword: "" }))}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            editForm.resetPassword ? "bg-cyan-500" : "bg-slate-600"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              editForm.resetPassword ? "translate-x-6" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Password fields when reset is enabled */}
+                      {editForm.resetPassword && (
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1">New Password</label>
+                            <input
+                              type="password"
+                              value={editForm.newPassword}
+                              onChange={(e) => setEditForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                              placeholder="••••••••"
+                              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1">Confirm New Password</label>
+                            <input
+                              type="password"
+                              value={editForm.confirmNewPassword}
+                              onChange={(e) => setEditForm(prev => ({ ...prev, confirmNewPassword: e.target.value }))}
+                              placeholder="••••••••"
+                              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                            />
+                          </div>
+                          <p className="col-span-2 text-xs text-slate-500">Password must be at least 8 characters</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {editForm.deactivateAccount && (
+                    <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                      <p className="text-xs text-red-400">
+                        ⚠️ The customer will no longer be able to log into their portal account. Their purchase history and data will be preserved.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex gap-3 pt-4">

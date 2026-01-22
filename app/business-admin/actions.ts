@@ -1023,6 +1023,9 @@ export async function getBusinessCustomers(businessSlug: string) {
           items: true,
         },
       },
+      user: {
+        select: { id: true, email: true },
+      },
     },
     orderBy: { createdAt: "desc" },
   })
@@ -1073,6 +1076,8 @@ export async function getBusinessCustomers(businessSlug: string) {
       totalPaid,
       outstanding: totalPurchased - totalPaid,
       productNames,
+      hasAccount: !!customer.user,
+      accountEmail: customer.user?.email || null,
     }
   })
 }
@@ -1093,6 +1098,15 @@ export interface UpdateBusinessCustomerPayload {
   notes?: string | null
   isActive?: boolean
   assignedCollectorId?: string | null
+  // Portal account creation
+  createAccount?: boolean
+  accountEmail?: string
+  accountPassword?: string
+  // Portal account deactivation
+  deactivateAccount?: boolean
+  // Portal account password reset
+  resetPassword?: boolean
+  newPassword?: string
 }
 
 export async function updateBusinessCustomer(
@@ -1138,6 +1152,65 @@ export async function updateBusinessCustomer(
       }
     }
 
+    // Handle portal account creation
+    let userAccountId: string | null = null
+    if (payload.createAccount && payload.accountEmail && payload.accountPassword) {
+      // Check if customer already has an account (customer.userId is set)
+      if (existingCustomer.userId) {
+        return { success: false, error: "This customer already has a portal account" }
+      }
+
+      // Check if email is already in use
+      const emailInUse = await prisma.user.findUnique({
+        where: { email: payload.accountEmail.trim().toLowerCase() },
+      })
+      if (emailInUse) {
+        return { success: false, error: "This email is already associated with another account" }
+      }
+
+      // Validate password
+      if (payload.accountPassword.length < 8) {
+        return { success: false, error: "Password must be at least 8 characters long" }
+      }
+
+      // Hash password and create account
+      const bcrypt = await import("bcryptjs")
+      const hashedPassword = await bcrypt.hash(payload.accountPassword, 12)
+
+      const newUser = await prisma.user.create({
+        data: {
+          email: payload.accountEmail.trim().toLowerCase(),
+          passwordHash: hashedPassword,
+          name: `${existingCustomer.firstName} ${existingCustomer.lastName}`,
+          role: "CUSTOMER",
+        },
+      })
+      userAccountId = newUser.id
+    }
+
+    // Handle portal account deactivation
+    let unlinkUserId = false
+    if (payload.deactivateAccount && existingCustomer.userId) {
+      // We'll unlink the user from the customer but keep the user record
+      // This preserves the user's data while preventing login access
+      unlinkUserId = true
+    }
+
+    // Handle password reset for existing accounts
+    if (payload.resetPassword && payload.newPassword && existingCustomer.userId) {
+      if (payload.newPassword.length < 8) {
+        return { success: false, error: "New password must be at least 8 characters long" }
+      }
+
+      const bcrypt = await import("bcryptjs")
+      const hashedPassword = await bcrypt.hash(payload.newPassword, 12)
+
+      await prisma.user.update({
+        where: { id: existingCustomer.userId },
+        data: { passwordHash: hashedPassword },
+      })
+    }
+
     const customer = await prisma.customer.update({
       where: { id: customerId },
       data: {
@@ -1153,6 +1226,10 @@ export async function updateBusinessCustomer(
         ...(payload.notes !== undefined && { notes: payload.notes?.trim() || null }),
         ...(payload.isActive !== undefined && { isActive: payload.isActive }),
         ...(payload.assignedCollectorId !== undefined && { assignedCollectorId: payload.assignedCollectorId || null }),
+        // Link user account if created
+        ...(userAccountId && { userId: userAccountId }),
+        // Unlink user account if deactivating
+        ...(unlinkUserId && { userId: null }),
       },
     })
 
