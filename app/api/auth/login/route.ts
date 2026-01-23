@@ -66,6 +66,21 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Check if user must change password on first login
+    if (user.mustChangePassword && user.role === "BUSINESS_ADMIN") {
+      return NextResponse.json({
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        },
+        mustChangePassword: true,
+        redirectPath: "/change-password",
+      })
+    }
+
     // Determine redirect path based on role
     let redirectPath = "/login"
     if (user.role === "SUPER_ADMIN") {

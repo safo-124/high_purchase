@@ -149,6 +149,7 @@ export async function createBusiness(formData: FormData): Promise<ActionResult> 
         name: adminName.trim(),
         passwordHash,
         role: "BUSINESS_ADMIN",
+        mustChangePassword: true, // Force password change on first login
         businessMemberships: {
           create: {
             businessId: business.id,

@@ -13,6 +13,7 @@ model User {
   name                    String?
   passwordHash            String
   role                    Role
+  mustChangePassword      Boolean          @default(false) // Force password change on first login
   phone                   String?
   gender                  Gender?
   idCardType              IdCardType?
