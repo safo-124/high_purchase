@@ -13,7 +13,8 @@ import {
   Menu,
   X,
   FileText,
-  MessageCircle
+  MessageCircle,
+  Settings
 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -65,6 +66,11 @@ export function CustomerNavbar({
       label: "Notifications",
       icon: Bell,
       badge: unreadCount > 0 ? unreadCount : undefined,
+    },
+    {
+      href: `/customer/${shopSlug}/settings`,
+      label: "Settings",
+      icon: Settings,
     },
   ]
 

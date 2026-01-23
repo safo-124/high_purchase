@@ -6707,3 +6707,127 @@ export async function generatePurchaseInvoice(
     return { success: false, error: "Failed to generate invoice" }
   }
 }
+
+// ==========================================
+// ACCOUNT SETTINGS (Email & Password)
+// ==========================================
+
+export async function changeBusinessAdminEmail(
+  businessSlug: string,
+  newEmail: string,
+  currentPassword: string
+): Promise<ActionResult> {
+  try {
+    const { user } = await requireBusinessAdmin(businessSlug)
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(newEmail.trim())) {
+      return { success: false, error: "Invalid email format" }
+    }
+
+    // Check if email is already in use by another user
+    const existingUser = await prisma.user.findUnique({
+      where: { email: newEmail.trim().toLowerCase() },
+    })
+    if (existingUser && existingUser.id !== user.id) {
+      return { success: false, error: "This email is already in use" }
+    }
+
+    // Verify current password
+    const bcrypt = await import("bcryptjs")
+    const currentUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { passwordHash: true },
+    })
+    
+    if (!currentUser) {
+      return { success: false, error: "User not found" }
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, currentUser.passwordHash)
+    if (!isPasswordValid) {
+      return { success: false, error: "Current password is incorrect" }
+    }
+
+    const oldEmail = user.email
+
+    // Update email
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { email: newEmail.trim().toLowerCase() },
+    })
+
+    // Create audit log
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "EMAIL_CHANGED",
+      entityType: "User",
+      entityId: user.id,
+      metadata: {
+        oldEmail,
+        newEmail: newEmail.trim().toLowerCase(),
+        changedByBusinessAdmin: true,
+      },
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error changing email:", error)
+    return { success: false, error: "Failed to change email" }
+  }
+}
+
+export async function changeBusinessAdminPassword(
+  businessSlug: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<ActionResult> {
+  try {
+    const { user } = await requireBusinessAdmin(businessSlug)
+
+    // Validate new password
+    if (newPassword.length < 8) {
+      return { success: false, error: "New password must be at least 8 characters" }
+    }
+
+    // Verify current password
+    const bcrypt = await import("bcryptjs")
+    const currentUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { passwordHash: true },
+    })
+    
+    if (!currentUser) {
+      return { success: false, error: "User not found" }
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, currentUser.passwordHash)
+    if (!isPasswordValid) {
+      return { success: false, error: "Current password is incorrect" }
+    }
+
+    // Hash and update new password
+    const hashedPassword = await bcrypt.hash(newPassword, 12)
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: hashedPassword },
+    })
+
+    // Create audit log
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PASSWORD_CHANGED",
+      entityType: "User",
+      entityId: user.id,
+      metadata: {
+        changedByBusinessAdmin: true,
+      },
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error changing password:", error)
+    return { success: false, error: "Failed to change password" }
+  }
+}

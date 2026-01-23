@@ -663,3 +663,135 @@ export async function getCustomerReceiptById(receiptId: string): Promise<Custome
     return null
   }
 }
+
+// ============================================
+// CUSTOMER SETTINGS
+// ============================================
+
+export async function changeCustomerEmail(
+  newEmail: string,
+  currentPassword: string
+): Promise<ActionResult> {
+  try {
+    const session = await requireCustomerAuth()
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(newEmail.trim())) {
+      return { success: false, error: "Invalid email format" }
+    }
+
+    // Check if email is already in use by another user
+    const existingUser = await prisma.user.findUnique({
+      where: { email: newEmail.trim().toLowerCase() },
+    })
+    if (existingUser && existingUser.id !== session.userId) {
+      return { success: false, error: "This email is already in use" }
+    }
+
+    // Verify current password
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { passwordHash: true },
+    })
+    
+    if (!currentUser) {
+      return { success: false, error: "User not found" }
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, currentUser.passwordHash)
+    if (!isPasswordValid) {
+      return { success: false, error: "Current password is incorrect" }
+    }
+
+    // Update email
+    await prisma.user.update({
+      where: { id: session.userId },
+      data: { email: newEmail.trim().toLowerCase() },
+    })
+
+    revalidatePath("/customer")
+    return { success: true }
+  } catch (error) {
+    console.error("Error changing email:", error)
+    return { success: false, error: "Failed to change email" }
+  }
+}
+
+export async function changeCustomerPassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<ActionResult> {
+  try {
+    const session = await requireCustomerAuth()
+
+    // Validate new password
+    if (newPassword.length < 8) {
+      return { success: false, error: "New password must be at least 8 characters" }
+    }
+
+    // Verify current password
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { passwordHash: true },
+    })
+    
+    if (!currentUser) {
+      return { success: false, error: "User not found" }
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, currentUser.passwordHash)
+    if (!isPasswordValid) {
+      return { success: false, error: "Current password is incorrect" }
+    }
+
+    // Hash and update new password
+    const hashedPassword = await bcrypt.hash(newPassword, 12)
+    await prisma.user.update({
+      where: { id: session.userId },
+      data: { passwordHash: hashedPassword },
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error changing password:", error)
+    return { success: false, error: "Failed to change password" }
+  }
+}
+
+export interface CustomerSettingsData {
+  email: string
+  name: string
+  phone: string
+  createdAt: Date
+}
+
+export async function getCustomerSettings(): Promise<CustomerSettingsData | null> {
+  try {
+    const session = await requireCustomerAuth()
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: session.customerId },
+      include: {
+        user: {
+          select: {
+            email: true,
+            name: true,
+            createdAt: true,
+          },
+        },
+      },
+    })
+
+    if (!customer || !customer.user) return null
+
+    return {
+      email: customer.user.email,
+      name: customer.user.name || `${customer.firstName} ${customer.lastName}`,
+      phone: customer.phone,
+      createdAt: customer.user.createdAt,
+    }
+  } catch {
+    return null
+  }
+}
