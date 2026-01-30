@@ -98,10 +98,10 @@ export async function GET(
     const shopsData = shops.map(shop => ({
       "Shop Name": shop.name,
       "Shop Slug": shop.shopSlug,
-      "Address": shop.address || "",
+      "Country": shop.country || "",
     }))
     const shopsSheet = XLSX.utils.json_to_sheet(shopsData)
-    shopsSheet["!cols"] = [{ wch: 25 }, { wch: 20 }, { wch: 40 }]
+    shopsSheet["!cols"] = [{ wch: 25 }, { wch: 20 }, { wch: 20 }]
     XLSX.utils.book_append_sheet(workbook, shopsSheet, "Shops")
 
     // Add instructions sheet
