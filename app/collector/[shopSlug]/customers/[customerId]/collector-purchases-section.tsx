@@ -403,11 +403,22 @@ export function CollectorPurchasesSection({ purchases, shopSlug, customerName }:
                   step="0.01"
                   max={paymentModal.purchase.outstandingBalance}
                   value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  onChange={(e) => {
+                    const maxAmount = paymentModal.purchase?.outstandingBalance || 0
+                    const value = parseFloat(e.target.value)
+                    if (!isNaN(value) && value > maxAmount) {
+                      setPaymentAmount(maxAmount.toString())
+                    } else {
+                      setPaymentAmount(e.target.value)
+                    }
+                  }}
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   placeholder="0.00"
                   autoFocus
                 />
+                <p className="mt-1 text-xs text-slate-500">
+                  Max: ₵{paymentModal.purchase.outstandingBalance.toLocaleString()}
+                </p>
               </div>
 
               <div>

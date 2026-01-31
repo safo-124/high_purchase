@@ -2439,6 +2439,12 @@ export async function recordPayment(
       return { success: false, error: "Payment amount must be greater than 0" }
     }
 
+    // Prevent overpayment
+    const outstanding = Number(purchase.outstandingBalance)
+    if (payload.amount > outstanding) {
+      return { success: false, error: `Amount cannot exceed outstanding balance of ₵${outstanding.toLocaleString()}` }
+    }
+
     const autoConfirm = payload.autoConfirm ?? false
 
     // Create payment record - pending by default unless autoConfirm is true

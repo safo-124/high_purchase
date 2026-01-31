@@ -438,6 +438,16 @@ export async function recordPaymentAsCollector(
       return { success: false, error: "This purchase is already fully paid" }
     }
 
+    if (payload.amount <= 0) {
+      return { success: false, error: "Payment amount must be greater than 0" }
+    }
+
+    // Prevent overpayment
+    const outstanding = Number(purchase.outstandingBalance)
+    if (payload.amount > outstanding) {
+      return { success: false, error: `Amount cannot exceed outstanding balance of ₵${outstanding.toLocaleString()}` }
+    }
+
     // Create the payment as PENDING confirmation (isConfirmed = false)
     // The balance will NOT be updated until shop admin confirms
     const payment = await prisma.payment.create({

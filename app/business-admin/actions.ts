@@ -1039,7 +1039,10 @@ export async function getBusinessCustomers(businessSlug: string) {
     for (const purchase of customer.purchases) {
       totalPurchased += Number(purchase.totalAmount)
       for (const payment of purchase.payments) {
-        totalPaid += Number(payment.amount)
+        // Only count confirmed payments
+        if (payment.isConfirmed) {
+          totalPaid += Number(payment.amount)
+        }
       }
       if (purchase.status === "ACTIVE") {
         activePurchases++
@@ -5342,6 +5345,12 @@ export async function recordPaymentAsBusinessAdmin(
       return { success: false, error: "Payment amount must be greater than 0" }
     }
 
+    // Prevent overpayment
+    const outstanding = Number(purchase.outstandingBalance)
+    if (payload.amount > outstanding) {
+      return { success: false, error: `Amount cannot exceed outstanding balance of ₵${outstanding.toLocaleString()}` }
+    }
+
     const autoConfirm = payload.autoConfirm ?? false
 
     // Create payment record - pending by default
@@ -5413,6 +5422,140 @@ export async function recordPaymentAsBusinessAdmin(
   } catch (error) {
     console.error("Error recording payment as business admin:", error)
     return { success: false, error: "Failed to record payment" }
+  }
+}
+
+/**
+ * Get full customer details with all purchases and payments
+ */
+export async function getBusinessCustomerDetails(
+  businessSlug: string,
+  customerId: string
+) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const customer = await prisma.customer.findFirst({
+    where: {
+      id: customerId,
+      shop: { businessId: business.id },
+    },
+    include: {
+      shop: {
+        select: { name: true, shopSlug: true },
+      },
+      assignedCollector: {
+        include: { user: { select: { name: true } } },
+      },
+      purchases: {
+        include: {
+          items: {
+            include: {
+              product: true,
+            },
+          },
+          payments: {
+            orderBy: { createdAt: "desc" },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      },
+      user: {
+        select: { id: true, email: true },
+      },
+    },
+  })
+
+  if (!customer) {
+    return null
+  }
+
+  // Calculate totals
+  let totalPurchased = 0
+  let totalPaid = 0
+  let activePurchases = 0
+
+  for (const purchase of customer.purchases) {
+    totalPurchased += Number(purchase.totalAmount)
+    for (const payment of purchase.payments) {
+      if (payment.isConfirmed) {
+        totalPaid += Number(payment.amount)
+      }
+    }
+    if (purchase.status === "ACTIVE") {
+      activePurchases++
+    }
+  }
+
+  return {
+    id: customer.id,
+    firstName: customer.firstName,
+    lastName: customer.lastName,
+    fullName: `${customer.firstName} ${customer.lastName}`,
+    phone: customer.phone,
+    email: customer.email,
+    idType: customer.idType,
+    idNumber: customer.idNumber,
+    address: customer.address,
+    city: customer.city,
+    region: customer.region,
+    notes: customer.notes,
+    isActive: customer.isActive,
+    assignedCollectorName: customer.assignedCollector?.user?.name || null,
+    createdAt: customer.createdAt,
+    shopName: customer.shop.name,
+    shopSlug: customer.shop.shopSlug,
+    hasAccount: !!customer.user,
+    accountEmail: customer.user?.email || null,
+    totalPurchased,
+    totalPaid,
+    outstanding: totalPurchased - totalPaid,
+    activePurchases,
+    totalPurchases: customer.purchases.length,
+    purchases: customer.purchases.map((purchase) => {
+      const purchasePaid = purchase.payments
+        .filter(p => p.isConfirmed)
+        .reduce((sum, p) => sum + Number(p.amount), 0)
+      const purchaseOutstanding = Number(purchase.totalAmount) - purchasePaid
+      const isOverdue = purchase.status === "ACTIVE" && purchase.dueDate && new Date(purchase.dueDate) < new Date()
+
+      return {
+        id: purchase.id,
+        purchaseNumber: purchase.purchaseNumber,
+        purchaseType: purchase.purchaseType,
+        status: purchase.status,
+        totalAmount: Number(purchase.totalAmount),
+        subtotal: Number(purchase.subtotal),
+        interestAmount: Number(purchase.interestAmount),
+        downPayment: Number(purchase.downPayment),
+        amountPaid: purchasePaid,
+        outstandingBalance: purchaseOutstanding,
+        installments: purchase.installments,
+        dueDate: purchase.dueDate,
+        isOverdue,
+        createdAt: purchase.createdAt,
+        items: purchase.items.map((item) => ({
+          id: item.id,
+          productName: item.productName,
+          productSku: item.product?.sku || null,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          totalPrice: Number(item.totalPrice),
+        })),
+        payments: purchase.payments.map((payment) => ({
+          id: payment.id,
+          amount: Number(payment.amount),
+          paymentMethod: payment.paymentMethod,
+          reference: payment.reference,
+          notes: payment.notes,
+          paidAt: payment.paidAt,
+          createdAt: payment.createdAt,
+          isConfirmed: payment.isConfirmed,
+          confirmedAt: payment.confirmedAt,
+          rejectedAt: payment.rejectedAt,
+          rejectionReason: payment.rejectionReason,
+        })),
+      }
+    }),
   }
 }
 

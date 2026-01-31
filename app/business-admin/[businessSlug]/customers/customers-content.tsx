@@ -341,6 +341,13 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
       toast.error("Please enter a valid payment amount")
       return
     }
+
+    // Prevent overpayment
+    const selectedPurchase = paymentModal.purchases.find(p => p.id === selectedPurchaseId)
+    if (selectedPurchase && amount > selectedPurchase.outstandingBalance) {
+      toast.error(`Amount cannot exceed outstanding balance of ₵${selectedPurchase.outstandingBalance.toLocaleString()}`)
+      return
+    }
     
     startTransition(async () => {
       const result = await recordPaymentAsBusinessAdmin(businessSlug, {
@@ -820,7 +827,11 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
             </thead>
             <tbody className="divide-y divide-white/5">
               {sortedCustomers.map((customer) => (
-                <tr key={customer.id} className="hover:bg-white/[0.02] transition-colors">
+                <tr 
+                  key={customer.id} 
+                  className="hover:bg-white/[0.02] transition-colors cursor-pointer"
+                  onClick={() => router.push(`/business-admin/${businessSlug}/customers/${customer.id}`)}
+                >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/15 border border-cyan-500/30 flex items-center justify-center">
@@ -829,7 +840,7 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                         </span>
                       </div>
                       <div>
-                        <p className="font-medium text-white">{customer.fullName || "Unknown"}</p>
+                        <p className="font-medium text-white hover:text-cyan-400 transition-colors">{customer.fullName || "Unknown"}</p>
                         <p className="text-xs text-slate-500">{customer.phone || "N/A"}</p>
                         {customer.email && (
                           <p className="text-xs text-slate-500">{customer.email}</p>
@@ -909,7 +920,7 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                       </span>
                     )}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
                       {!customer.isActive && (
                         <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
@@ -917,7 +928,7 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                         </span>
                       )}
                       <button
-                        onClick={() => openEditModal(customer)}
+                        onClick={(e) => { e.stopPropagation(); openEditModal(customer); }}
                         className="px-3 py-1.5 rounded-lg bg-white/5 text-slate-300 text-xs font-medium hover:bg-white/10 transition-all flex items-center gap-1"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -926,7 +937,7 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                         Edit
                       </button>
                       <button
-                        onClick={() => setDeleteModal({ open: true, customer })}
+                        onClick={(e) => { e.stopPropagation(); setDeleteModal({ open: true, customer }); }}
                         className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs font-medium hover:bg-red-500/20 transition-all flex items-center gap-1"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -936,7 +947,7 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                       </button>
                       {customer.outstanding > 0 && (
                         <button
-                          onClick={() => openPaymentModal(customer)}
+                          onClick={(e) => { e.stopPropagation(); openPaymentModal(customer); }}
                           className="px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 text-xs font-medium hover:bg-green-500/30 transition-all flex items-center gap-1"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1040,13 +1051,28 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                     <input
                       type="number"
                       value={paymentAmount}
-                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      onChange={(e) => {
+                        const selectedPurchase = paymentModal.purchases.find(p => p.id === selectedPurchaseId)
+                        const maxAmount = selectedPurchase?.outstandingBalance || 0
+                        const value = parseFloat(e.target.value)
+                        if (!isNaN(value) && value > maxAmount) {
+                          setPaymentAmount(maxAmount.toString())
+                        } else {
+                          setPaymentAmount(e.target.value)
+                        }
+                      }}
                       placeholder="0.00"
                       min="0"
+                      max={paymentModal.purchases.find(p => p.id === selectedPurchaseId)?.outstandingBalance || undefined}
                       step="0.01"
                       className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
                     />
                   </div>
+                  {selectedPurchaseId && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Max: ₵{paymentModal.purchases.find(p => p.id === selectedPurchaseId)?.outstandingBalance.toLocaleString() || "0"}
+                    </p>
+                  )}
                 </div>
 
                 {/* Payment Method */}

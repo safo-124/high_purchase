@@ -344,7 +344,7 @@ export function PurchasesContent({ purchases, shops, businessSlug }: PurchasesCo
                     <div className="flex-1">
                       <div className="flex justify-between text-xs mb-1">
                         <span className="text-slate-500">Progress</span>
-                        <span className="text-white">{purchase.paidInstallments}/{purchase.installmentCount}</span>
+                        <span className="text-white">{Math.round((purchase.totalPaid / purchase.totalPrice) * 100)}%</span>
                       </div>
                       <div className="h-2 bg-white/5 rounded-full overflow-hidden">
                         <div
@@ -355,13 +355,18 @@ export function PurchasesContent({ purchases, shops, businessSlug }: PurchasesCo
                               ? "bg-red-500"
                               : "bg-cyan-500"
                           }`}
-                          style={{ width: `${(purchase.paidInstallments / purchase.installmentCount) * 100}%` }}
+                          style={{ width: `${Math.min(100, (purchase.totalPaid / purchase.totalPrice) * 100)}%` }}
                         />
                       </div>
                     </div>
                   </div>
                   <div className="flex justify-between mt-2 text-xs">
-                    <span className="text-slate-500">₵{purchase.installmentAmount.toLocaleString()}/installment</span>
+                    <span className="text-slate-500">
+                      {purchase.installmentCount > 0 
+                        ? `${purchase.paidInstallments}/${purchase.installmentCount} installments`
+                        : "Single payment"
+                      }
+                    </span>
                   </div>
                 </div>
 
