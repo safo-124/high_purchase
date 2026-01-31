@@ -66,6 +66,7 @@ export default async function BusinessPurchasesPage({ params }: Props) {
       <PurchasesContent 
         purchases={purchases} 
         shops={shops.map(s => ({ name: s.name, shopSlug: s.shopSlug }))} 
+        businessSlug={businessSlug}
       />
     </div>
   )
