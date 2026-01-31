@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useRef } from "react"
+import { useState, useTransition, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { recordPaymentAsBusinessAdmin, getBusinessCustomerPurchases, createBusinessCustomer, updateBusinessCustomer, deleteBusinessCustomer, updateBusinessPurchaseItems, getBusinessShopProducts, getBusinessPurchaseDetails, BusinessShopProduct, BusinessPurchaseDetails } from "../../actions"
@@ -72,6 +72,85 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "cleared">("all")
   const [sortBy, setSortBy] = useState<"name" | "outstanding" | "recent">("name")
   
+  // Excel import/export state
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [showImportResult, setShowImportResult] = useState<{
+    open: boolean
+    created: number
+    updated: number
+    errors: string[]
+    totalErrors: number
+  } | null>(null)
+
+  // Excel export handler
+  const handleExport = useCallback(async () => {
+    setIsExporting(true)
+    try {
+      const response = await fetch(`/api/business-admin/${businessSlug}/customers/export`)
+      if (!response.ok) {
+        throw new Error("Failed to export customers")
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `customers_${businessSlug}_${new Date().toISOString().split("T")[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast.success("Customers exported successfully")
+    } catch {
+      toast.error("Failed to export customers")
+    } finally {
+      setIsExporting(false)
+    }
+  }, [businessSlug])
+
+  // Excel import handler
+  const handleImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsImporting(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const response = await fetch(`/api/business-admin/${businessSlug}/customers/import`, {
+        method: "POST",
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to import customers")
+      }
+
+      setShowImportResult({
+        open: true,
+        created: result.created,
+        updated: result.updated,
+        errors: result.errors || [],
+        totalErrors: result.totalErrors || 0,
+      })
+
+      if (result.created > 0 || result.updated > 0) {
+        router.refresh()
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to import customers")
+    } finally {
+      setIsImporting(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+    }
+  }, [businessSlug, router])
+
   // Payment modal state
   const [paymentModal, setPaymentModal] = useState<{
     open: boolean
@@ -649,6 +728,48 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
             <option value="outstanding">Sort by Outstanding</option>
             <option value="recent">Sort by Recent</option>
           </select>
+
+          {/* Excel Export Button */}
+          <button
+            onClick={handleExport}
+            disabled={isExporting}
+            className="px-4 py-2 rounded-xl bg-green-500/20 text-green-400 text-sm font-medium hover:bg-green-500/30 transition-all flex items-center gap-2 border border-green-500/30 disabled:opacity-50"
+          >
+            {isExporting ? (
+              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            )}
+            Export
+          </button>
+
+          {/* Excel Import Button */}
+          <label className="px-4 py-2 rounded-xl bg-amber-500/20 text-amber-400 text-sm font-medium hover:bg-amber-500/30 transition-all flex items-center gap-2 border border-amber-500/30 cursor-pointer">
+            {isImporting ? (
+              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+            )}
+            Import
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleImport}
+              disabled={isImporting}
+              className="hidden"
+            />
+          </label>
 
           {/* New Customer Button */}
           <button
@@ -2002,6 +2123,70 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Import Results Modal */}
+      {showImportResult && showImportResult.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="glass-card rounded-2xl p-6 w-full max-w-md relative">
+            <button
+              onClick={() => setShowImportResult(null)}
+              className="absolute top-4 right-4 p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/15 border border-green-500/30 flex items-center justify-center">
+                <svg className="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Import Complete</h3>
+                <p className="text-sm text-slate-400">Customer data has been processed</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 mb-6">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-green-500/10 border border-green-500/20">
+                <span className="text-sm text-green-300">Customers Created</span>
+                <span className="text-lg font-bold text-green-400">{showImportResult.created}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                <span className="text-sm text-blue-300">Customers Updated</span>
+                <span className="text-lg font-bold text-blue-400">{showImportResult.updated}</span>
+              </div>
+              {showImportResult.totalErrors > 0 && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-red-300">Errors</span>
+                    <span className="text-lg font-bold text-red-400">{showImportResult.totalErrors}</span>
+                  </div>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {showImportResult.errors.map((error, idx) => (
+                      <p key={idx} className="text-xs text-red-400/80">{error}</p>
+                    ))}
+                    {showImportResult.totalErrors > showImportResult.errors.length && (
+                      <p className="text-xs text-red-400/60">
+                        ... and {showImportResult.totalErrors - showImportResult.errors.length} more errors
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowImportResult(null)}
+              className="w-full px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-all"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
