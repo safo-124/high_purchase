@@ -7532,7 +7532,7 @@ export interface SupplyCategoryData {
   id: string
   name: string
   description: string | null
-  color: string
+  color: string | null
   imageUrl: string | null
   isActive: boolean
   createdAt: Date
@@ -7554,10 +7554,10 @@ export interface SupplyItemData {
   name: string
   sku: string | null
   barcode: string | null
-  unit: string
+  unit: string | null
   unitPrice: number
   stockQuantity: number
-  reorderLevel: number | null
+  reorderLevel: number
   leadTimeDays: number | null
   description: string | null
   imageUrl: string | null
@@ -7565,7 +7565,7 @@ export interface SupplyItemData {
   createdAt: Date
   updatedAt: Date
   supplier: { id: string; name: string } | null
-  category: { id: string; name: string; color: string } | null
+  category: { id: string; name: string; color: string | null } | null
 }
 
 export interface SupplyItemPayload {
@@ -7575,7 +7575,7 @@ export interface SupplyItemPayload {
   unit?: string
   unitPrice: number
   stockQuantity?: number
-  reorderLevel?: number | null
+  reorderLevel?: number
   leadTimeDays?: number | null
   description?: string | null
   imageUrl?: string | null
@@ -8149,8 +8149,8 @@ export async function createSupplyItem(businessSlug: string, data: SupplyItemPay
         unit: data.unit || "piece",
         unitPrice: data.unitPrice,
         stockQuantity: data.stockQuantity ?? 0,
-        reorderLevel: data.reorderLevel ?? null,
-        leadTimeDays: data.leadTimeDays ?? null,
+        reorderLevel: data.reorderLevel ?? 10,
+        leadTimeDays: data.leadTimeDays ?? undefined,
         description: data.description?.trim() || null,
         imageUrl: data.imageUrl || null,
         isActive: data.isActive ?? true,
@@ -8231,8 +8231,8 @@ export async function updateSupplyItem(
         unit: data.unit || "piece",
         unitPrice: data.unitPrice,
         stockQuantity: data.stockQuantity ?? 0,
-        reorderLevel: data.reorderLevel ?? null,
-        leadTimeDays: data.leadTimeDays ?? null,
+        reorderLevel: data.reorderLevel ?? 10,
+        leadTimeDays: data.leadTimeDays ?? undefined,
         description: data.description?.trim() || null,
         imageUrl: data.imageUrl || null,
         isActive: data.isActive ?? true,

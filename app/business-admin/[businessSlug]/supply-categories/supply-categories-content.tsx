@@ -80,7 +80,7 @@ export function SupplyCategoriesContent({ categories, businessSlug }: SupplyCate
     setFormData({
       name: category.name,
       description: category.description || "",
-      color: category.color,
+      color: category.color || "#8b5cf6",
       imageUrl: category.imageUrl || "",
       isActive: category.isActive,
     })
@@ -211,11 +211,11 @@ export function SupplyCategoriesContent({ categories, businessSlug }: SupplyCate
                 <div className="flex items-center gap-3">
                   <div
                     className="w-10 h-10 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: `${category.color}20` }}
+                    style={{ backgroundColor: `${category.color || '#8b5cf6'}20` }}
                   >
                     <svg
                       className="w-5 h-5"
-                      style={{ color: category.color }}
+                      style={{ color: category.color || '#8b5cf6' }}
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -265,7 +265,7 @@ export function SupplyCategoriesContent({ categories, businessSlug }: SupplyCate
                 <div className="flex items-center gap-2">
                   <div
                     className="w-4 h-4 rounded"
-                    style={{ backgroundColor: category.color }}
+                    style={{ backgroundColor: category.color || '#8b5cf6' }}
                   />
                   <span className="text-xs text-slate-500">
                     {colorOptions.find(c => c.value === category.color)?.label || "Custom"}

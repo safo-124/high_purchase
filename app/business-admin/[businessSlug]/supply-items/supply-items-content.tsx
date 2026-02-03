@@ -18,7 +18,7 @@ interface Supplier {
 interface Category {
   id: string
   name: string
-  color: string
+  color: string | null
 }
 
 interface SupplyItemsContentProps {
@@ -124,7 +124,7 @@ export function SupplyItemsContent({ items, suppliers, categories, businessSlug 
       name: item.name,
       sku: item.sku || "",
       barcode: item.barcode || "",
-      unit: item.unit,
+      unit: item.unit || "piece",
       unitPrice: item.unitPrice.toString(),
       stockQuantity: item.stockQuantity.toString(),
       reorderLevel: item.reorderLevel?.toString() || "",
@@ -166,7 +166,7 @@ export function SupplyItemsContent({ items, suppliers, categories, businessSlug 
       unit: formData.unit,
       unitPrice: parseFloat(formData.unitPrice) || 0,
       stockQuantity: parseInt(formData.stockQuantity) || 0,
-      reorderLevel: formData.reorderLevel ? parseInt(formData.reorderLevel) : null,
+      reorderLevel: formData.reorderLevel ? parseInt(formData.reorderLevel) : undefined,
       leadTimeDays: formData.leadTimeDays ? parseInt(formData.leadTimeDays) : null,
       description: formData.description.trim() || null,
       imageUrl: formData.imageUrl.trim() || null,
@@ -372,13 +372,13 @@ export function SupplyItemsContent({ items, suppliers, categories, businessSlug 
                           <span
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs"
                             style={{
-                              backgroundColor: `${item.category.color}15`,
-                              color: item.category.color,
+                              backgroundColor: item.category.color ? `${item.category.color}15` : 'rgba(139, 92, 246, 0.15)',
+                              color: item.category.color || '#8b5cf6',
                             }}
                           >
                             <span
                               className="w-2 h-2 rounded-full"
-                              style={{ backgroundColor: item.category.color }}
+                              style={{ backgroundColor: item.category.color || '#8b5cf6' }}
                             />
                             {item.category.name}
                           </span>
