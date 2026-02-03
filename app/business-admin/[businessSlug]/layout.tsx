@@ -60,8 +60,8 @@ export default async function BusinessAdminLayout({ children, params }: LayoutPr
         posEnabled={business.posEnabled}
       />
 
-      {/* Main Content Area */}
-      <main className="lg:ml-64 min-h-screen relative z-10 pt-16 lg:pt-0 pb-16 lg:pb-0">
+      {/* Main Content Area - Updated to match w-72 sidebar */}
+      <main className="lg:ml-72 min-h-screen relative z-10 pt-16 lg:pt-0 pb-16 lg:pb-0">
         {children}
       </main>
     </div>
