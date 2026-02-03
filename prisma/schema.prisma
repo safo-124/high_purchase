@@ -48,6 +48,7 @@ model Business {
   email         String?          // Business email
   website       String?          // Business website
   posEnabled    Boolean          @default(false) // POS system enabled by super admin
+  supplyCatalogEnabled Boolean   @default(false) // Supply catalog enabled by super admin
   isActive      Boolean          @default(true)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
@@ -62,6 +63,10 @@ model Business {
   taxes         Tax[]            @relation("BusinessTaxes")
   conversations Conversation[]   @relation("BusinessConversations")
   posTransactions PosTransaction[] @relation("BusinessPosTransactions")
+  // Supply Catalog relations
+  suppliers       Supplier[]       @relation("BusinessSuppliers")
+  supplyCategories SupplyCategory[] @relation("BusinessSupplyCategories")
+  supplyItems     SupplyItem[]     @relation("BusinessSupplyItems")
 }
 
 model BusinessPolicy {
@@ -1029,4 +1034,93 @@ enum PosStatus {
   COMPLETED
   VOIDED
   REFUNDED
+}
+
+// ==========================================
+// SUPPLY CATALOG MODELS
+// ==========================================
+
+// Supplier - businesses/individuals that supply items
+model Supplier {
+  id              String       @id @default(cuid())
+  businessId      String
+  name            String
+  contactPerson   String?
+  email           String?
+  phone           String?
+  address         String?
+  city            String?
+  country         String?      @default("Ghana")
+  website         String?
+  notes           String?
+  paymentTerms    String?      // e.g., "Net 30", "COD"
+  bankName        String?
+  bankAccountNumber String?
+  bankAccountName String?
+  momoProvider    String?
+  momoNumber      String?
+  momoName        String?
+  rating          Int?         @default(0) // 0-5 rating
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  business        Business     @relation("BusinessSuppliers", fields: [businessId], references: [id], onDelete: Cascade)
+  supplyItems     SupplyItem[] @relation("SupplierItems")
+
+  @@unique([businessId, name])
+  @@index([businessId])
+  @@index([isActive])
+}
+
+// Supply Category - categorize supply items
+model SupplyCategory {
+  id          String       @id @default(cuid())
+  businessId  String
+  name        String
+  description String?
+  color       String?      @default("#8b5cf6") // Purple default
+  imageUrl    String?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  business    Business     @relation("BusinessSupplyCategories", fields: [businessId], references: [id], onDelete: Cascade)
+  supplyItems SupplyItem[] @relation("CategorySupplyItems")
+
+  @@unique([businessId, name])
+  @@index([businessId])
+  @@index([isActive])
+}
+
+// Supply Item - items in the supply catalog
+model SupplyItem {
+  id              String         @id @default(cuid())
+  businessId      String
+  categoryId      String?
+  supplierId      String?
+  name            String
+  description     String?
+  sku             String?        // Stock Keeping Unit
+  barcode         String?
+  unit            String?        @default("pcs") // pcs, kg, liters, boxes, etc.
+  unitPrice       Decimal        @db.Decimal(12, 2)
+  minimumOrder    Int            @default(1)
+  stockQuantity   Int            @default(0)
+  reorderLevel    Int            @default(10) // Minimum stock before reorder
+  reorderQuantity Int            @default(50) // How many to reorder
+  imageUrl        String?
+  leadTimeDays    Int?           @default(3) // Days to receive after ordering
+  specifications  String?        // Technical specifications
+  notes           String?
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  business        Business       @relation("BusinessSupplyItems", fields: [businessId], references: [id], onDelete: Cascade)
+  category        SupplyCategory? @relation("CategorySupplyItems", fields: [categoryId], references: [id])
+  supplier        Supplier?      @relation("SupplierItems", fields: [supplierId], references: [id])
+
+  @@unique([businessId, sku])
+  @@index([businessId])
+  @@index([categoryId])
+  @@index([supplierId])
+  @@index([isActive])
 }

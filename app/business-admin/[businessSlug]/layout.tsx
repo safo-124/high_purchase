@@ -58,6 +58,7 @@ export default async function BusinessAdminLayout({ children, params }: LayoutPr
         userName={user.name || "Admin"}
         userEmail={user.email}
         posEnabled={business.posEnabled}
+        supplyCatalogEnabled={business.supplyCatalogEnabled}
       />
 
       {/* Main Content Area - Updated to match w-72 sidebar */}

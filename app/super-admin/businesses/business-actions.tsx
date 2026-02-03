@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { setBusinessActive, deleteBusiness, toggleBusinessPOS, type ActionResult } from "../actions"
+import { setBusinessActive, deleteBusiness, toggleBusinessPOS, toggleBusinessSupplyCatalog, type ActionResult } from "../actions"
 import { toast } from "sonner"
 import { BusinessData } from "../actions"
 
@@ -38,6 +38,19 @@ export function BusinessActions({ business }: BusinessActionsProps) {
     setIsLoading(false)
   }
 
+  const handleToggleSupplyCatalog = async () => {
+    setIsLoading(true)
+    const newStatus = !business.supplyCatalogEnabled
+    const result: ActionResult = await toggleBusinessSupplyCatalog(business.id, newStatus)
+    
+    if (result.success) {
+      toast.success(`Supply Catalog ${newStatus ? "enabled" : "disabled"} successfully`)
+    } else {
+      toast.error(result.error || "Failed to toggle Supply Catalog")
+    }
+    setIsLoading(false)
+  }
+
   const handleDelete = async () => {
     if (!confirm(`Are you sure you want to delete "${business.name}"? This will also delete all its shops and cannot be undone.`)) {
       return
@@ -69,6 +82,22 @@ export function BusinessActions({ business }: BusinessActionsProps) {
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      </button>
+
+      {/* Supply Catalog Toggle Button */}
+      <button
+        onClick={handleToggleSupplyCatalog}
+        disabled={isLoading}
+        className={`p-2 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+          business.supplyCatalogEnabled
+            ? "bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20"
+            : "bg-slate-500/10 text-slate-400 hover:bg-slate-500/20 border border-slate-500/20"
+        }`}
+        title={business.supplyCatalogEnabled ? "Disable Supply Catalog" : "Enable Supply Catalog"}
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
         </svg>
       </button>
 

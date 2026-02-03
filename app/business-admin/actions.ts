@@ -7495,3 +7495,851 @@ export async function voidPosTransaction(
     return { success: false, error: "Failed to void transaction" }
   }
 }
+
+// ============================================
+// SUPPLY CATALOG ACTIONS
+// ============================================
+
+// Supplier Types
+export interface SupplierData {
+  id: string
+  name: string
+  contactPerson: string | null
+  email: string | null
+  phone: string | null
+  address: string | null
+  paymentTerms: string | null
+  rating: number | null
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+  itemCount: number
+}
+
+export interface SupplierPayload {
+  name: string
+  contactPerson?: string | null
+  email?: string | null
+  phone?: string | null
+  address?: string | null
+  paymentTerms?: string | null
+  rating?: number | null
+  isActive?: boolean
+}
+
+// Supply Category Types
+export interface SupplyCategoryData {
+  id: string
+  name: string
+  description: string | null
+  color: string
+  imageUrl: string | null
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+  itemCount: number
+}
+
+export interface SupplyCategoryPayload {
+  name: string
+  description?: string | null
+  color?: string
+  imageUrl?: string | null
+  isActive?: boolean
+}
+
+// Supply Item Types
+export interface SupplyItemData {
+  id: string
+  name: string
+  sku: string | null
+  barcode: string | null
+  unit: string
+  unitPrice: number
+  stockQuantity: number
+  reorderLevel: number | null
+  leadTimeDays: number | null
+  description: string | null
+  imageUrl: string | null
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+  supplier: { id: string; name: string } | null
+  category: { id: string; name: string; color: string } | null
+}
+
+export interface SupplyItemPayload {
+  name: string
+  sku?: string | null
+  barcode?: string | null
+  unit?: string
+  unitPrice: number
+  stockQuantity?: number
+  reorderLevel?: number | null
+  leadTimeDays?: number | null
+  description?: string | null
+  imageUrl?: string | null
+  isActive?: boolean
+  supplierId?: string | null
+  categoryId?: string | null
+}
+
+// ========== SUPPLIER ACTIONS ==========
+
+/**
+ * Get all suppliers for a business
+ */
+export async function getSuppliers(businessSlug: string): Promise<SupplierData[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const suppliers = await prisma.supplier.findMany({
+    where: { businessId: business.id },
+    include: {
+      _count: {
+        select: { supplyItems: true },
+      },
+    },
+    orderBy: { name: "asc" },
+  })
+
+  return suppliers.map((s) => ({
+    id: s.id,
+    name: s.name,
+    contactPerson: s.contactPerson,
+    email: s.email,
+    phone: s.phone,
+    address: s.address,
+    paymentTerms: s.paymentTerms,
+    rating: s.rating ? Number(s.rating) : null,
+    isActive: s.isActive,
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
+    itemCount: s._count.supplyItems,
+  }))
+}
+
+/**
+ * Get a single supplier by ID
+ */
+export async function getSupplier(businessSlug: string, supplierId: string): Promise<SupplierData | null> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const supplier = await prisma.supplier.findFirst({
+    where: { id: supplierId, businessId: business.id },
+    include: {
+      _count: {
+        select: { supplyItems: true },
+      },
+    },
+  })
+
+  if (!supplier) return null
+
+  return {
+    id: supplier.id,
+    name: supplier.name,
+    contactPerson: supplier.contactPerson,
+    email: supplier.email,
+    phone: supplier.phone,
+    address: supplier.address,
+    paymentTerms: supplier.paymentTerms,
+    rating: supplier.rating ? Number(supplier.rating) : null,
+    isActive: supplier.isActive,
+    createdAt: supplier.createdAt,
+    updatedAt: supplier.updatedAt,
+    itemCount: supplier._count.supplyItems,
+  }
+}
+
+/**
+ * Create a new supplier
+ */
+export async function createSupplier(businessSlug: string, data: SupplierPayload): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    if (!data.name?.trim()) {
+      return { success: false, error: "Supplier name is required" }
+    }
+
+    // Check for duplicate name
+    const existing = await prisma.supplier.findFirst({
+      where: {
+        businessId: business.id,
+        name: { equals: data.name.trim(), mode: "insensitive" },
+      },
+    })
+
+    if (existing) {
+      return { success: false, error: "A supplier with this name already exists" }
+    }
+
+    const supplier = await prisma.supplier.create({
+      data: {
+        businessId: business.id,
+        name: data.name.trim(),
+        contactPerson: data.contactPerson?.trim() || null,
+        email: data.email?.trim() || null,
+        phone: data.phone?.trim() || null,
+        address: data.address?.trim() || null,
+        paymentTerms: data.paymentTerms?.trim() || null,
+        rating: data.rating ?? null,
+        isActive: data.isActive ?? true,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CREATE_SUPPLIER",
+      entityType: "SUPPLIER",
+      entityId: supplier.id,
+      metadata: { name: supplier.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/suppliers`)
+    return { success: true, data: { id: supplier.id } }
+  } catch (error) {
+    console.error("Error creating supplier:", error)
+    return { success: false, error: "Failed to create supplier" }
+  }
+}
+
+/**
+ * Update a supplier
+ */
+export async function updateSupplier(
+  businessSlug: string,
+  supplierId: string,
+  data: SupplierPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const supplier = await prisma.supplier.findFirst({
+      where: { id: supplierId, businessId: business.id },
+    })
+
+    if (!supplier) {
+      return { success: false, error: "Supplier not found" }
+    }
+
+    if (!data.name?.trim()) {
+      return { success: false, error: "Supplier name is required" }
+    }
+
+    // Check for duplicate name (excluding current)
+    const existing = await prisma.supplier.findFirst({
+      where: {
+        businessId: business.id,
+        name: { equals: data.name.trim(), mode: "insensitive" },
+        NOT: { id: supplierId },
+      },
+    })
+
+    if (existing) {
+      return { success: false, error: "A supplier with this name already exists" }
+    }
+
+    await prisma.supplier.update({
+      where: { id: supplierId },
+      data: {
+        name: data.name.trim(),
+        contactPerson: data.contactPerson?.trim() || null,
+        email: data.email?.trim() || null,
+        phone: data.phone?.trim() || null,
+        address: data.address?.trim() || null,
+        paymentTerms: data.paymentTerms?.trim() || null,
+        rating: data.rating ?? null,
+        isActive: data.isActive ?? true,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "UPDATE_SUPPLIER",
+      entityType: "SUPPLIER",
+      entityId: supplierId,
+      metadata: { name: data.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/suppliers`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error updating supplier:", error)
+    return { success: false, error: "Failed to update supplier" }
+  }
+}
+
+/**
+ * Delete a supplier
+ */
+export async function deleteSupplier(businessSlug: string, supplierId: string): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const supplier = await prisma.supplier.findFirst({
+      where: { id: supplierId, businessId: business.id },
+      include: {
+        _count: {
+          select: { supplyItems: true },
+        },
+      },
+    })
+
+    if (!supplier) {
+      return { success: false, error: "Supplier not found" }
+    }
+
+    if (supplier._count.supplyItems > 0) {
+      return { success: false, error: "Cannot delete supplier with associated items. Remove items first." }
+    }
+
+    await prisma.supplier.delete({
+      where: { id: supplierId },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "DELETE_SUPPLIER",
+      entityType: "SUPPLIER",
+      entityId: supplierId,
+      metadata: { name: supplier.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/suppliers`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting supplier:", error)
+    return { success: false, error: "Failed to delete supplier" }
+  }
+}
+
+// ========== SUPPLY CATEGORY ACTIONS ==========
+
+/**
+ * Get all supply categories for a business
+ */
+export async function getSupplyCategories(businessSlug: string): Promise<SupplyCategoryData[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const categories = await prisma.supplyCategory.findMany({
+    where: { businessId: business.id },
+    include: {
+      _count: {
+        select: { supplyItems: true },
+      },
+    },
+    orderBy: { name: "asc" },
+  })
+
+  return categories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    color: c.color,
+    imageUrl: c.imageUrl,
+    isActive: c.isActive,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+    itemCount: c._count.supplyItems,
+  }))
+}
+
+/**
+ * Get a single supply category by ID
+ */
+export async function getSupplyCategory(businessSlug: string, categoryId: string): Promise<SupplyCategoryData | null> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const category = await prisma.supplyCategory.findFirst({
+    where: { id: categoryId, businessId: business.id },
+    include: {
+      _count: {
+        select: { supplyItems: true },
+      },
+    },
+  })
+
+  if (!category) return null
+
+  return {
+    id: category.id,
+    name: category.name,
+    description: category.description,
+    color: category.color,
+    imageUrl: category.imageUrl,
+    isActive: category.isActive,
+    createdAt: category.createdAt,
+    updatedAt: category.updatedAt,
+    itemCount: category._count.supplyItems,
+  }
+}
+
+/**
+ * Create a new supply category
+ */
+export async function createSupplyCategory(businessSlug: string, data: SupplyCategoryPayload): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    if (!data.name?.trim()) {
+      return { success: false, error: "Category name is required" }
+    }
+
+    // Check for duplicate name
+    const existing = await prisma.supplyCategory.findFirst({
+      where: {
+        businessId: business.id,
+        name: { equals: data.name.trim(), mode: "insensitive" },
+      },
+    })
+
+    if (existing) {
+      return { success: false, error: "A category with this name already exists" }
+    }
+
+    const category = await prisma.supplyCategory.create({
+      data: {
+        businessId: business.id,
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        color: data.color || "#8b5cf6",
+        imageUrl: data.imageUrl || null,
+        isActive: data.isActive ?? true,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CREATE_SUPPLY_CATEGORY",
+      entityType: "SUPPLY_CATEGORY",
+      entityId: category.id,
+      metadata: { name: category.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/supply-categories`)
+    return { success: true, data: { id: category.id } }
+  } catch (error) {
+    console.error("Error creating supply category:", error)
+    return { success: false, error: "Failed to create category" }
+  }
+}
+
+/**
+ * Update a supply category
+ */
+export async function updateSupplyCategory(
+  businessSlug: string,
+  categoryId: string,
+  data: SupplyCategoryPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const category = await prisma.supplyCategory.findFirst({
+      where: { id: categoryId, businessId: business.id },
+    })
+
+    if (!category) {
+      return { success: false, error: "Category not found" }
+    }
+
+    if (!data.name?.trim()) {
+      return { success: false, error: "Category name is required" }
+    }
+
+    // Check for duplicate name (excluding current)
+    const existing = await prisma.supplyCategory.findFirst({
+      where: {
+        businessId: business.id,
+        name: { equals: data.name.trim(), mode: "insensitive" },
+        NOT: { id: categoryId },
+      },
+    })
+
+    if (existing) {
+      return { success: false, error: "A category with this name already exists" }
+    }
+
+    await prisma.supplyCategory.update({
+      where: { id: categoryId },
+      data: {
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        color: data.color || "#8b5cf6",
+        imageUrl: data.imageUrl || null,
+        isActive: data.isActive ?? true,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "UPDATE_SUPPLY_CATEGORY",
+      entityType: "SUPPLY_CATEGORY",
+      entityId: categoryId,
+      metadata: { name: data.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/supply-categories`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error updating supply category:", error)
+    return { success: false, error: "Failed to update category" }
+  }
+}
+
+/**
+ * Delete a supply category
+ */
+export async function deleteSupplyCategory(businessSlug: string, categoryId: string): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const category = await prisma.supplyCategory.findFirst({
+      where: { id: categoryId, businessId: business.id },
+      include: {
+        _count: {
+          select: { supplyItems: true },
+        },
+      },
+    })
+
+    if (!category) {
+      return { success: false, error: "Category not found" }
+    }
+
+    if (category._count.supplyItems > 0) {
+      return { success: false, error: "Cannot delete category with associated items. Remove items first." }
+    }
+
+    await prisma.supplyCategory.delete({
+      where: { id: categoryId },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "DELETE_SUPPLY_CATEGORY",
+      entityType: "SUPPLY_CATEGORY",
+      entityId: categoryId,
+      metadata: { name: category.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/supply-categories`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting supply category:", error)
+    return { success: false, error: "Failed to delete category" }
+  }
+}
+
+// ========== SUPPLY ITEM ACTIONS ==========
+
+/**
+ * Get all supply items for a business
+ */
+export async function getSupplyItems(businessSlug: string): Promise<SupplyItemData[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const items = await prisma.supplyItem.findMany({
+    where: { businessId: business.id },
+    include: {
+      supplier: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true, color: true } },
+    },
+    orderBy: { name: "asc" },
+  })
+
+  return items.map((i) => ({
+    id: i.id,
+    name: i.name,
+    sku: i.sku,
+    barcode: i.barcode,
+    unit: i.unit,
+    unitPrice: Number(i.unitPrice),
+    stockQuantity: i.stockQuantity,
+    reorderLevel: i.reorderLevel,
+    leadTimeDays: i.leadTimeDays,
+    description: i.description,
+    imageUrl: i.imageUrl,
+    isActive: i.isActive,
+    createdAt: i.createdAt,
+    updatedAt: i.updatedAt,
+    supplier: i.supplier,
+    category: i.category,
+  }))
+}
+
+/**
+ * Get a single supply item by ID
+ */
+export async function getSupplyItem(businessSlug: string, itemId: string): Promise<SupplyItemData | null> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const item = await prisma.supplyItem.findFirst({
+    where: { id: itemId, businessId: business.id },
+    include: {
+      supplier: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true, color: true } },
+    },
+  })
+
+  if (!item) return null
+
+  return {
+    id: item.id,
+    name: item.name,
+    sku: item.sku,
+    barcode: item.barcode,
+    unit: item.unit,
+    unitPrice: Number(item.unitPrice),
+    stockQuantity: item.stockQuantity,
+    reorderLevel: item.reorderLevel,
+    leadTimeDays: item.leadTimeDays,
+    description: item.description,
+    imageUrl: item.imageUrl,
+    isActive: item.isActive,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    supplier: item.supplier,
+    category: item.category,
+  }
+}
+
+/**
+ * Create a new supply item
+ */
+export async function createSupplyItem(businessSlug: string, data: SupplyItemPayload): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    if (!data.name?.trim()) {
+      return { success: false, error: "Item name is required" }
+    }
+
+    if (data.unitPrice === undefined || data.unitPrice < 0) {
+      return { success: false, error: "Valid unit price is required" }
+    }
+
+    // Validate supplier if provided
+    if (data.supplierId) {
+      const supplier = await prisma.supplier.findFirst({
+        where: { id: data.supplierId, businessId: business.id },
+      })
+      if (!supplier) {
+        return { success: false, error: "Invalid supplier" }
+      }
+    }
+
+    // Validate category if provided
+    if (data.categoryId) {
+      const category = await prisma.supplyCategory.findFirst({
+        where: { id: data.categoryId, businessId: business.id },
+      })
+      if (!category) {
+        return { success: false, error: "Invalid category" }
+      }
+    }
+
+    const item = await prisma.supplyItem.create({
+      data: {
+        businessId: business.id,
+        name: data.name.trim(),
+        sku: data.sku?.trim() || null,
+        barcode: data.barcode?.trim() || null,
+        unit: data.unit || "piece",
+        unitPrice: data.unitPrice,
+        stockQuantity: data.stockQuantity ?? 0,
+        reorderLevel: data.reorderLevel ?? null,
+        leadTimeDays: data.leadTimeDays ?? null,
+        description: data.description?.trim() || null,
+        imageUrl: data.imageUrl || null,
+        isActive: data.isActive ?? true,
+        supplierId: data.supplierId || null,
+        categoryId: data.categoryId || null,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CREATE_SUPPLY_ITEM",
+      entityType: "SUPPLY_ITEM",
+      entityId: item.id,
+      metadata: { name: item.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/supply-items`)
+    return { success: true, data: { id: item.id } }
+  } catch (error) {
+    console.error("Error creating supply item:", error)
+    return { success: false, error: "Failed to create item" }
+  }
+}
+
+/**
+ * Update a supply item
+ */
+export async function updateSupplyItem(
+  businessSlug: string,
+  itemId: string,
+  data: SupplyItemPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const item = await prisma.supplyItem.findFirst({
+      where: { id: itemId, businessId: business.id },
+    })
+
+    if (!item) {
+      return { success: false, error: "Item not found" }
+    }
+
+    if (!data.name?.trim()) {
+      return { success: false, error: "Item name is required" }
+    }
+
+    if (data.unitPrice === undefined || data.unitPrice < 0) {
+      return { success: false, error: "Valid unit price is required" }
+    }
+
+    // Validate supplier if provided
+    if (data.supplierId) {
+      const supplier = await prisma.supplier.findFirst({
+        where: { id: data.supplierId, businessId: business.id },
+      })
+      if (!supplier) {
+        return { success: false, error: "Invalid supplier" }
+      }
+    }
+
+    // Validate category if provided
+    if (data.categoryId) {
+      const category = await prisma.supplyCategory.findFirst({
+        where: { id: data.categoryId, businessId: business.id },
+      })
+      if (!category) {
+        return { success: false, error: "Invalid category" }
+      }
+    }
+
+    await prisma.supplyItem.update({
+      where: { id: itemId },
+      data: {
+        name: data.name.trim(),
+        sku: data.sku?.trim() || null,
+        barcode: data.barcode?.trim() || null,
+        unit: data.unit || "piece",
+        unitPrice: data.unitPrice,
+        stockQuantity: data.stockQuantity ?? 0,
+        reorderLevel: data.reorderLevel ?? null,
+        leadTimeDays: data.leadTimeDays ?? null,
+        description: data.description?.trim() || null,
+        imageUrl: data.imageUrl || null,
+        isActive: data.isActive ?? true,
+        supplierId: data.supplierId || null,
+        categoryId: data.categoryId || null,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "UPDATE_SUPPLY_ITEM",
+      entityType: "SUPPLY_ITEM",
+      entityId: itemId,
+      metadata: { name: data.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/supply-items`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error updating supply item:", error)
+    return { success: false, error: "Failed to update item" }
+  }
+}
+
+/**
+ * Delete a supply item
+ */
+export async function deleteSupplyItem(businessSlug: string, itemId: string): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const item = await prisma.supplyItem.findFirst({
+      where: { id: itemId, businessId: business.id },
+    })
+
+    if (!item) {
+      return { success: false, error: "Item not found" }
+    }
+
+    await prisma.supplyItem.delete({
+      where: { id: itemId },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "DELETE_SUPPLY_ITEM",
+      entityType: "SUPPLY_ITEM",
+      entityId: itemId,
+      metadata: { name: item.name },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/supply-items`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting supply item:", error)
+    return { success: false, error: "Failed to delete item" }
+  }
+}
+
+/**
+ * Update supply item stock
+ */
+export async function updateSupplyItemStock(
+  businessSlug: string,
+  itemId: string,
+  adjustment: number,
+  reason?: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const item = await prisma.supplyItem.findFirst({
+      where: { id: itemId, businessId: business.id },
+    })
+
+    if (!item) {
+      return { success: false, error: "Item not found" }
+    }
+
+    const newQuantity = item.stockQuantity + adjustment
+    if (newQuantity < 0) {
+      return { success: false, error: "Stock quantity cannot be negative" }
+    }
+
+    await prisma.supplyItem.update({
+      where: { id: itemId },
+      data: { stockQuantity: newQuantity },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "UPDATE_SUPPLY_ITEM_STOCK",
+      entityType: "SUPPLY_ITEM",
+      entityId: itemId,
+      metadata: {
+        name: item.name,
+        previousQuantity: item.stockQuantity,
+        adjustment,
+        newQuantity,
+        reason: reason || "Manual adjustment",
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/supply-items`)
+    return { success: true, data: { newQuantity } }
+  } catch (error) {
+    console.error("Error updating supply item stock:", error)
+    return { success: false, error: "Failed to update stock" }
+  }
+}

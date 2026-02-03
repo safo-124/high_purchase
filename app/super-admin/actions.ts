@@ -22,6 +22,7 @@ export interface BusinessData {
   businessSlug: string
   country: string
   posEnabled: boolean
+  supplyCatalogEnabled: boolean
   isActive: boolean
   createdAt: Date
   shopCount: number
@@ -60,6 +61,7 @@ export async function getBusinesses(): Promise<BusinessData[]> {
     businessSlug: b.businessSlug,
     country: b.country,
     posEnabled: b.posEnabled,
+    supplyCatalogEnabled: b.supplyCatalogEnabled,
     isActive: b.isActive,
     createdAt: b.createdAt,
     shopCount: b._count.shops,
@@ -83,6 +85,7 @@ export async function createBusiness(formData: FormData): Promise<ActionResult> 
     const name = formData.get("name") as string
     const businessSlug = formData.get("businessSlug") as string
     const posEnabled = formData.get("posEnabled") === "true"
+    const supplyCatalogEnabled = formData.get("supplyCatalogEnabled") === "true"
     
     // Business Admin fields
     const adminName = formData.get("adminName") as string | null
@@ -141,6 +144,7 @@ export async function createBusiness(formData: FormData): Promise<ActionResult> 
         name: name.trim(),
         businessSlug: normalizedSlug,
         posEnabled,
+        supplyCatalogEnabled,
       },
     })
 
@@ -512,6 +516,47 @@ export async function toggleBusinessPOS(businessId: string, enabled: boolean): P
   } catch (error) {
     console.error("Error toggling POS:", error)
     return { success: false, error: "Failed to toggle POS" }
+  }
+}
+
+/**
+ * Toggle Supply Catalog for a business
+ */
+export async function toggleBusinessSupplyCatalog(businessId: string, enabled: boolean): Promise<ActionResult> {
+  try {
+    const user = await requireSuperAdmin()
+
+    const business = await prisma.business.findUnique({
+      where: { id: businessId },
+    })
+
+    if (!business) {
+      return { success: false, error: "Business not found" }
+    }
+
+    const updatedBusiness = await prisma.business.update({
+      where: { id: businessId },
+      data: { supplyCatalogEnabled: enabled },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: enabled ? "SUPPLY_CATALOG_ENABLED" : "SUPPLY_CATALOG_DISABLED",
+      entityType: "Business",
+      entityId: businessId,
+      metadata: {
+        businessName: business.name,
+        supplyCatalogEnabled: enabled,
+      },
+    })
+
+    revalidatePath("/super-admin/businesses")
+    revalidatePath(`/business-admin/${business.businessSlug}`)
+
+    return { success: true, data: updatedBusiness }
+  } catch (error) {
+    console.error("Error toggling Supply Catalog:", error)
+    return { success: false, error: "Failed to toggle Supply Catalog" }
   }
 }
 

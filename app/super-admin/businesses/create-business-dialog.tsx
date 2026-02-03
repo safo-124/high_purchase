@@ -24,6 +24,7 @@ export function CreateBusinessDialog() {
   const [adminPassword, setAdminPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [posEnabled, setPosEnabled] = useState(false)
+  const [supplyCatalogEnabled, setSupplyCatalogEnabled] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,6 +37,7 @@ export function CreateBusinessDialog() {
     formData.append("adminEmail", adminEmail)
     formData.append("adminPassword", adminPassword)
     formData.append("posEnabled", posEnabled.toString())
+    formData.append("supplyCatalogEnabled", supplyCatalogEnabled.toString())
 
     const result = await createBusiness(formData)
 
@@ -58,6 +60,7 @@ export function CreateBusinessDialog() {
     setAdminEmail("")
     setAdminPassword("")
     setPosEnabled(false)
+    setSupplyCatalogEnabled(false)
   }
 
   const handleNameChange = (value: string) => {
@@ -273,6 +276,36 @@ export function CreateBusinessDialog() {
                   <span
                     className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
                       posEnabled ? "translate-x-6" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Supply Catalog Toggle */}
+            <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-violet-500/15 border border-purple-500/30 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Enable Supply Catalog</p>
+                    <p className="text-xs text-slate-400">Manage suppliers and supply items</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSupplyCatalogEnabled(!supplyCatalogEnabled)}
+                  className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${
+                    supplyCatalogEnabled ? "bg-purple-500" : "bg-slate-600"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                      supplyCatalogEnabled ? "translate-x-6" : "translate-x-0"
                     }`}
                   />
                 </button>
