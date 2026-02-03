@@ -1811,3 +1811,244 @@ export async function getSalesStaffProgressInvoice(shopSlug: string, invoiceId: 
     })),
   }
 }
+
+// ============================================
+// DAILY REPORTS
+// ============================================
+
+import { DailyReportType, DailyReportStatus } from "../generated/prisma/client"
+
+export interface DailyReportPayload {
+  reportDate: string // ISO date string
+  totalSalesAmount: number
+  newCustomersCount: number
+  newPurchasesCount: number
+  itemsSoldCount: number
+  notes?: string
+}
+
+export interface DailyReportData {
+  id: string
+  reportDate: Date
+  reportType: DailyReportType
+  status: DailyReportStatus
+  totalSalesAmount: number | null
+  newCustomersCount: number | null
+  newPurchasesCount: number | null
+  itemsSoldCount: number | null
+  notes: string | null
+  reviewedAt: Date | null
+  reviewNotes: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+/**
+ * Get today's report for the current sales staff member
+ */
+export async function getTodaysSalesReport(shopSlug: string): Promise<DailyReportData | null> {
+  const { shop, membership, user } = await requireSalesStaffForShop(shopSlug)
+  
+  // For SUPER_ADMIN, get membership or return null
+  let memberId: string | null = membership?.id || null
+  
+  if (!memberId && user.role === "SUPER_ADMIN") {
+    // SUPER_ADMIN doesn't have membership, return null
+    return null
+  }
+  
+  if (!memberId) {
+    return null
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const report = await prisma.dailyReport.findFirst({
+    where: {
+      shopMemberId: memberId,
+      reportType: "SALES",
+      reportDate: today,
+    },
+  })
+
+  if (!report) return null
+
+  return {
+    id: report.id,
+    reportDate: report.reportDate,
+    reportType: report.reportType,
+    status: report.status,
+    totalSalesAmount: report.totalSalesAmount ? Number(report.totalSalesAmount) : null,
+    newCustomersCount: report.newCustomersCount,
+    newPurchasesCount: report.newPurchasesCount,
+    itemsSoldCount: report.itemsSoldCount,
+    notes: report.notes,
+    reviewedAt: report.reviewedAt,
+    reviewNotes: report.reviewNotes,
+    createdAt: report.createdAt,
+    updatedAt: report.updatedAt,
+  }
+}
+
+/**
+ * Get all daily reports for the current sales staff member
+ */
+export async function getMySalesReports(shopSlug: string): Promise<DailyReportData[]> {
+  const { shop, membership, user } = await requireSalesStaffForShop(shopSlug)
+  
+  let memberId: string | null = membership?.id || null
+  
+  if (!memberId) {
+    return []
+  }
+
+  const reports = await prisma.dailyReport.findMany({
+    where: {
+      shopMemberId: memberId,
+      reportType: "SALES",
+    },
+    orderBy: { reportDate: "desc" },
+    take: 30, // Last 30 reports
+  })
+
+  return reports.map((report) => ({
+    id: report.id,
+    reportDate: report.reportDate,
+    reportType: report.reportType,
+    status: report.status,
+    totalSalesAmount: report.totalSalesAmount ? Number(report.totalSalesAmount) : null,
+    newCustomersCount: report.newCustomersCount,
+    newPurchasesCount: report.newPurchasesCount,
+    itemsSoldCount: report.itemsSoldCount,
+    notes: report.notes,
+    reviewedAt: report.reviewedAt,
+    reviewNotes: report.reviewNotes,
+    createdAt: report.createdAt,
+    updatedAt: report.updatedAt,
+  }))
+}
+
+/**
+ * Submit or update a daily sales report
+ */
+export async function submitSalesDailyReport(
+  shopSlug: string,
+  payload: DailyReportPayload
+): Promise<ActionResult> {
+  try {
+    const { shop, membership, user } = await requireSalesStaffForShop(shopSlug)
+    
+    let memberId: string | null = membership?.id || null
+    
+    if (!memberId) {
+      return { success: false, error: "You must be a shop member to submit reports" }
+    }
+
+    const reportDate = new Date(payload.reportDate)
+    reportDate.setHours(0, 0, 0, 0)
+
+    // Check if report already exists
+    const existingReport = await prisma.dailyReport.findFirst({
+      where: {
+        shopMemberId: memberId,
+        reportType: "SALES",
+        reportDate,
+      },
+    })
+
+    if (existingReport && existingReport.status === "REVIEWED") {
+      return { success: false, error: "This report has already been reviewed and cannot be modified" }
+    }
+
+    const report = await prisma.dailyReport.upsert({
+      where: {
+        id: existingReport?.id || "new-report",
+      },
+      create: {
+        shopMemberId: memberId,
+        shopId: shop.id,
+        reportDate,
+        reportType: "SALES",
+        status: "SUBMITTED",
+        totalSalesAmount: payload.totalSalesAmount,
+        newCustomersCount: payload.newCustomersCount,
+        newPurchasesCount: payload.newPurchasesCount,
+        itemsSoldCount: payload.itemsSoldCount,
+        notes: payload.notes || null,
+      },
+      update: {
+        status: "SUBMITTED",
+        totalSalesAmount: payload.totalSalesAmount,
+        newCustomersCount: payload.newCustomersCount,
+        newPurchasesCount: payload.newPurchasesCount,
+        itemsSoldCount: payload.itemsSoldCount,
+        notes: payload.notes || null,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: existingReport ? "UPDATE_DAILY_REPORT" : "CREATE_DAILY_REPORT",
+      entityType: "DAILY_REPORT",
+      entityId: report.id,
+      metadata: { reportType: "SALES", reportDate: payload.reportDate },
+    })
+
+    revalidatePath(`/sales-staff/${shopSlug}/reports`)
+    return { success: true, data: report }
+  } catch (error) {
+    console.error("Error submitting daily report:", error)
+    return { success: false, error: "Failed to submit daily report" }
+  }
+}
+
+/**
+ * Get auto-calculated stats for sales staff daily report
+ */
+export async function getSalesStaffDailyStats(shopSlug: string, date: string) {
+  const { shop, membership, user } = await requireSalesStaffForShop(shopSlug)
+
+  const reportDate = new Date(date)
+  const startOfDay = new Date(reportDate)
+  startOfDay.setHours(0, 0, 0, 0)
+  const endOfDay = new Date(reportDate)
+  endOfDay.setHours(23, 59, 59, 999)
+
+  // Get purchases created today
+  const purchases = await prisma.purchase.findMany({
+    where: {
+      customer: { shopId: shop.id },
+      createdAt: {
+        gte: startOfDay,
+        lte: endOfDay,
+      },
+    },
+    include: {
+      items: true,
+    },
+  })
+
+  // Get new customers today
+  const newCustomers = await prisma.customer.count({
+    where: {
+      shopId: shop.id,
+      createdAt: {
+        gte: startOfDay,
+        lte: endOfDay,
+      },
+    },
+  })
+
+  const totalSalesAmount = purchases.reduce((sum, p) => sum + Number(p.totalAmount), 0)
+  const itemsSoldCount = purchases.reduce((sum, p) => 
+    sum + p.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0
+  )
+
+  return {
+    totalSalesAmount,
+    newCustomersCount: newCustomers,
+    newPurchasesCount: purchases.length,
+    itemsSoldCount,
+  }
+}

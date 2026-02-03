@@ -21,6 +21,7 @@ export interface BusinessData {
   name: string
   businessSlug: string
   country: string
+  posEnabled: boolean
   isActive: boolean
   createdAt: Date
   shopCount: number
@@ -58,6 +59,7 @@ export async function getBusinesses(): Promise<BusinessData[]> {
     name: b.name,
     businessSlug: b.businessSlug,
     country: b.country,
+    posEnabled: b.posEnabled,
     isActive: b.isActive,
     createdAt: b.createdAt,
     shopCount: b._count.shops,
@@ -80,6 +82,7 @@ export async function createBusiness(formData: FormData): Promise<ActionResult> 
 
     const name = formData.get("name") as string
     const businessSlug = formData.get("businessSlug") as string
+    const posEnabled = formData.get("posEnabled") === "true"
     
     // Business Admin fields
     const adminName = formData.get("adminName") as string | null
@@ -137,6 +140,7 @@ export async function createBusiness(formData: FormData): Promise<ActionResult> 
       data: {
         name: name.trim(),
         businessSlug: normalizedSlug,
+        posEnabled,
       },
     })
 
@@ -467,6 +471,47 @@ export async function deleteBusiness(businessId: string): Promise<ActionResult> 
   } catch (error) {
     console.error("Error deleting business:", error)
     return { success: false, error: "Failed to delete business" }
+  }
+}
+
+/**
+ * Toggle POS system for a business
+ */
+export async function toggleBusinessPOS(businessId: string, enabled: boolean): Promise<ActionResult> {
+  try {
+    const user = await requireSuperAdmin()
+
+    const business = await prisma.business.findUnique({
+      where: { id: businessId },
+    })
+
+    if (!business) {
+      return { success: false, error: "Business not found" }
+    }
+
+    const updatedBusiness = await prisma.business.update({
+      where: { id: businessId },
+      data: { posEnabled: enabled },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: enabled ? "POS_ENABLED" : "POS_DISABLED",
+      entityType: "Business",
+      entityId: businessId,
+      metadata: {
+        businessName: business.name,
+        posEnabled: enabled,
+      },
+    })
+
+    revalidatePath("/super-admin/businesses")
+    revalidatePath(`/business-admin/${business.businessSlug}`)
+
+    return { success: true, data: updatedBusiness }
+  } catch (error) {
+    console.error("Error toggling POS:", error)
+    return { success: false, error: "Failed to toggle POS" }
   }
 }
 

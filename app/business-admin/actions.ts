@@ -1487,6 +1487,7 @@ export async function getBusinessStaff(businessSlug: string) {
     userAddress: member.user.address,
     role: member.role,
     isActive: member.isActive,
+    posAccess: member.posAccess,
     shopName: member.shop.name,
     shopSlug: member.shop.shopSlug,
     createdAt: member.createdAt,
@@ -6972,5 +6973,525 @@ export async function changeBusinessAdminPassword(
   } catch (error) {
     console.error("Error changing password:", error)
     return { success: false, error: "Failed to change password" }
+  }
+}
+
+// ============================================
+// STAFF DAILY REPORTS (Business Admin View)
+// ============================================
+
+import { DailyReportType, DailyReportStatus } from "../generated/prisma/client"
+
+export interface BusinessStaffDailyReportData {
+  id: string
+  reportDate: Date
+  reportType: DailyReportType
+  status: DailyReportStatus
+  staffName: string
+  staffRole: string
+  shopName: string
+  shopSlug: string
+  // Sales fields
+  totalSalesAmount: number | null
+  newCustomersCount: number | null
+  newPurchasesCount: number | null
+  itemsSoldCount: number | null
+  // Collection fields
+  customersVisited: number | null
+  paymentsCollected: number | null
+  totalCollected: number | null
+  // Common fields
+  notes: string | null
+  reviewedAt: Date | null
+  reviewNotes: string | null
+  reviewedByName: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+/**
+ * Get all daily reports across all shops for a business (for business admin)
+ */
+export async function getBusinessDailyReports(
+  businessSlug: string,
+  filters?: {
+    startDate?: string
+    endDate?: string
+    reportType?: DailyReportType
+    status?: DailyReportStatus
+    shopId?: string
+  }
+): Promise<BusinessStaffDailyReportData[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  // Get all shop IDs for this business
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true, name: true, shopSlug: true },
+  })
+  const shopIds = shops.map((s) => s.id)
+  const shopMap = new Map(shops.map((s) => [s.id, { name: s.name, slug: s.shopSlug }]))
+
+  const where: Prisma.DailyReportWhereInput = {
+    shopId: filters?.shopId ? filters.shopId : { in: shopIds },
+  }
+
+  if (filters?.startDate) {
+    where.reportDate = { ...where.reportDate as object, gte: new Date(filters.startDate) }
+  }
+  if (filters?.endDate) {
+    where.reportDate = { ...where.reportDate as object, lte: new Date(filters.endDate) }
+  }
+  if (filters?.reportType) {
+    where.reportType = filters.reportType
+  }
+  if (filters?.status) {
+    where.status = filters.status
+  }
+
+  const reports = await prisma.dailyReport.findMany({
+    where,
+    include: {
+      shopMember: {
+        include: {
+          user: {
+            select: { name: true },
+          },
+        },
+      },
+    },
+    orderBy: { reportDate: "desc" },
+    take: 200,
+  })
+
+  // Get reviewer names in batch
+  const reviewerIds = reports.filter((r) => r.reviewedById).map((r) => r.reviewedById!)
+  const reviewers = await prisma.user.findMany({
+    where: { id: { in: reviewerIds } },
+    select: { id: true, name: true },
+  })
+  const reviewerMap = new Map(reviewers.map((r) => [r.id, r.name]))
+
+  return reports.map((report) => ({
+    id: report.id,
+    reportDate: report.reportDate,
+    reportType: report.reportType,
+    status: report.status,
+    staffName: report.shopMember.user.name || "Unknown",
+    staffRole: report.shopMember.role,
+    shopName: shopMap.get(report.shopId)?.name || "Unknown Shop",
+    shopSlug: shopMap.get(report.shopId)?.slug || "",
+    totalSalesAmount: report.totalSalesAmount ? Number(report.totalSalesAmount) : null,
+    newCustomersCount: report.newCustomersCount,
+    newPurchasesCount: report.newPurchasesCount,
+    itemsSoldCount: report.itemsSoldCount,
+    customersVisited: report.customersVisited,
+    paymentsCollected: report.paymentsCollected,
+    totalCollected: report.totalCollected ? Number(report.totalCollected) : null,
+    notes: report.notes,
+    reviewedAt: report.reviewedAt,
+    reviewNotes: report.reviewNotes,
+    reviewedByName: report.reviewedById ? reviewerMap.get(report.reviewedById) || null : null,
+    createdAt: report.createdAt,
+    updatedAt: report.updatedAt,
+  }))
+}
+
+/**
+ * Review a daily report as business admin
+ */
+export async function reviewDailyReportAsBusinessAdmin(
+  businessSlug: string,
+  reportId: string,
+  reviewNotes?: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Get shops for this business
+    const shops = await prisma.shop.findMany({
+      where: { businessId: business.id },
+      select: { id: true },
+    })
+    const shopIds = shops.map((s) => s.id)
+
+    const report = await prisma.dailyReport.findFirst({
+      where: {
+        id: reportId,
+        shopId: { in: shopIds },
+      },
+    })
+
+    if (!report) {
+      return { success: false, error: "Report not found" }
+    }
+
+    await prisma.dailyReport.update({
+      where: { id: reportId },
+      data: {
+        status: "REVIEWED",
+        reviewedById: user.id,
+        reviewedAt: new Date(),
+        reviewNotes: reviewNotes || null,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "REVIEW_DAILY_REPORT",
+      entityType: "DAILY_REPORT",
+      entityId: reportId,
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/staff-reports`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error reviewing daily report:", error)
+    return { success: false, error: "Failed to review report" }
+  }
+}
+
+// ============================================
+// POS SYSTEM ACTIONS
+// ============================================
+
+interface PosCartItem {
+  productId: string
+  productName: string
+  quantity: number
+  unitPrice: number
+  totalPrice: number
+}
+
+interface CreatePosTransactionPayload {
+  shopId: string
+  customerName: string | null
+  customerPhone: string | null
+  items: PosCartItem[]
+  paymentMethod: "CASH" | "MOBILE_MONEY" | "CARD"
+  amountPaid: number
+}
+
+/**
+ * Create a new POS transaction
+ */
+export async function createPosTransaction(
+  businessSlug: string,
+  payload: CreatePosTransactionPayload
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    if (!business.posEnabled) {
+      return { success: false, error: "POS is not enabled for this business" }
+    }
+
+    if (payload.items.length === 0) {
+      return { success: false, error: "Cart is empty" }
+    }
+
+    // Calculate totals
+    const subtotal = payload.items.reduce((sum, item) => sum + item.totalPrice, 0)
+    const totalAmount = subtotal
+
+    if (payload.amountPaid < totalAmount) {
+      return { success: false, error: "Amount paid is less than total" }
+    }
+
+    // Generate transaction number
+    const today = new Date()
+    const datePrefix = today.toISOString().slice(0, 10).replace(/-/g, "")
+    const count = await prisma.posTransaction.count({
+      where: {
+        businessId: business.id,
+        createdAt: {
+          gte: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
+          lt: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1),
+        },
+      },
+    })
+    const transactionNo = `POS-${datePrefix}-${String(count + 1).padStart(4, "0")}`
+
+    // Create transaction with items
+    const transaction = await prisma.posTransaction.create({
+      data: {
+        transactionNo,
+        businessId: business.id,
+        shopId: payload.shopId,
+        cashierId: user.id,
+        customerName: payload.customerName,
+        customerPhone: payload.customerPhone,
+        subtotal,
+        taxAmount: 0,
+        discountAmount: 0,
+        totalAmount,
+        paymentMethod: payload.paymentMethod,
+        amountPaid: payload.amountPaid,
+        changeGiven: payload.amountPaid - totalAmount,
+        status: "COMPLETED",
+        items: {
+          create: payload.items.map((item) => ({
+            productId: item.productId,
+            productName: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+          })),
+        },
+      },
+    })
+
+    // Update product stock for each item
+    for (const item of payload.items) {
+      await prisma.product.update({
+        where: { id: item.productId },
+        data: {
+          stockQuantity: { decrement: item.quantity },
+        },
+      })
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CREATE_POS_TRANSACTION",
+      entityType: "POS_TRANSACTION",
+      entityId: transaction.id,
+      metadata: { transactionNo, totalAmount, itemCount: payload.items.length },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/pos`)
+    return { success: true, data: { transactionId: transaction.id, transactionNo } }
+  } catch (error) {
+    console.error("Error creating POS transaction:", error)
+    return { success: false, error: "Failed to create transaction" }
+  }
+}
+
+/**
+ * Toggle staff POS access
+ */
+export async function toggleStaffPosAccess(
+  businessSlug: string,
+  memberId: string,
+  enabled: boolean
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Get shops for this business
+    const shops = await prisma.shop.findMany({
+      where: { businessId: business.id },
+      select: { id: true },
+    })
+    const shopIds = shops.map((s) => s.id)
+
+    // Verify the member belongs to a shop in this business
+    const member = await prisma.shopMember.findFirst({
+      where: {
+        id: memberId,
+        shopId: { in: shopIds },
+      },
+    })
+
+    if (!member) {
+      return { success: false, error: "Staff member not found" }
+    }
+
+    await prisma.shopMember.update({
+      where: { id: memberId },
+      data: { posAccess: enabled },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: enabled ? "GRANT_POS_ACCESS" : "REVOKE_POS_ACCESS",
+      entityType: "SHOP_MEMBER",
+      entityId: memberId,
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/pos`)
+    revalidatePath(`/business-admin/${businessSlug}/staff`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error toggling POS access:", error)
+    return { success: false, error: "Failed to update POS access" }
+  }
+}
+
+/**
+ * Get POS transactions for a date range
+ */
+export async function getPosTransactions(
+  businessSlug: string,
+  startDate?: Date,
+  endDate?: Date
+): Promise<{
+  id: string
+  transactionNo: string
+  customerName: string | null
+  totalAmount: number
+  paymentMethod: string
+  cashierName: string
+  itemCount: number
+  createdAt: Date
+  status: string
+}[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const where: Prisma.PosTransactionWhereInput = {
+    businessId: business.id,
+  }
+
+  if (startDate && endDate) {
+    where.createdAt = {
+      gte: startDate,
+      lte: endDate,
+    }
+  }
+
+  const transactions = await prisma.posTransaction.findMany({
+    where,
+    include: {
+      cashier: {
+        select: { name: true },
+      },
+      _count: {
+        select: { items: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 500,
+  })
+
+  return transactions.map((t) => ({
+    id: t.id,
+    transactionNo: t.transactionNo,
+    customerName: t.customerName,
+    totalAmount: Number(t.totalAmount),
+    paymentMethod: t.paymentMethod,
+    cashierName: t.cashier.name || "Unknown",
+    itemCount: t._count.items,
+    createdAt: t.createdAt,
+    status: t.status,
+  }))
+}
+
+/**
+ * Get POS daily summary
+ */
+export async function getPosDailySummary(
+  businessSlug: string,
+  date: Date
+): Promise<{
+  totalSales: number
+  transactionCount: number
+  cashSales: number
+  mobileMoneySales: number
+  cardSales: number
+  itemsSold: number
+}> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
+
+  const transactions = await prisma.posTransaction.findMany({
+    where: {
+      businessId: business.id,
+      status: "COMPLETED",
+      createdAt: {
+        gte: startOfDay,
+        lt: endOfDay,
+      },
+    },
+    include: {
+      _count: {
+        select: { items: true },
+      },
+    },
+  })
+
+  const totalSales = transactions.reduce((sum, t) => sum + Number(t.totalAmount), 0)
+  const cashSales = transactions
+    .filter((t) => t.paymentMethod === "CASH")
+    .reduce((sum, t) => sum + Number(t.totalAmount), 0)
+  const mobileMoneySales = transactions
+    .filter((t) => t.paymentMethod === "MOBILE_MONEY")
+    .reduce((sum, t) => sum + Number(t.totalAmount), 0)
+  const cardSales = transactions
+    .filter((t) => t.paymentMethod === "CARD")
+    .reduce((sum, t) => sum + Number(t.totalAmount), 0)
+  const itemsSold = transactions.reduce((sum, t) => sum + t._count.items, 0)
+
+  return {
+    totalSales,
+    transactionCount: transactions.length,
+    cashSales,
+    mobileMoneySales,
+    cardSales,
+    itemsSold,
+  }
+}
+
+/**
+ * Void a POS transaction
+ */
+export async function voidPosTransaction(
+  businessSlug: string,
+  transactionId: string,
+  reason: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const transaction = await prisma.posTransaction.findFirst({
+      where: {
+        id: transactionId,
+        businessId: business.id,
+        status: "COMPLETED",
+      },
+      include: {
+        items: true,
+      },
+    })
+
+    if (!transaction) {
+      return { success: false, error: "Transaction not found or already voided" }
+    }
+
+    // Restore stock for each item
+    for (const item of transaction.items) {
+      if (item.productId) {
+        await prisma.product.update({
+          where: { id: item.productId },
+          data: {
+            stockQuantity: { increment: item.quantity },
+          },
+        })
+      }
+    }
+
+    // Update transaction status
+    await prisma.posTransaction.update({
+      where: { id: transactionId },
+      data: {
+        status: "VOIDED",
+        voidReason: reason,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "VOID_POS_TRANSACTION",
+      entityType: "POS_TRANSACTION",
+      entityId: transactionId,
+      metadata: { reason },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/pos`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error voiding POS transaction:", error)
+    return { success: false, error: "Failed to void transaction" }
   }
 }

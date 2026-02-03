@@ -7,6 +7,7 @@ import {
   updateStaffMember,
   deleteStaffMember,
   toggleStaffActive,
+  toggleStaffPosAccess,
 } from "../../actions"
 import { CollectorDetailsModal } from "./collector-details-modal"
 import { SalesStaffDetailsModal } from "./sales-staff-details-modal"
@@ -26,6 +27,7 @@ interface StaffMember {
   userAddress: string | null
   role: string
   isActive: boolean
+  posAccess: boolean
   shopName: string
   shopSlug: string
   createdAt: Date
@@ -232,6 +234,15 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
     })
   }
 
+  const handleTogglePosAccess = async (member: StaffMember) => {
+    startTransition(async () => {
+      const result = await toggleStaffPosAccess(businessSlug, member.id, !member.posAccess)
+      if (result.success) {
+        router.refresh()
+      }
+    })
+  }
+
   return (
     <>
       <div className="glass-card overflow-hidden">
@@ -349,6 +360,7 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Role</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Shop</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">POS Access</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Joined</th>
                   <th className="px-6 py-4 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -438,6 +450,26 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                         >
                           <span className={`w-1.5 h-1.5 rounded-full ${member.isActive ? "bg-green-400" : "bg-red-400"}`} />
                           {member.isActive ? "Active" : "Inactive"}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleTogglePosAccess(member)
+                          }}
+                          disabled={isPending}
+                          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${
+                            member.posAccess
+                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              : "bg-slate-500/10 text-slate-400 border border-slate-500/20"
+                          }`}
+                          title={member.posAccess ? "Revoke POS Access" : "Grant POS Access"}
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                          {member.posAccess ? "POS" : "No POS"}
                         </button>
                       </td>
                       <td className="px-6 py-4">

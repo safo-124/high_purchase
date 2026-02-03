@@ -1440,6 +1440,234 @@ export async function getCollectorReceipts(shopSlug: string): Promise<Collection
   })
 }
 
+// ============================================
+// DAILY REPORTS
+// ============================================
 
+import { DailyReportType, DailyReportStatus } from "../generated/prisma/client"
 
+export interface CollectorDailyReportPayload {
+  reportDate: string // ISO date string
+  customersVisited: number
+  paymentsCollected: number
+  totalCollected: number
+  notes?: string
+}
 
+export interface CollectorDailyReportData {
+  id: string
+  reportDate: Date
+  reportType: DailyReportType
+  status: DailyReportStatus
+  customersVisited: number | null
+  paymentsCollected: number | null
+  totalCollected: number | null
+  notes: string | null
+  reviewedAt: Date | null
+  reviewNotes: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+/**
+ * Get today's report for the current debt collector
+ */
+export async function getTodaysCollectorReport(shopSlug: string): Promise<CollectorDailyReportData | null> {
+  const { shop, membership, user } = await requireCollectorForShop(shopSlug)
+  
+  let memberId: string | null = membership?.id || null
+  
+  if (!memberId && user.role === "SUPER_ADMIN") {
+    return null
+  }
+  
+  if (!memberId) {
+    return null
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const report = await prisma.dailyReport.findFirst({
+    where: {
+      shopMemberId: memberId,
+      reportType: "COLLECTION",
+      reportDate: today,
+    },
+  })
+
+  if (!report) return null
+
+  return {
+    id: report.id,
+    reportDate: report.reportDate,
+    reportType: report.reportType,
+    status: report.status,
+    customersVisited: report.customersVisited,
+    paymentsCollected: report.paymentsCollected,
+    totalCollected: report.totalCollected ? Number(report.totalCollected) : null,
+    notes: report.notes,
+    reviewedAt: report.reviewedAt,
+    reviewNotes: report.reviewNotes,
+    createdAt: report.createdAt,
+    updatedAt: report.updatedAt,
+  }
+}
+
+/**
+ * Get all daily reports for the current debt collector
+ */
+export async function getMyCollectorReports(shopSlug: string): Promise<CollectorDailyReportData[]> {
+  const { shop, membership, user } = await requireCollectorForShop(shopSlug)
+  
+  let memberId: string | null = membership?.id || null
+  
+  if (!memberId) {
+    return []
+  }
+
+  const reports = await prisma.dailyReport.findMany({
+    where: {
+      shopMemberId: memberId,
+      reportType: "COLLECTION",
+    },
+    orderBy: { reportDate: "desc" },
+    take: 30,
+  })
+
+  return reports.map((report) => ({
+    id: report.id,
+    reportDate: report.reportDate,
+    reportType: report.reportType,
+    status: report.status,
+    customersVisited: report.customersVisited,
+    paymentsCollected: report.paymentsCollected,
+    totalCollected: report.totalCollected ? Number(report.totalCollected) : null,
+    notes: report.notes,
+    reviewedAt: report.reviewedAt,
+    reviewNotes: report.reviewNotes,
+    createdAt: report.createdAt,
+    updatedAt: report.updatedAt,
+  }))
+}
+
+/**
+ * Submit or update a daily collector report
+ */
+export async function submitCollectorDailyReport(
+  shopSlug: string,
+  payload: CollectorDailyReportPayload
+): Promise<ActionResult> {
+  try {
+    const { shop, membership, user } = await requireCollectorForShop(shopSlug)
+    
+    let memberId: string | null = membership?.id || null
+    
+    if (!memberId) {
+      return { success: false, error: "You must be a shop member to submit reports" }
+    }
+
+    const reportDate = new Date(payload.reportDate)
+    reportDate.setHours(0, 0, 0, 0)
+
+    const existingReport = await prisma.dailyReport.findFirst({
+      where: {
+        shopMemberId: memberId,
+        reportType: "COLLECTION",
+        reportDate,
+      },
+    })
+
+    if (existingReport && existingReport.status === "REVIEWED") {
+      return { success: false, error: "This report has already been reviewed and cannot be modified" }
+    }
+
+    const report = await prisma.dailyReport.upsert({
+      where: {
+        id: existingReport?.id || "new-report",
+      },
+      create: {
+        shopMemberId: memberId,
+        shopId: shop.id,
+        reportDate,
+        reportType: "COLLECTION",
+        status: "SUBMITTED",
+        customersVisited: payload.customersVisited,
+        paymentsCollected: payload.paymentsCollected,
+        totalCollected: payload.totalCollected,
+        notes: payload.notes || null,
+      },
+      update: {
+        status: "SUBMITTED",
+        customersVisited: payload.customersVisited,
+        paymentsCollected: payload.paymentsCollected,
+        totalCollected: payload.totalCollected,
+        notes: payload.notes || null,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: existingReport ? "UPDATE_DAILY_REPORT" : "CREATE_DAILY_REPORT",
+      entityType: "DAILY_REPORT",
+      entityId: report.id,
+      metadata: { reportType: "COLLECTION", reportDate: payload.reportDate },
+    })
+
+    revalidatePath(`/collector/${shopSlug}/reports`)
+    return { success: true, data: report }
+  } catch (error) {
+    console.error("Error submitting daily report:", error)
+    return { success: false, error: "Failed to submit daily report" }
+  }
+}
+
+/**
+ * Get auto-calculated stats for collector daily report
+ */
+export async function getCollectorDailyStats(shopSlug: string, date: string) {
+  const { shop, membership, user } = await requireCollectorForShop(shopSlug)
+
+  let memberId: string | null = membership?.id || null
+  
+  if (!memberId) {
+    return {
+      customersVisited: 0,
+      paymentsCollected: 0,
+      totalCollected: 0,
+    }
+  }
+
+  const reportDate = new Date(date)
+  const startOfDay = new Date(reportDate)
+  startOfDay.setHours(0, 0, 0, 0)
+  const endOfDay = new Date(reportDate)
+  endOfDay.setHours(23, 59, 59, 999)
+
+  // Get payments collected today by this collector
+  const payments = await prisma.payment.findMany({
+    where: {
+      collectorId: memberId,
+      createdAt: {
+        gte: startOfDay,
+        lte: endOfDay,
+      },
+    },
+    include: {
+      purchase: {
+        include: {
+          customer: true,
+        },
+      },
+    },
+  })
+
+  const uniqueCustomers = new Set(payments.map((p) => p.purchase.customer.id))
+  const totalCollected = payments.reduce((sum, p) => sum + Number(p.amount), 0)
+
+  return {
+    customersVisited: uniqueCustomers.size,
+    paymentsCollected: payments.length,
+    totalCollected,
+  }
+}

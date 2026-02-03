@@ -23,6 +23,7 @@ export function CreateBusinessDialog() {
   const [adminEmail, setAdminEmail] = useState("")
   const [adminPassword, setAdminPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [posEnabled, setPosEnabled] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,6 +35,7 @@ export function CreateBusinessDialog() {
     formData.append("adminName", adminName)
     formData.append("adminEmail", adminEmail)
     formData.append("adminPassword", adminPassword)
+    formData.append("posEnabled", posEnabled.toString())
 
     const result = await createBusiness(formData)
 
@@ -55,6 +57,7 @@ export function CreateBusinessDialog() {
     setAdminName("")
     setAdminEmail("")
     setAdminPassword("")
+    setPosEnabled(false)
   }
 
   const handleNameChange = (value: string) => {
@@ -242,6 +245,36 @@ export function CreateBusinessDialog() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     </svg>
                   )}
+                </button>
+              </div>
+            </div>
+
+            {/* POS System Toggle */}
+            <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/15 border border-green-500/30 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Enable POS System</p>
+                    <p className="text-xs text-slate-400">Allow business to use Point of Sale</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPosEnabled(!posEnabled)}
+                  className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${
+                    posEnabled ? "bg-green-500" : "bg-slate-600"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                      posEnabled ? "translate-x-6" : "translate-x-0"
+                    }`}
+                  />
                 </button>
               </div>
             </div>

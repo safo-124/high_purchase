@@ -57,6 +57,7 @@ export default async function BusinessAdminLayout({ children, params }: LayoutPr
         businessTagline={business.tagline ?? null}
         userName={user.name || "Admin"}
         userEmail={user.email}
+        posEnabled={business.posEnabled}
       />
 
       {/* Main Content Area */}

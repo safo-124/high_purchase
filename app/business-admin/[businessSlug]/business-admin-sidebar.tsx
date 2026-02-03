@@ -12,6 +12,7 @@ interface BusinessAdminSidebarProps {
   businessTagline: string | null
   userName: string
   userEmail: string
+  posEnabled: boolean
 }
 
 export function BusinessAdminSidebar({ 
@@ -20,7 +21,8 @@ export function BusinessAdminSidebar({
   businessLogoUrl,
   businessTagline,
   userName, 
-  userEmail 
+  userEmail,
+  posEnabled 
 }: BusinessAdminSidebarProps) {
   const pathname = usePathname()
   const [isSigningOut, setIsSigningOut] = useState(false)
@@ -100,6 +102,16 @@ export function BusinessAdminSidebar({
         </svg>
       ),
     },
+    // POS item - only shown if enabled
+    ...(posEnabled ? [{
+      name: "POS System",
+      href: `${baseUrl}/pos`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      ),
+    }] : []),
     {
       name: "Purchases",
       href: `${baseUrl}/purchases`,
@@ -205,6 +217,15 @@ export function BusinessAdminSidebar({
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      ),
+    },
+    {
+      name: "Staff Reports",
+      href: `${baseUrl}/staff-reports`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       ),
     },

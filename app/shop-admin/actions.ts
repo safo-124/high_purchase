@@ -5128,3 +5128,158 @@ export async function generateShopPurchaseInvoice(
     return { success: false, error: "Failed to generate invoice" }
   }
 }
+
+// ============================================
+// STAFF DAILY REPORTS (Shop Admin View)
+// ============================================
+
+import { DailyReportType, DailyReportStatus } from "../generated/prisma/client"
+
+export interface StaffDailyReportData {
+  id: string
+  reportDate: Date
+  reportType: DailyReportType
+  status: DailyReportStatus
+  staffName: string
+  staffRole: string
+  // Sales fields
+  totalSalesAmount: number | null
+  newCustomersCount: number | null
+  newPurchasesCount: number | null
+  itemsSoldCount: number | null
+  // Collection fields
+  customersVisited: number | null
+  paymentsCollected: number | null
+  totalCollected: number | null
+  // Common fields
+  notes: string | null
+  reviewedAt: Date | null
+  reviewNotes: string | null
+  reviewedByName: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+/**
+ * Get all daily reports for a shop (for shop admin)
+ */
+export async function getShopDailyReports(
+  shopSlug: string,
+  filters?: {
+    startDate?: string
+    endDate?: string
+    reportType?: DailyReportType
+    status?: DailyReportStatus
+  }
+): Promise<StaffDailyReportData[]> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const where: Prisma.DailyReportWhereInput = {
+    shopId: shop.id,
+  }
+
+  if (filters?.startDate) {
+    where.reportDate = { ...where.reportDate as object, gte: new Date(filters.startDate) }
+  }
+  if (filters?.endDate) {
+    where.reportDate = { ...where.reportDate as object, lte: new Date(filters.endDate) }
+  }
+  if (filters?.reportType) {
+    where.reportType = filters.reportType
+  }
+  if (filters?.status) {
+    where.status = filters.status
+  }
+
+  const reports = await prisma.dailyReport.findMany({
+    where,
+    include: {
+      shopMember: {
+        include: {
+          user: {
+            select: { name: true },
+          },
+        },
+      },
+    },
+    orderBy: { reportDate: "desc" },
+    take: 100,
+  })
+
+  // Get reviewer names in batch
+  const reviewerIds = reports.filter((r) => r.reviewedById).map((r) => r.reviewedById!)
+  const reviewers = await prisma.user.findMany({
+    where: { id: { in: reviewerIds } },
+    select: { id: true, name: true },
+  })
+  const reviewerMap = new Map(reviewers.map((r) => [r.id, r.name]))
+
+  return reports.map((report) => ({
+    id: report.id,
+    reportDate: report.reportDate,
+    reportType: report.reportType,
+    status: report.status,
+    staffName: report.shopMember.user.name || "Unknown",
+    staffRole: report.shopMember.role,
+    totalSalesAmount: report.totalSalesAmount ? Number(report.totalSalesAmount) : null,
+    newCustomersCount: report.newCustomersCount,
+    newPurchasesCount: report.newPurchasesCount,
+    itemsSoldCount: report.itemsSoldCount,
+    customersVisited: report.customersVisited,
+    paymentsCollected: report.paymentsCollected,
+    totalCollected: report.totalCollected ? Number(report.totalCollected) : null,
+    notes: report.notes,
+    reviewedAt: report.reviewedAt,
+    reviewNotes: report.reviewNotes,
+    reviewedByName: report.reviewedById ? reviewerMap.get(report.reviewedById) || null : null,
+    createdAt: report.createdAt,
+    updatedAt: report.updatedAt,
+  }))
+}
+
+/**
+ * Review a daily report (approve or add notes)
+ */
+export async function reviewDailyReport(
+  shopSlug: string,
+  reportId: string,
+  reviewNotes?: string
+): Promise<ActionResult> {
+  try {
+    const { user, shop } = await requireShopAdminForShop(shopSlug)
+
+    const report = await prisma.dailyReport.findFirst({
+      where: {
+        id: reportId,
+        shopId: shop.id,
+      },
+    })
+
+    if (!report) {
+      return { success: false, error: "Report not found" }
+    }
+
+    await prisma.dailyReport.update({
+      where: { id: reportId },
+      data: {
+        status: "REVIEWED",
+        reviewedById: user.id,
+        reviewedAt: new Date(),
+        reviewNotes: reviewNotes || null,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "REVIEW_DAILY_REPORT",
+      entityType: "DAILY_REPORT",
+      entityId: reportId,
+    })
+
+    revalidatePath(`/shop-admin/${shopSlug}/staff-reports`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error reviewing daily report:", error)
+    return { success: false, error: "Failed to review report" }
+  }
+}

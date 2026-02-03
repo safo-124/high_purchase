@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { setBusinessActive, deleteBusiness, type ActionResult } from "../actions"
+import { setBusinessActive, deleteBusiness, toggleBusinessPOS, type ActionResult } from "../actions"
 import { toast } from "sonner"
 import { BusinessData } from "../actions"
 
@@ -25,6 +25,19 @@ export function BusinessActions({ business }: BusinessActionsProps) {
     setIsLoading(false)
   }
 
+  const handleTogglePOS = async () => {
+    setIsLoading(true)
+    const newStatus = !business.posEnabled
+    const result: ActionResult = await toggleBusinessPOS(business.id, newStatus)
+    
+    if (result.success) {
+      toast.success(`POS system ${newStatus ? "enabled" : "disabled"} successfully`)
+    } else {
+      toast.error(result.error || "Failed to toggle POS system")
+    }
+    setIsLoading(false)
+  }
+
   const handleDelete = async () => {
     if (!confirm(`Are you sure you want to delete "${business.name}"? This will also delete all its shops and cannot be undone.`)) {
       return
@@ -43,6 +56,22 @@ export function BusinessActions({ business }: BusinessActionsProps) {
 
   return (
     <div className="flex items-center justify-end gap-2">
+      {/* POS Toggle Button */}
+      <button
+        onClick={handleTogglePOS}
+        disabled={isLoading}
+        className={`p-2 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+          business.posEnabled
+            ? "bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20"
+            : "bg-slate-500/10 text-slate-400 hover:bg-slate-500/20 border border-slate-500/20"
+        }`}
+        title={business.posEnabled ? "Disable POS" : "Enable POS"}
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      </button>
+
       {/* Toggle Status Button */}
       <button
         onClick={handleToggleStatus}
