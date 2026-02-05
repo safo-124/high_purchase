@@ -203,6 +203,7 @@ model Shop {
   purchaseInvoices    PurchaseInvoice[] @relation("ShopPurchaseInvoices")
   conversations       Conversation[]    @relation("ShopConversations")
   dailyReports        DailyReport[]     @relation("ShopDailyReports")
+  walletTransactions  WalletTransaction[] @relation("ShopWalletTransactions")
 
   @@index([businessId])
 }
@@ -261,6 +262,7 @@ model Customer {
   emailNotifications  Boolean           @default(true)
   smsNotifications    Boolean           @default(true)
   notes               String?
+  walletBalance       Decimal           @default(0) @db.Decimal(12, 2) // Customer wallet/savings balance
   isActive            Boolean           @default(true)
   lastSeenAt          DateTime?         // Track last online activity
   createdAt           DateTime          @default(now())
@@ -273,6 +275,7 @@ model Customer {
   purchases           Purchase[]        @relation("CustomerPurchases")
   conversations       Conversation[]    @relation("CustomerConversations")
   inAppMessages       InAppMessage[]    @relation("CustomerInAppMessages")
+  walletTransactions  WalletTransaction[] @relation("CustomerWalletTransactions")
 
   @@unique([shopId, phone])
   @@index([shopId])
@@ -344,6 +347,7 @@ model ShopMember {
   shopId             String
   role               Role          @default(SHOP_ADMIN)
   posAccess          Boolean       @default(false) // POS access granted by business admin
+  canLoadWallet      Boolean       @default(false) // Permission to load customer wallets
   isActive           Boolean       @default(true)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
@@ -354,6 +358,8 @@ model ShopMember {
   dailyReports       DailyReport[] @relation("MemberDailyReports")
   shop               Shop          @relation("ShopMembers", fields: [shopId], references: [id], onDelete: Cascade)
   user               User          @relation("UserMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  createdWalletTransactions   WalletTransaction[] @relation("WalletTransactionCreator")
+  confirmedWalletTransactions WalletTransaction[] @relation("WalletTransactionConfirmer")
 
   @@unique([userId, shopId])
   @@index([userId])
@@ -1123,4 +1129,51 @@ model SupplyItem {
   @@index([categoryId])
   @@index([supplierId])
   @@index([isActive])
+}
+
+// ========== CUSTOMER WALLET/SAVINGS SYSTEM ==========
+
+// Wallet Transaction - tracks all wallet deposits, withdrawals, and adjustments
+model WalletTransaction {
+  id              String                    @id @default(cuid())
+  customerId      String
+  shopId          String                    // Shop where transaction originated
+  type            WalletTransactionType
+  amount          Decimal                   @db.Decimal(12, 2)
+  balanceBefore   Decimal                   @db.Decimal(12, 2)
+  balanceAfter    Decimal                   @db.Decimal(12, 2)
+  description     String?
+  reference       String?                   // Payment reference (e.g., mobile money reference)
+  paymentMethod   PaymentMethod?
+  status          WalletTransactionStatus   @default(PENDING)
+  createdById     String?                   // Staff/person who created the transaction (null for admin/system)
+  confirmedById   String?                   // Staff who confirmed (shop admin or business admin)
+  confirmedAt     DateTime?
+  rejectedReason  String?                   // Reason if rejected
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  
+  customer        Customer                  @relation("CustomerWalletTransactions", fields: [customerId], references: [id], onDelete: Cascade)
+  shop            Shop                      @relation("ShopWalletTransactions", fields: [shopId], references: [id], onDelete: Cascade)
+  createdBy       ShopMember?               @relation("WalletTransactionCreator", fields: [createdById], references: [id])
+  confirmedBy     ShopMember?               @relation("WalletTransactionConfirmer", fields: [confirmedById], references: [id])
+
+  @@index([customerId])
+  @@index([shopId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([createdById])
+}
+
+enum WalletTransactionType {
+  DEPOSIT       // Customer loading money into wallet
+  PURCHASE      // Using wallet balance for purchase
+  ADJUSTMENT    // Admin adjustment (add/remove)
+  REFUND        // Refund to wallet
+}
+
+enum WalletTransactionStatus {
+  PENDING       // Awaiting confirmation
+  CONFIRMED     // Confirmed and reflected in balance
+  REJECTED      // Rejected by admin
 }
