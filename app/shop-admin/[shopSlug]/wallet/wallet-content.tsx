@@ -9,7 +9,9 @@ import {
   type CustomerForWallet,
   type WalletTransactionData,
 } from "../../wallet-actions"
-import { PaymentMethod } from "@/app/generated/prisma/client"
+
+// Define PaymentMethod locally to avoid importing from Prisma in client component
+type PaymentMethod = "CASH" | "MOBILE_MONEY" | "BANK_TRANSFER" | "CARD"
 
 interface ShopWalletContentProps {
   shopSlug: string
@@ -36,7 +38,7 @@ export function ShopWalletContent({
   // Load wallet form
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerForWallet | null>(null)
   const [amount, setAmount] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH")
   const [reference, setReference] = useState("")
   const [description, setDescription] = useState("")
   
