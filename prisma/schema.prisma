@@ -348,6 +348,8 @@ model ShopMember {
   role               Role          @default(SHOP_ADMIN)
   posAccess          Boolean       @default(false) // POS access granted by business admin
   canLoadWallet      Boolean       @default(false) // Permission to load customer wallets
+  canSellProducts    Boolean       @default(false) // Permission for collectors to sell products
+  canCreateCustomers Boolean       @default(false) // Permission for collectors to create customers
   isActive           Boolean       @default(true)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt

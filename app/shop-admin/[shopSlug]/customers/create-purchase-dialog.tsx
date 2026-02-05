@@ -189,6 +189,7 @@ export function CreatePurchaseDialog({ customer, shopSlug, products }: CreatePur
       installments: finalInstallments,
       notes: notes ? `[${paymentType}] ${notes}` : `[${paymentType}]`,
       useWalletAmount: effectiveWalletAmount > 0 ? effectiveWalletAmount : undefined,
+      purchaseType: paymentType,
     })
 
     if (result.success) {

@@ -95,6 +95,8 @@ export interface CollectorDashboardData {
   activeLoans: number
   totalOutstanding: number
   totalCollected: number
+  canSellProducts: boolean
+  canCreateCustomers: boolean
   recentPayments: {
     id: string
     amount: number
@@ -191,6 +193,8 @@ export async function getCollectorDashboard(shopSlug: string): Promise<Collector
     activeLoans,
     totalOutstanding,
     totalCollected,
+    canSellProducts: membership?.canSellProducts ?? false,
+    canCreateCustomers: membership?.canCreateCustomers ?? false,
     recentPayments: recentPayments.map((p) => ({
       id: p.id,
       amount: Number(p.amount),

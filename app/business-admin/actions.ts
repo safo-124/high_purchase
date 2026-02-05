@@ -1491,6 +1491,8 @@ export async function getBusinessStaff(businessSlug: string) {
     shopName: member.shop.name,
     shopSlug: member.shop.shopSlug,
     createdAt: member.createdAt,
+    canSellProducts: member.canSellProducts,
+    canCreateCustomers: member.canCreateCustomers,
   }))
 }
 
@@ -1608,6 +1610,8 @@ export async function createStaffMember(
     const guarantorPhone = formData.get("guarantorPhone") as string
     const guarantorRelationship = formData.get("guarantorRelationship") as string
     const address = formData.get("address") as string
+    const canSellProducts = formData.get("canSellProducts") === "true"
+    const canCreateCustomers = formData.get("canCreateCustomers") === "true"
 
     // Validation
     if (!shopId) {
@@ -1685,6 +1689,8 @@ export async function createStaffMember(
           userId: existingUser.id,
           role,
           isActive: true,
+          canSellProducts: role === "DEBT_COLLECTOR" ? canSellProducts : false,
+          canCreateCustomers: role === "DEBT_COLLECTOR" ? canCreateCustomers : false,
         },
       })
 
@@ -1722,6 +1728,8 @@ export async function createStaffMember(
           userId: newUser.id,
           role,
           isActive: true,
+          canSellProducts: role === "DEBT_COLLECTOR" ? canSellProducts : false,
+          canCreateCustomers: role === "DEBT_COLLECTOR" ? canCreateCustomers : false,
         },
       })
 
@@ -1786,6 +1794,8 @@ export async function updateStaffMember(
     const guarantorPhone = formData.get("guarantorPhone") as string
     const guarantorRelationship = formData.get("guarantorRelationship") as string
     const address = formData.get("address") as string
+    const canSellProducts = formData.get("canSellProducts") === "true"
+    const canCreateCustomers = formData.get("canCreateCustomers") === "true"
 
     // Validation
     if (!name || name.trim().length === 0) {
@@ -1902,6 +1912,8 @@ export async function updateStaffMember(
       data: {
         role,
         isActive,
+        canSellProducts: role === "DEBT_COLLECTOR" ? canSellProducts : false,
+        canCreateCustomers: role === "DEBT_COLLECTOR" ? canCreateCustomers : false,
         ...(shopId && shopId !== member.shopId ? { shopId } : {}),
       },
     })
@@ -5029,18 +5041,20 @@ export async function createBusinessSale(
           purchaseNumber,
           customerId: customer.id,
           purchaseType: payload.purchaseType,
-          status: outstandingBalance === 0 ? "COMPLETED" : "ACTIVE",
+          status: payload.purchaseType === "CASH" ? "COMPLETED" : (outstandingBalance === 0 ? "COMPLETED" : "ACTIVE"),
           subtotal: new Prisma.Decimal(subtotal),
           interestAmount: new Prisma.Decimal(interestAmount),
           totalAmount: new Prisma.Decimal(totalAmount),
-          amountPaid: new Prisma.Decimal(downPayment),
-          outstandingBalance: new Prisma.Decimal(outstandingBalance),
-          downPayment: new Prisma.Decimal(downPayment),
+          amountPaid: payload.purchaseType === "CASH" ? new Prisma.Decimal(totalAmount) : new Prisma.Decimal(downPayment),
+          outstandingBalance: payload.purchaseType === "CASH" ? new Prisma.Decimal(0) : new Prisma.Decimal(outstandingBalance),
+          downPayment: payload.purchaseType === "CASH" ? new Prisma.Decimal(totalAmount) : new Prisma.Decimal(downPayment),
           installments: payload.purchaseType === "CASH" ? 1 : Math.ceil(payload.tenorDays / 30),
           startDate: new Date(),
           dueDate,
           interestType: policy?.interestType || "FLAT",
           interestRate: policy ? Number(policy.interestRate) : 0,
+          deliveryStatus: payload.purchaseType === "CASH" ? "DELIVERED" : "PENDING",
+          deliveredAt: payload.purchaseType === "CASH" ? new Date() : null,
           notes: `${payload.purchaseType} sale by Business Admin: ${user.name}`,
           items: {
             create: payload.items.map(item => ({
@@ -5059,18 +5073,20 @@ export async function createBusinessSale(
         },
       })
 
-      // Create down payment record if > 0
-      if (downPayment > 0) {
+      // Create payment record
+      // For CASH: record full payment; for others: record down payment if > 0
+      const paymentAmount = payload.purchaseType === "CASH" ? totalAmount : downPayment
+      if (paymentAmount > 0) {
         await tx.payment.create({
           data: {
             purchaseId: newPurchase.id,
-            amount: new Prisma.Decimal(downPayment),
+            amount: new Prisma.Decimal(paymentAmount),
             paymentMethod: "CASH",
             status: "COMPLETED",
             isConfirmed: true,
             confirmedAt: new Date(),
             paidAt: new Date(),
-            notes: "Down payment at time of purchase (Business Admin)",
+            notes: payload.purchaseType === "CASH" ? "Full cash payment (Business Admin)" : "Down payment at time of purchase (Business Admin)",
           },
         })
       }

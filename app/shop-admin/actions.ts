@@ -646,6 +646,8 @@ export interface DebtCollectorPayload {
   email: string
   password: string
   phone?: string
+  canSellProducts?: boolean
+  canCreateCustomers?: boolean
 }
 
 export interface DebtCollectorData {
@@ -748,6 +750,8 @@ export async function createDebtCollector(
             shopId: shop.id,
             role: "DEBT_COLLECTOR",
             isActive: true,
+            canSellProducts: payload.canSellProducts ?? false,
+            canCreateCustomers: payload.canCreateCustomers ?? false,
           },
         },
       },
@@ -1748,6 +1752,8 @@ export interface PurchaseItemPayload {
   unitPrice: number
 }
 
+export type PurchaseTypeOption = "CASH" | "LAYAWAY" | "CREDIT"
+
 export interface PurchasePayload {
   customerId: string
   items: PurchaseItemPayload[]
@@ -1755,6 +1761,7 @@ export interface PurchasePayload {
   installments: number // Number of payment installments
   notes?: string
   useWalletAmount?: number // Amount to use from customer's wallet
+  purchaseType?: PurchaseTypeOption // CASH = full payment + delivered, LAYAWAY/CREDIT = installments
 }
 
 export interface PurchaseData {
@@ -2062,22 +2069,36 @@ export async function createPurchase(
       }
     }
 
+    // Determine purchase type and status
+    const purchaseType = payload.purchaseType || "CREDIT"
+    const isCashPurchase = purchaseType === "CASH"
+    
+    // For CASH purchases: full payment, completed status, delivered immediately
+    // For LAYAWAY/CREDIT: normal installment flow
+    const purchaseStatus = isCashPurchase ? "COMPLETED" : (downPayment > 0 ? "ACTIVE" : "PENDING")
+    const deliveryStatus = isCashPurchase ? "DELIVERED" : "PENDING"
+    const finalAmountPaid = isCashPurchase ? totalAmount : downPayment
+    const finalOutstanding = isCashPurchase ? 0 : outstandingBalance
+
     const purchase = await prisma.purchase.create({
       data: {
         purchaseNumber,
         customerId: customer.id,
-        status: downPayment > 0 ? "ACTIVE" : "PENDING",
+        status: purchaseStatus,
+        purchaseType,
         subtotal,
         interestAmount,
         totalAmount,
-        amountPaid: downPayment,
-        outstandingBalance,
-        downPayment,
-        installments: payload.installments,
+        amountPaid: finalAmountPaid,
+        outstandingBalance: finalOutstanding,
+        downPayment: isCashPurchase ? totalAmount : downPayment,
+        installments: isCashPurchase ? 1 : payload.installments,
         startDate: new Date(),
         dueDate,
         interestType,
         interestRate,
+        deliveryStatus,
+        deliveredAt: isCashPurchase ? new Date() : null,
         notes: payload.notes,
         items: {
           create: payload.items.map((item) => ({
@@ -2091,7 +2112,47 @@ export async function createPurchase(
       },
     })
 
-    // Stock deduction is deferred until payment is completed
+    // For CASH purchases, deduct stock immediately since it's paid and delivered
+    if (isCashPurchase) {
+      for (const item of payload.items) {
+        // Try to deduct from ShopProduct first
+        const shopProduct = await prisma.shopProduct.findFirst({
+          where: { shopId: shop.id, productId: item.productId },
+        })
+        
+        if (shopProduct) {
+          await prisma.shopProduct.update({
+            where: { id: shopProduct.id },
+            data: { stockQuantity: { decrement: item.quantity } },
+          })
+        } else {
+          // Fall back to Product table
+          await prisma.product.update({
+            where: { id: item.productId },
+            data: { stockQuantity: { decrement: item.quantity } },
+          })
+        }
+      }
+
+      // Create full payment record for CASH purchase
+      const cashAmount = totalAmount - walletAmountToUse
+      if (cashAmount > 0) {
+        await prisma.payment.create({
+          data: {
+            purchaseId: purchase.id,
+            amount: cashAmount,
+            paymentMethod: "CASH",
+            status: "COMPLETED",
+            isConfirmed: true,
+            confirmedAt: new Date(),
+            paidAt: new Date(),
+            notes: "Full cash payment",
+          },
+        })
+      }
+    }
+
+    // Stock deduction for non-CASH purchases is deferred until payment is completed
     // This ensures stock is only deducted when customer fully pays (waybill + delivery)
 
     // Handle wallet deduction if using wallet
@@ -2138,8 +2199,9 @@ export async function createPurchase(
     }
 
     // If cash down payment was made (separate from wallet), record it
+    // Skip for CASH purchases since full payment is already recorded above
     const cashDownPayment = payload.downPayment || 0
-    if (cashDownPayment > 0) {
+    if (cashDownPayment > 0 && !isCashPurchase) {
       await prisma.payment.create({
         data: {
           purchaseId: purchase.id,
@@ -2187,7 +2249,7 @@ export async function createPurchase(
       customerAddress: customer.address,
       shopName: shop.name,
       businessName: shopWithPayment?.business?.name || shop.name,
-      purchaseType: "CREDIT" as const,
+      purchaseType: purchaseType as "CASH" | "LAYAWAY" | "CREDIT",
       items: payload.items.map(item => ({
         productName: item.productName,
         quantity: item.quantity,
@@ -2195,12 +2257,12 @@ export async function createPurchase(
         totalPrice: item.unitPrice * item.quantity,
       })),
       subtotal,
-      interestAmount,
+      interestAmount: isCashPurchase ? 0 : interestAmount,
       totalAmount,
-      downPayment,
-      amountPaid: downPayment,
-      outstandingBalance,
-      installments: payload.installments,
+      downPayment: isCashPurchase ? totalAmount : downPayment,
+      amountPaid: finalAmountPaid,
+      outstandingBalance: finalOutstanding,
+      installments: isCashPurchase ? 1 : payload.installments,
       dueDate: dueDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
       purchaseDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
       bankName: shopWithPayment?.bankName,
@@ -4547,8 +4609,6 @@ export async function createQuickCustomer(
   }
 }
 
-export type PurchaseTypeOption = "CASH" | "LAYAWAY" | "CREDIT"
-
 export interface SaleItem {
   productId: string
   productName: string
@@ -4716,18 +4776,20 @@ export async function createSale(
           purchaseNumber,
           customerId: customer.id,
           purchaseType: payload.purchaseType,
-          status: outstandingBalance === 0 ? "COMPLETED" : "ACTIVE",
+          status: payload.purchaseType === "CASH" ? "COMPLETED" : (outstandingBalance === 0 ? "COMPLETED" : "ACTIVE"),
           subtotal: new Prisma.Decimal(subtotal),
           interestAmount: new Prisma.Decimal(interestAmount),
           totalAmount: new Prisma.Decimal(totalAmount),
-          amountPaid: new Prisma.Decimal(downPayment),
-          outstandingBalance: new Prisma.Decimal(outstandingBalance),
-          downPayment: new Prisma.Decimal(downPayment),
+          amountPaid: payload.purchaseType === "CASH" ? new Prisma.Decimal(totalAmount) : new Prisma.Decimal(downPayment),
+          outstandingBalance: payload.purchaseType === "CASH" ? new Prisma.Decimal(0) : new Prisma.Decimal(outstandingBalance),
+          downPayment: payload.purchaseType === "CASH" ? new Prisma.Decimal(totalAmount) : new Prisma.Decimal(downPayment),
           installments: payload.purchaseType === "CASH" ? 1 : Math.ceil(payload.tenorDays / 30),
           startDate: new Date(),
           dueDate,
           interestType: policy?.interestType || "FLAT",
           interestRate: policy ? Number(policy.interestRate) : 0,
+          deliveryStatus: payload.purchaseType === "CASH" ? "DELIVERED" : "PENDING",
+          deliveredAt: payload.purchaseType === "CASH" ? new Date() : null,
           notes: `${payload.purchaseType} sale by ${user.name}`,
           items: {
             create: payload.items.map(item => ({
@@ -4746,18 +4808,20 @@ export async function createSale(
         },
       })
 
-      // Create down payment record if > 0 (already confirmed since it's counted in amountPaid)
-      if (downPayment > 0) {
+      // Create payment record
+      // For CASH: record full payment; for others: record down payment if > 0
+      const paymentAmount = payload.purchaseType === "CASH" ? totalAmount : downPayment
+      if (paymentAmount > 0) {
         await tx.payment.create({
           data: {
             purchaseId: newPurchase.id,
-            amount: new Prisma.Decimal(downPayment),
+            amount: new Prisma.Decimal(paymentAmount),
             paymentMethod: "CASH",
             status: "COMPLETED",
             isConfirmed: true,
             confirmedAt: new Date(),
             paidAt: new Date(),
-            notes: "Down payment at time of purchase",
+            notes: payload.purchaseType === "CASH" ? "Full cash payment" : "Down payment at time of purchase",
           },
         })
       }

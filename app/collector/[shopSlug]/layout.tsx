@@ -34,6 +34,8 @@ export default async function CollectorLayout({ children, params }: CollectorLay
         businessName={dashboard.businessName}
         businessLogoUrl={dashboard.businessLogoUrl}
         unreadMessageCount={unreadMessageCount}
+        canSellProducts={dashboard.canSellProducts}
+        canCreateCustomers={dashboard.canCreateCustomers}
       />
 
       {/* Main Content */}

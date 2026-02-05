@@ -31,6 +31,8 @@ interface StaffMember {
   shopName: string
   shopSlug: string
   createdAt: Date
+  canSellProducts: boolean
+  canCreateCustomers: boolean
 }
 
 interface Shop {
@@ -92,6 +94,8 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
     role: "SALES_STAFF" as "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR",
     shopId: "",
     isActive: true,
+    canSellProducts: false,
+    canCreateCustomers: false,
   })
 
   // Filter staff
@@ -142,6 +146,8 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
       role: "SALES_STAFF",
       shopId: shops[0]?.id || "",
       isActive: true,
+      canSellProducts: false,
+      canCreateCustomers: false,
     })
     setFormError(null)
     setModalMode("create")
@@ -165,6 +171,8 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
       role: member.role as "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR",
       shopId: shop?.id || "",
       isActive: member.isActive,
+      canSellProducts: member.canSellProducts || false,
+      canCreateCustomers: member.canCreateCustomers || false,
     })
     setFormError(null)
     setModalMode("edit")
@@ -195,6 +203,8 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
     form.set("role", formData.role)
     form.set("shopId", formData.shopId)
     form.set("isActive", formData.isActive.toString())
+    form.set("canSellProducts", formData.canSellProducts.toString())
+    form.set("canCreateCustomers", formData.canCreateCustomers.toString())
 
     startTransition(async () => {
       let result
@@ -756,6 +766,46 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                     </select>
                   </div>
                 </div>
+
+                {/* Collector Permissions - only shown when role is DEBT_COLLECTOR */}
+                {formData.role === "DEBT_COLLECTOR" && (
+                  <div className="mt-4 p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+                    <h5 className="text-sm font-semibold text-amber-400 mb-3 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                      Collector Permissions
+                    </h5>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id="canSellProducts"
+                          checked={formData.canSellProducts}
+                          onChange={(e) => setFormData({ ...formData, canSellProducts: e.target.checked })}
+                          className="w-4 h-4 rounded border-amber-500/30 bg-white/5 text-amber-500 focus:ring-amber-500"
+                        />
+                        <label htmlFor="canSellProducts" className="text-sm text-slate-300">
+                          Can Sell Products
+                          <span className="block text-xs text-slate-500">Allow this collector to create new sales and view products</span>
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id="canCreateCustomers"
+                          checked={formData.canCreateCustomers}
+                          onChange={(e) => setFormData({ ...formData, canCreateCustomers: e.target.checked })}
+                          className="w-4 h-4 rounded border-amber-500/30 bg-white/5 text-amber-500 focus:ring-amber-500"
+                        />
+                        <label htmlFor="canCreateCustomers" className="text-sm text-slate-300">
+                          Can Create Customers
+                          <span className="block text-xs text-slate-500">Allow this collector to create new customer accounts</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {modalMode === "edit" && (

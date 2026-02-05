@@ -12,9 +12,20 @@ interface CollectorSidebarProps {
   businessName: string
   businessLogoUrl: string | null
   unreadMessageCount?: number
+  canSellProducts?: boolean
+  canCreateCustomers?: boolean
 }
 
-export function CollectorSidebar({ shopSlug, shopName, collectorName, businessName, businessLogoUrl, unreadMessageCount = 0 }: CollectorSidebarProps) {
+export function CollectorSidebar({ 
+  shopSlug, 
+  shopName, 
+  collectorName, 
+  businessName, 
+  businessLogoUrl, 
+  unreadMessageCount = 0,
+  canSellProducts = false,
+  canCreateCustomers = false,
+}: CollectorSidebarProps) {
   const pathname = usePathname()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
 
@@ -37,7 +48,8 @@ export function CollectorSidebar({ shopSlug, shopName, collectorName, businessNa
 
   const baseUrl = `/collector/${shopSlug}`
 
-  const navItems = [
+  // Build nav items dynamically based on permissions
+  const navItems: { name: string; href: string; icon: React.ReactNode; badge?: number }[] = [
     {
       name: "Dashboard",
       href: `/collector/${shopSlug}/dashboard`,
@@ -47,6 +59,31 @@ export function CollectorSidebar({ shopSlug, shopName, collectorName, businessNa
         </svg>
       ),
     },
+  ]
+
+  // Add New Sale link if collector can sell products
+  if (canSellProducts) {
+    navItems.push({
+      name: "New Sale",
+      href: `/collector/${shopSlug}/new-sale`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+        </svg>
+      ),
+    })
+    navItems.push({
+      name: "Products",
+      href: `/collector/${shopSlug}/products`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        </svg>
+      ),
+    })
+  }
+
+  navItems.push(
     {
       name: "Customers",
       href: `/collector/${shopSlug}/customers`,
@@ -102,7 +139,7 @@ export function CollectorSidebar({ shopSlug, shopName, collectorName, businessNa
         </svg>
       ),
     },
-  ]
+  )
 
   const isActive = (href: string) => {
     if (href.includes("/dashboard")) {
@@ -262,13 +299,25 @@ export function CollectorSidebar({ shopSlug, shopName, collectorName, businessNa
       {/* Mobile Bottom Navigation */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 glass-card border-t border-white/10 pb-safe">
         <div className="flex items-center justify-around py-2">
-          {[
-            { name: "Home", href: `${baseUrl}/dashboard`, icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg> },
-            { name: "Sale", href: `${baseUrl}/new-sale`, icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>, highlight: true },
-            { name: "Products", href: `${baseUrl}/products`, icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg> },
-            { name: "Customers", href: `${baseUrl}/customers`, icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg> },
-            { name: "Payments", href: `${baseUrl}/payments`, icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg> },
-          ].map((item) => {
+          {(() => {
+            const mobileNavItems: { name: string; href: string; icon: React.ReactNode; highlight?: boolean }[] = [
+              { name: "Home", href: `${baseUrl}/dashboard`, icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg> },
+            ]
+            
+            if (canSellProducts) {
+              mobileNavItems.push(
+                { name: "Sale", href: `${baseUrl}/new-sale`, icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>, highlight: true },
+                { name: "Products", href: `${baseUrl}/products`, icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg> },
+              )
+            }
+            
+            mobileNavItems.push(
+              { name: "Customers", href: `${baseUrl}/customers`, icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg> },
+              { name: "Payments", href: `${baseUrl}/payments`, icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg> },
+            )
+            
+            return mobileNavItems
+          })().map((item) => {
             const active = isActive(item.href)
             return (
               <Link

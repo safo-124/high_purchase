@@ -24,6 +24,8 @@ export function CreateCollectorDialog({ shopSlug }: CreateCollectorDialogProps) 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [canSellProducts, setCanSellProducts] = useState(false)
+  const [canCreateCustomers, setCanCreateCustomers] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -33,6 +35,8 @@ export function CreateCollectorDialog({ shopSlug }: CreateCollectorDialogProps) 
       name,
       email,
       password,
+      canSellProducts,
+      canCreateCustomers,
     })
 
     if (result.success) {
@@ -50,6 +54,8 @@ export function CreateCollectorDialog({ shopSlug }: CreateCollectorDialogProps) 
     setName("")
     setEmail("")
     setPassword("")
+    setCanSellProducts(false)
+    setCanCreateCustomers(false)
   }
 
   return (
@@ -164,6 +170,52 @@ export function CreateCollectorDialog({ shopSlug }: CreateCollectorDialogProps) 
               <p className="text-xs text-slate-500">
                 The collector will use these credentials to log in
               </p>
+            </div>
+
+            {/* Permissions */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-slate-200 flex items-center gap-2">
+                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Permissions
+              </label>
+              
+              <div className="space-y-2">
+                {/* Can Sell Products */}
+                <label className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 transition-all">
+                  <input
+                    type="checkbox"
+                    checked={canSellProducts}
+                    onChange={(e) => setCanSellProducts(e.target.checked)}
+                    className="w-4 h-4 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/20"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-white">Can Sell Products</p>
+                    <p className="text-xs text-slate-400">Allow collector to create new sales</p>
+                  </div>
+                  <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                </label>
+
+                {/* Can Create Customers */}
+                <label className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 transition-all">
+                  <input
+                    type="checkbox"
+                    checked={canCreateCustomers}
+                    onChange={(e) => setCanCreateCustomers(e.target.checked)}
+                    className="w-4 h-4 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/20"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-white">Can Create Customers</p>
+                    <p className="text-xs text-slate-400">Allow collector to add new customers</p>
+                  </div>
+                  <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                </label>
+              </div>
             </div>
 
             {/* Credentials Preview */}
