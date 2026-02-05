@@ -1754,6 +1754,7 @@ export interface PurchasePayload {
   downPayment?: number
   installments: number // Number of payment installments
   notes?: string
+  useWalletAmount?: number // Amount to use from customer's wallet
 }
 
 export interface PurchaseData {
@@ -2004,7 +2005,19 @@ export async function createPurchase(
     }
 
     const totalAmount = subtotal + interestAmount
-    const downPayment = payload.downPayment || 0
+    const walletAmountToUse = payload.useWalletAmount || 0
+    
+    // Validate wallet balance if using wallet
+    if (walletAmountToUse > 0) {
+      if (walletAmountToUse > Number(customer.walletBalance || 0)) {
+        return { success: false, error: "Insufficient wallet balance" }
+      }
+      if (walletAmountToUse > totalAmount) {
+        return { success: false, error: "Wallet amount cannot exceed total amount" }
+      }
+    }
+    
+    const downPayment = (payload.downPayment || 0) + walletAmountToUse
     const outstandingBalance = totalAmount - downPayment
 
     // Calculate due date based on policy maxTenorDays (use default if no policy)
@@ -2081,18 +2094,62 @@ export async function createPurchase(
     // Stock deduction is deferred until payment is completed
     // This ensures stock is only deducted when customer fully pays (waybill + delivery)
 
-    // If down payment was made, record it as a payment (already confirmed since it's counted in amountPaid)
-    if (downPayment > 0) {
+    // Handle wallet deduction if using wallet
+    if (walletAmountToUse > 0) {
+      // Deduct from customer wallet
+      await prisma.customer.update({
+        where: { id: customer.id },
+        data: {
+          walletBalance: {
+            decrement: walletAmountToUse,
+          },
+        },
+      })
+
+      // Create wallet transaction record
+      await prisma.walletTransaction.create({
+        data: {
+          customerId: customer.id,
+          shopId: shop.id,
+          type: "PURCHASE",
+          amount: walletAmountToUse,
+          balanceBefore: Number(customer.walletBalance || 0),
+          balanceAfter: Number(customer.walletBalance || 0) - walletAmountToUse,
+          status: "CONFIRMED",
+          description: `Purchase payment for ${purchaseNumber}`,
+          reference: purchaseNumber,
+          confirmedAt: new Date(),
+        },
+      })
+
+      // Record wallet payment
       await prisma.payment.create({
         data: {
           purchaseId: purchase.id,
-          amount: downPayment,
+          amount: walletAmountToUse,
+          paymentMethod: "WALLET",
+          status: "COMPLETED",
+          isConfirmed: true,
+          confirmedAt: new Date(),
+          paidAt: new Date(),
+          notes: "Payment from wallet",
+        },
+      })
+    }
+
+    // If cash down payment was made (separate from wallet), record it
+    const cashDownPayment = payload.downPayment || 0
+    if (cashDownPayment > 0) {
+      await prisma.payment.create({
+        data: {
+          purchaseId: purchase.id,
+          amount: cashDownPayment,
           paymentMethod: "CASH", // Default for in-store down payments
           status: "COMPLETED",
           isConfirmed: true,
           confirmedAt: new Date(),
           paidAt: new Date(),
-          notes: "Down payment",
+          notes: "Down payment (cash)",
         },
       })
     }
@@ -2560,6 +2617,7 @@ export interface CustomerSummary {
   totalOwed: number
   totalPaid: number
   assignedCollectorName: string | null
+  walletBalance: number
 }
 
 export async function getCustomersWithSummary(shopSlug: string): Promise<CustomerSummary[]> {
@@ -2594,6 +2652,7 @@ export async function getCustomersWithSummary(shopSlug: string): Promise<Custome
     totalOwed: c.purchases.reduce((sum, p) => sum + Number(p.outstandingBalance), 0),
     totalPaid: c.purchases.reduce((sum, p) => sum + Number(p.amountPaid), 0),
     assignedCollectorName: c.assignedCollector?.user.name || null,
+    walletBalance: Number(c.walletBalance || 0),
   }))
 }
 

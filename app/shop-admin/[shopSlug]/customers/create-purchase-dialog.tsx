@@ -39,6 +39,10 @@ export function CreatePurchaseDialog({ customer, shopSlug, products }: CreatePur
   const [downPayment, setDownPayment] = useState(0)
   const [installments, setInstallments] = useState(3)
   const [notes, setNotes] = useState("")
+  
+  // Wallet state
+  const [useWallet, setUseWallet] = useState(false)
+  const [walletAmount, setWalletAmount] = useState(0)
 
   // Get unique categories
   const categories = products.reduce((acc, p) => {
@@ -104,7 +108,9 @@ export function CreatePurchaseDialog({ customer, shopSlug, products }: CreatePur
     : 0
   
   const totalAmount = subtotal + interestAmount
-  const amountToFinance = totalAmount - downPayment
+  const effectiveWalletAmount = useWallet ? Math.min(walletAmount, totalAmount, customer.walletBalance) : 0
+  const totalDownPayment = downPayment + effectiveWalletAmount
+  const amountToFinance = totalAmount - totalDownPayment
   const monthlyPayment = installments > 0 ? amountToFinance / installments : 0
 
   const handleAddToCart = () => {
@@ -160,6 +166,12 @@ export function CreatePurchaseDialog({ customer, shopSlug, products }: CreatePur
       return
     }
 
+    // Validate wallet amount
+    if (useWallet && effectiveWalletAmount > customer.walletBalance) {
+      toast.error("Insufficient wallet balance")
+      return
+    }
+
     // For cash purchases, installments should be 1
     const finalInstallments = paymentType === "CASH" ? 1 : installments
 
@@ -173,9 +185,10 @@ export function CreatePurchaseDialog({ customer, shopSlug, products }: CreatePur
         quantity: item.quantity,
         unitPrice: item.unitPrice,
       })),
-      downPayment: paymentType === "CASH" ? subtotal : downPayment,
+      downPayment: paymentType === "CASH" ? subtotal - effectiveWalletAmount : downPayment,
       installments: finalInstallments,
       notes: notes ? `[${paymentType}] ${notes}` : `[${paymentType}]`,
+      useWalletAmount: effectiveWalletAmount > 0 ? effectiveWalletAmount : undefined,
     })
 
     if (result.success) {
@@ -186,6 +199,8 @@ export function CreatePurchaseDialog({ customer, shopSlug, products }: CreatePur
       setInstallments(3)
       setNotes("")
       setPaymentType("CREDIT")
+      setUseWallet(false)
+      setWalletAmount(0)
       router.refresh()
     } else {
       toast.error(result.error || "Failed to create purchase")
@@ -508,6 +523,70 @@ export function CreatePurchaseDialog({ customer, shopSlug, products }: CreatePur
               </div>
             )}
 
+            {/* Wallet Payment Option */}
+            {customer.walletBalance > 0 && cart.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                  <Wallet className="w-4 h-4" />
+                  Wallet Balance
+                </h3>
+                <div className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-xs text-slate-400">Available Balance</p>
+                      <p className="text-lg font-bold text-cyan-400">
+                        GHS {customer.walletBalance.toLocaleString()}
+                      </p>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useWallet}
+                        onChange={(e) => {
+                          setUseWallet(e.target.checked)
+                          if (e.target.checked) {
+                            // Default to full wallet amount or total, whichever is less
+                            setWalletAmount(Math.min(customer.walletBalance, totalAmount))
+                          } else {
+                            setWalletAmount(0)
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-white/20 bg-white/5 text-cyan-500 focus:ring-cyan-500/50"
+                      />
+                      <span className="text-sm text-white">Use wallet</span>
+                    </label>
+                  </div>
+                  
+                  {useWallet && (
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Amount to use</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max={Math.min(customer.walletBalance, totalAmount)}
+                          value={walletAmount}
+                          onChange={(e) => setWalletAmount(Math.min(Number(e.target.value), customer.walletBalance, totalAmount))}
+                          className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                        />
+                        <button
+                          onClick={() => setWalletAmount(Math.min(customer.walletBalance, totalAmount))}
+                          className="px-3 py-2 bg-cyan-500/20 text-cyan-400 text-xs font-medium rounded-lg hover:bg-cyan-500/30 transition-all"
+                        >
+                          Use Max
+                        </button>
+                      </div>
+                      {effectiveWalletAmount > 0 && (
+                        <p className="text-xs text-cyan-400 mt-2">
+                          GHS {effectiveWalletAmount.toLocaleString()} will be deducted from wallet
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Notes */}
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">Notes (Optional)</label>
@@ -564,8 +643,14 @@ export function CreatePurchaseDialog({ customer, shopSlug, products }: CreatePur
 
                   {paymentType !== "CASH" && (
                     <>
+                      {effectiveWalletAmount > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-400">From Wallet</span>
+                          <span className="text-cyan-400">- GHS {effectiveWalletAmount.toLocaleString()}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">Down Payment</span>
+                        <span className="text-slate-400">Down Payment (Cash)</span>
                         <span className="text-emerald-400">- GHS {downPayment.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-sm font-medium">
@@ -585,12 +670,20 @@ export function CreatePurchaseDialog({ customer, shopSlug, products }: CreatePur
                   )}
 
                   {paymentType === "CASH" && (
-                    <div className="flex justify-between text-sm bg-emerald-500/10 rounded-lg p-3 -mx-1">
-                      <span className="text-emerald-300 font-medium">Amount Due Now</span>
-                      <span className="text-lg font-bold text-emerald-400">
-                        GHS {subtotal.toLocaleString()}
-                      </span>
-                    </div>
+                    <>
+                      {effectiveWalletAmount > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-400">From Wallet</span>
+                          <span className="text-cyan-400">- GHS {effectiveWalletAmount.toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-sm bg-emerald-500/10 rounded-lg p-3 -mx-1">
+                        <span className="text-emerald-300 font-medium">Cash Due Now</span>
+                        <span className="text-lg font-bold text-emerald-400">
+                          GHS {(subtotal - effectiveWalletAmount).toLocaleString()}
+                        </span>
+                      </div>
+                    </>
                   )}
                 </div>
               </div>

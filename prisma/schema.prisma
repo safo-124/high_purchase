@@ -905,6 +905,7 @@ enum PaymentMethod {
   MOBILE_MONEY
   BANK_TRANSFER
   CARD
+  WALLET
 }
 
 enum PurchaseType {

@@ -1,6 +1,5 @@
 import { requireCollectorForShop } from "@/lib/auth"
 import { getAssignedCustomers } from "../../actions"
-import { CreateCustomerDialog } from "./create-customer-dialog"
 import { CustomersContent } from "./customers-content"
 
 interface CollectorCustomersPageProps {
@@ -19,9 +18,8 @@ export default async function CollectorCustomersPage({ params }: CollectorCustom
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-white mb-1 sm:mb-2">My Customers</h1>
-          <p className="text-sm sm:text-base text-slate-400">Manage and view your assigned customers</p>
+          <p className="text-sm sm:text-base text-slate-400">View your assigned customers and collect payments</p>
         </div>
-        <CreateCustomerDialog shopSlug={shopSlug} />
       </div>
 
       {/* Stats Row */}

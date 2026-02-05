@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { CreateCustomerDialog } from "./create-customer-dialog"
 
 interface Customer {
   id: string
@@ -90,8 +89,7 @@ export function CustomersContent({ customers, shopSlug }: CustomersContentProps)
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">No customers assigned</h3>
-            <p className="text-slate-400 text-sm mb-6">Create your first customer to get started</p>
-            <CreateCustomerDialog shopSlug={shopSlug} />
+            <p className="text-slate-400 text-sm">Ask your shop admin to assign customers to you</p>
           </div>
         ) : filteredCustomers.length === 0 ? (
           <div className="p-12 text-center">
