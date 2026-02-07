@@ -10,6 +10,7 @@ interface PurchasesSectionProps {
   shopSlug: string
   customerId: string
   products: ProductForSale[]
+  walletBalance?: number
 }
 
 interface EditCartItem {
@@ -28,7 +29,7 @@ const statusStyles: Record<string, { bg: string; text: string; label: string }> 
   DEFAULTED: { bg: "bg-red-500/20", text: "text-red-400", label: "Defaulted" },
 }
 
-export function PurchasesSection({ purchases, shopSlug, products }: PurchasesSectionProps) {
+export function PurchasesSection({ purchases, shopSlug, products, walletBalance = 0 }: PurchasesSectionProps) {
   const router = useRouter()
   const [expandedPurchase, setExpandedPurchase] = useState<string | null>(null)
   const [paymentModal, setPaymentModal] = useState<{ open: boolean; purchase: PurchaseData | null }>({
@@ -157,12 +158,18 @@ export function PurchasesSection({ purchases, shopSlug, products }: PurchasesSec
       return
     }
 
+    // Check wallet balance if using wallet payment
+    if (paymentMethod === "WALLET" && amount > walletBalance) {
+      toast.error(`Insufficient wallet balance. Available: GH₵${walletBalance.toLocaleString()}`)
+      return
+    }
+
     setIsRecording(true)
     
     const result = await recordPayment(shopSlug, {
       purchaseId: paymentModal.purchase.id,
       amount,
-      paymentMethod: paymentMethod as "CASH" | "MOBILE_MONEY" | "BANK_TRANSFER" | "CARD",
+      paymentMethod: paymentMethod as "CASH" | "MOBILE_MONEY" | "BANK_TRANSFER" | "CARD" | "WALLET",
       reference: paymentReference || undefined,
     })
 
@@ -405,16 +412,36 @@ export function PurchasesSection({ purchases, shopSlug, products }: PurchasesSec
                 </span>
               </div>
 
+              {/* Wallet Balance Card */}
+              {walletBalance > 0 && (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                    <span className="text-sm text-emerald-300">Wallet Balance</span>
+                  </div>
+                  <span className="text-lg font-bold text-emerald-400">
+                    GH₵{walletBalance.toLocaleString()}
+                  </span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Payment Amount (GHS)</label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
-                  max={paymentModal.purchase.outstandingBalance}
+                  max={paymentMethod === "WALLET" 
+                    ? Math.min(paymentModal.purchase.outstandingBalance, walletBalance)
+                    : paymentModal.purchase.outstandingBalance
+                  }
                   value={paymentAmount}
                   onChange={(e) => {
-                    const maxAmount = paymentModal.purchase?.outstandingBalance || 0
+                    const maxAmount = paymentMethod === "WALLET"
+                      ? Math.min(paymentModal.purchase?.outstandingBalance || 0, walletBalance)
+                      : paymentModal.purchase?.outstandingBalance || 0
                     const value = parseFloat(e.target.value)
                     if (!isNaN(value) && value > maxAmount) {
                       setPaymentAmount(maxAmount.toString())
@@ -427,7 +454,10 @@ export function PurchasesSection({ purchases, shopSlug, products }: PurchasesSec
                   autoFocus
                 />
                 <p className="mt-1 text-xs text-slate-500">
-                  Max: ₵{paymentModal.purchase.outstandingBalance.toLocaleString()}
+                  Max: ₵{paymentMethod === "WALLET" 
+                    ? Math.min(paymentModal.purchase.outstandingBalance, walletBalance).toLocaleString()
+                    : paymentModal.purchase.outstandingBalance.toLocaleString()
+                  }
                 </p>
               </div>
 
@@ -435,14 +465,36 @@ export function PurchasesSection({ purchases, shopSlug, products }: PurchasesSec
                 <label className="block text-sm font-medium text-slate-300 mb-2">Payment Method</label>
                 <select
                   value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  onChange={(e) => {
+                    setPaymentMethod(e.target.value)
+                    // Reset amount if switching to wallet and amount exceeds wallet balance
+                    if (e.target.value === "WALLET") {
+                      const currentAmount = parseFloat(paymentAmount) || 0
+                      if (currentAmount > walletBalance) {
+                        setPaymentAmount(walletBalance.toString())
+                      }
+                    }
+                  }}
                   className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 >
                   <option value="CASH" className="bg-slate-800 text-white">Cash</option>
                   <option value="MOBILE_MONEY" className="bg-slate-800 text-white">Mobile Money</option>
                   <option value="BANK_TRANSFER" className="bg-slate-800 text-white">Bank Transfer</option>
                   <option value="CARD" className="bg-slate-800 text-white">Card</option>
+                  {walletBalance > 0 && (
+                    <option value="WALLET" className="bg-slate-800 text-emerald-400">
+                      💳 Wallet (GH₵{walletBalance.toLocaleString()} available)
+                    </option>
+                  )}
                 </select>
+                {paymentMethod === "WALLET" && (
+                  <p className="mt-2 text-xs text-emerald-400 flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Payment will be deducted from customer&apos;s wallet balance
+                  </p>
+                )}
               </div>
 
               <div>

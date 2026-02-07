@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { 
   getShopProductsForSale, 
@@ -17,7 +17,7 @@ import { toast } from "sonner"
 import { 
   ShoppingCart, Plus, Trash2, Package, Store, User, CreditCard, 
   Banknote, Clock, ChevronRight, Search, X, Check, Sparkles,
-  ArrowLeft, Receipt, Wallet, Calendar, Users
+  ArrowLeft, Receipt, Wallet, Calendar, Users, Printer, Download, FileText
 } from "lucide-react"
 
 interface Shop {
@@ -89,6 +89,28 @@ export function NewSaleContent({ businessSlug, shops }: NewSaleContentProps) {
   const [newPreferredPayment, setNewPreferredPayment] = useState<"ONLINE" | "DEBT_COLLECTOR" | "BOTH">("BOTH")
   const [newAssignedCollectorId, setNewAssignedCollectorId] = useState("")
   const [newNotes, setNewNotes] = useState("")
+
+  // Invoice/Receipt modal
+  const [showInvoice, setShowInvoice] = useState(false)
+  const [invoiceData, setInvoiceData] = useState<{
+    purchaseId: string
+    purchaseNumber: string
+    purchaseType: string
+    totalAmount: number
+    subtotal: number
+    interestAmount: number
+    downPayment: number
+    outstandingBalance: number
+    dueDate: string
+    createdAt: string
+    customer: { name: string; phone: string; address: string | null; city: string | null; region: string | null }
+    shop: { name: string; slug: string }
+    business: { name: string }
+    items: { productName: string; quantity: number; unitPrice: number; totalPrice: number }[]
+    tenorDays: number
+    installments: number
+  } | null>(null)
+  const invoiceRef = useRef<HTMLDivElement>(null)
 
   const selectedCustomer = customers.find((c) => c.id === customerId)
   const selectedShop = shops.find((s) => s.shopSlug === selectedShopSlug)
@@ -231,14 +253,73 @@ export function NewSaleContent({ businessSlug, shops }: NewSaleContentProps) {
       tenorDays,
     })
 
-    if (result.success) {
+    if (result.success && result.data) {
       toast.success("Sale created successfully!")
-      router.push(`/business-admin/${businessSlug}/purchases`)
+      // Show invoice/receipt modal
+      setInvoiceData(result.data as typeof invoiceData)
+      setShowInvoice(true)
     } else {
       toast.error(result.error || "Failed to create sale")
     }
 
     setIsLoading(false)
+  }
+
+  const handlePrint = () => {
+    if (!invoiceRef.current) return
+    
+    const printContent = invoiceRef.current.innerHTML
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${invoiceData?.purchaseType === "CASH" ? "Receipt" : "Invoice"} - ${invoiceData?.purchaseNumber}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: white; color: #1a1a1a; }
+            .invoice-header { text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e5e7eb; }
+            .invoice-header h1 { font-size: 24px; font-weight: bold; color: #0891b2; margin-bottom: 4px; }
+            .invoice-header p { color: #6b7280; font-size: 14px; }
+            .invoice-number { font-size: 18px; font-weight: 600; color: #1f2937; margin-top: 8px; }
+            .invoice-type { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-top: 8px; }
+            .type-cash { background: #d1fae5; color: #059669; }
+            .type-credit { background: #dbeafe; color: #2563eb; }
+            .type-layaway { background: #fef3c7; color: #d97706; }
+            .section { margin-bottom: 20px; }
+            .section-title { font-size: 14px; font-weight: 600; color: #6b7280; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+            .info-box { padding: 12px; background: #f9fafb; border-radius: 8px; }
+            .info-label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+            .info-value { font-size: 14px; font-weight: 500; color: #1f2937; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+            th { text-align: left; padding: 10px 8px; background: #f3f4f6; font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase; }
+            td { padding: 12px 8px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+            .text-right { text-align: right; }
+            .totals { margin-top: 16px; padding-top: 16px; border-top: 2px solid #e5e7eb; }
+            .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
+            .total-row.final { font-size: 18px; font-weight: 700; color: #0891b2; border-top: 2px solid #0891b2; margin-top: 8px; padding-top: 12px; }
+            .balance-due { background: #fef2f2; color: #dc2626; padding: 12px; border-radius: 8px; margin-top: 12px; text-align: center; font-weight: 600; }
+            .paid-full { background: #d1fae5; color: #059669; padding: 12px; border-radius: 8px; margin-top: 12px; text-align: center; font-weight: 600; }
+            .footer { margin-top: 32px; text-align: center; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px; }
+            @media print { body { padding: 0; } }
+          </style>
+        </head>
+        <body>
+          ${printContent}
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+    printWindow.print()
+  }
+
+  const handleCloseInvoice = () => {
+    setShowInvoice(false)
+    setInvoiceData(null)
+    router.push(`/business-admin/${businessSlug}/purchases`)
   }
 
   const handleNewCustomer = async (e: React.FormEvent) => {
@@ -1001,6 +1082,184 @@ export function NewSaleContent({ businessSlug, shops }: NewSaleContentProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice/Receipt Modal */}
+      {showInvoice && invoiceData && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl border border-white/10 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-xl ${
+                  invoiceData.purchaseType === "CASH" 
+                    ? "bg-green-500/20 border border-green-500/30" 
+                    : "bg-cyan-500/20 border border-cyan-500/30"
+                }`}>
+                  {invoiceData.purchaseType === "CASH" ? (
+                    <Receipt className="w-5 h-5 text-green-400" />
+                  ) : (
+                    <FileText className="w-5 h-5 text-cyan-400" />
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">
+                    {invoiceData.purchaseType === "CASH" ? "Receipt" : "Invoice"}
+                  </h2>
+                  <p className="text-sm text-slate-400">{invoiceData.purchaseNumber}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePrint}
+                  className="flex items-center gap-2 px-4 py-2 bg-cyan-500/20 text-cyan-400 rounded-xl hover:bg-cyan-500/30 transition-all"
+                >
+                  <Printer className="w-4 h-4" />
+                  Print
+                </button>
+                <button
+                  onClick={handleCloseInvoice}
+                  className="p-2 hover:bg-white/10 rounded-xl transition-all"
+                >
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+            </div>
+
+            {/* Invoice Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+              <div ref={invoiceRef}>
+                {/* Printable Invoice Content */}
+                <div className="invoice-header">
+                  <h1>{invoiceData.business.name}</h1>
+                  <p>{invoiceData.shop.name}</p>
+                  <div className="invoice-number">{invoiceData.purchaseNumber}</div>
+                  <span className={`invoice-type type-${invoiceData.purchaseType.toLowerCase()}`}>
+                    {invoiceData.purchaseType === "CASH" ? "Cash Receipt" : 
+                     invoiceData.purchaseType === "CREDIT" ? "Credit Invoice" : "Layaway Invoice"}
+                  </span>
+                </div>
+
+                {/* Customer & Date Info */}
+                <div className="section">
+                  <div className="info-grid">
+                    <div className="info-box">
+                      <div className="info-label">Customer</div>
+                      <div className="info-value">{invoiceData.customer.name}</div>
+                      <div className="info-label" style={{ marginTop: '8px' }}>Phone</div>
+                      <div className="info-value">{invoiceData.customer.phone}</div>
+                      {invoiceData.customer.address && (
+                        <>
+                          <div className="info-label" style={{ marginTop: '8px' }}>Address</div>
+                          <div className="info-value">
+                            {invoiceData.customer.address}
+                            {invoiceData.customer.city && `, ${invoiceData.customer.city}`}
+                            {invoiceData.customer.region && `, ${invoiceData.customer.region}`}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <div className="info-box">
+                      <div className="info-label">Date</div>
+                      <div className="info-value">{new Date(invoiceData.createdAt).toLocaleDateString()}</div>
+                      {invoiceData.purchaseType !== "CASH" && (
+                        <>
+                          <div className="info-label" style={{ marginTop: '8px' }}>Due Date</div>
+                          <div className="info-value">{new Date(invoiceData.dueDate).toLocaleDateString()}</div>
+                          <div className="info-label" style={{ marginTop: '8px' }}>Payment Terms</div>
+                          <div className="info-value">{invoiceData.tenorDays} days ({invoiceData.installments} installment{invoiceData.installments > 1 ? 's' : ''})</div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Items Table */}
+                <div className="section">
+                  <div className="section-title">Items</div>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th className="text-right">Qty</th>
+                        <th className="text-right">Unit Price</th>
+                        <th className="text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invoiceData.items.map((item, idx) => (
+                        <tr key={idx}>
+                          <td>{item.productName}</td>
+                          <td className="text-right">{item.quantity}</td>
+                          <td className="text-right">GH₵{item.unitPrice.toFixed(2)}</td>
+                          <td className="text-right">GH₵{item.totalPrice.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Totals */}
+                <div className="totals">
+                  <div className="total-row">
+                    <span>Subtotal</span>
+                    <span>GH₵{invoiceData.subtotal.toFixed(2)}</span>
+                  </div>
+                  {invoiceData.interestAmount > 0 && (
+                    <div className="total-row">
+                      <span>Interest</span>
+                      <span>GH₵{invoiceData.interestAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="total-row final">
+                    <span>Total Amount</span>
+                    <span>GH₵{invoiceData.totalAmount.toFixed(2)}</span>
+                  </div>
+                  {invoiceData.purchaseType !== "CASH" && (
+                    <>
+                      <div className="total-row">
+                        <span>Down Payment</span>
+                        <span>-GH₵{invoiceData.downPayment.toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
+                  {invoiceData.outstandingBalance > 0 ? (
+                    <div className="balance-due">
+                      Balance Due: GH₵{invoiceData.outstandingBalance.toFixed(2)}
+                    </div>
+                  ) : (
+                    <div className="paid-full">
+                      ✓ PAID IN FULL
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="footer">
+                  <p>Thank you for your business!</p>
+                  <p style={{ marginTop: '4px' }}>Generated on {new Date().toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-white/10 flex gap-3">
+              <button
+                onClick={handlePrint}
+                className="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:from-cyan-600 hover:to-blue-600 transition-all flex items-center justify-center gap-2"
+              >
+                <Printer className="w-5 h-5" />
+                Print {invoiceData.purchaseType === "CASH" ? "Receipt" : "Invoice"}
+              </button>
+              <button
+                onClick={handleCloseInvoice}
+                className="flex-1 py-3 bg-white/5 text-slate-300 font-medium rounded-xl hover:bg-white/10 transition-all"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}

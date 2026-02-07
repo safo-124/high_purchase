@@ -41,6 +41,7 @@ async function getCustomerDetails(shopSlug: string, customerId: string) {
     isActive: customer.isActive,
     createdAt: customer.createdAt,
     assignedCollectorName: customer.assignedCollector?.user.name || null,
+    walletBalance: Number(customer.walletBalance),
   }
 }
 
@@ -158,6 +159,12 @@ export default async function CustomerDetailPage({ params }: CustomerDetailPageP
                 {customer.preferredPayment === "ONLINE" ? "Online" : customer.preferredPayment === "DEBT_COLLECTOR" ? "Collector" : "Both"}
               </span>
             </div>
+            <div>
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Wallet Balance</p>
+              <p className={`text-lg font-semibold ${customer.walletBalance > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                GH₵{customer.walletBalance.toLocaleString()}
+              </p>
+            </div>
             {customer.assignedCollectorName && (
               <div>
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Assigned Collector</p>
@@ -177,6 +184,7 @@ export default async function CustomerDetailPage({ params }: CustomerDetailPageP
           shopSlug={shopSlug} 
           customerId={customer.id}
           products={products}
+          walletBalance={customer.walletBalance}
         />
       </main>
     </div>

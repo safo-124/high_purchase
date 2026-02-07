@@ -2564,60 +2564,111 @@ export async function recordPayment(
       return { success: false, error: `Amount cannot exceed outstanding balance of ₵${outstanding.toLocaleString()}` }
     }
 
-    const autoConfirm = payload.autoConfirm ?? false
+    // Handle WALLET payments - always auto-confirm since wallet funds are verified
+    const isWalletPayment = payload.paymentMethod === "WALLET"
+    const autoConfirm = isWalletPayment ? true : (payload.autoConfirm ?? false)
 
-    // Create payment record - pending by default unless autoConfirm is true
-    const payment = await prisma.payment.create({
-      data: {
-        purchaseId: purchase.id,
-        amount: payload.amount,
-        paymentMethod: payload.paymentMethod,
-        status: autoConfirm ? "COMPLETED" : "PENDING",
-        collectorId: payload.collectorId || null,
-        paidAt: new Date(),
-        reference: payload.reference,
-        notes: `${payload.notes || ""} [Recorded by Shop Admin: ${user.name}]`.trim(),
-        isConfirmed: autoConfirm,
-        confirmedAt: autoConfirm ? new Date() : null,
-        confirmedById: autoConfirm ? membership?.id : null,
-      },
-    })
+    // For wallet payments, verify and deduct balance
+    if (isWalletPayment) {
+      const customerWalletBalance = Number(purchase.customer.walletBalance)
+      if (payload.amount > customerWalletBalance) {
+        return { 
+          success: false, 
+          error: `Insufficient wallet balance. Available: GH₵${customerWalletBalance.toLocaleString()}` 
+        }
+      }
+    }
 
-    // Only update purchase totals if auto-confirming
-    if (autoConfirm) {
-      const newAmountPaid = Number(purchase.amountPaid) + payload.amount
-      const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
-      let newStatus: PurchaseStatus = "ACTIVE"
-      if (newOutstanding <= 0) {
-        newStatus = "COMPLETED"
+    // Use transaction for wallet payments to ensure atomicity
+    const result = await prisma.$transaction(async (tx) => {
+      // For wallet payments, deduct from wallet and create transaction record
+      if (isWalletPayment) {
+        const currentBalance = Number(purchase.customer.walletBalance)
+        const newBalance = currentBalance - payload.amount
+
+        // Update customer wallet balance
+        await tx.customer.update({
+          where: { id: purchase.customer.id },
+          data: { walletBalance: newBalance },
+        })
+
+        // Create wallet transaction record
+        await tx.walletTransaction.create({
+          data: {
+            customerId: purchase.customer.id,
+            shopId: shop.id,
+            type: "PURCHASE",
+            amount: payload.amount,
+            balanceBefore: currentBalance,
+            balanceAfter: newBalance,
+            description: `Payment for purchase ${purchase.purchaseNumber}`,
+            reference: payload.reference || `PAY-${purchase.purchaseNumber}`,
+            paymentMethod: "WALLET",
+            status: "CONFIRMED",
+            createdById: membership?.id || null,
+            confirmedById: membership?.id || null,
+            confirmedAt: new Date(),
+          },
+        })
       }
 
-      await prisma.purchase.update({
-        where: { id: purchase.id },
+      // Create payment record
+      const payment = await tx.payment.create({
         data: {
-          amountPaid: newAmountPaid,
-          outstandingBalance: Math.max(0, newOutstanding),
-          status: newStatus,
+          purchaseId: purchase.id,
+          amount: payload.amount,
+          paymentMethod: payload.paymentMethod,
+          status: autoConfirm ? "COMPLETED" : "PENDING",
+          collectorId: payload.collectorId || null,
+          paidAt: new Date(),
+          reference: payload.reference,
+          notes: `${payload.notes || ""} [Recorded by Shop Admin: ${user.name}]${isWalletPayment ? " [Wallet Payment]" : ""}`.trim(),
+          isConfirmed: autoConfirm,
+          confirmedAt: autoConfirm ? new Date() : null,
+          confirmedById: autoConfirm ? membership?.id : null,
         },
       })
-    }
+
+      // Update purchase totals if auto-confirming
+      if (autoConfirm) {
+        const newAmountPaid = Number(purchase.amountPaid) + payload.amount
+        const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
+        let newStatus: PurchaseStatus = "ACTIVE"
+        if (newOutstanding <= 0) {
+          newStatus = "COMPLETED"
+        }
+
+        await tx.purchase.update({
+          where: { id: purchase.id },
+          data: {
+            amountPaid: newAmountPaid,
+            outstandingBalance: Math.max(0, newOutstanding),
+            status: newStatus,
+          },
+        })
+      }
+
+      return payment
+    })
 
     await createAuditLog({
       actorUserId: user.id,
       action: autoConfirm ? "PAYMENT_RECORDED_AND_CONFIRMED" : "PAYMENT_RECORDED_PENDING",
       entityType: "Payment",
-      entityId: payment.id,
+      entityId: result.id,
       metadata: {
         purchaseId: purchase.id,
         purchaseNumber: purchase.purchaseNumber,
         amount: payload.amount,
+        paymentMethod: payload.paymentMethod,
         customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
         recordedBy: user.name,
         awaitingConfirmation: !autoConfirm,
+        isWalletPayment,
       },
     })
 
-    // Send in-app message to customer about the pending payment
+    // Send in-app message to customer about the pending payment (only for non-wallet, non-auto-confirm)
     if (!autoConfirm) {
       try {
         // Get collector name if available
@@ -2654,8 +2705,9 @@ export async function recordPayment(
     return {
       success: true,
       data: {
-        paymentId: payment.id,
+        paymentId: result.id,
         awaitingConfirmation: !autoConfirm,
+        isWalletPayment,
       },
     }
   } catch (error) {
