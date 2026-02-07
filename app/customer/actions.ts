@@ -248,6 +248,11 @@ export interface CustomerDashboardData {
     totalOwed: number
     totalPaid: number
   }
+  wallet: {
+    balance: number
+    totalDeposited: number
+    netBalance: number // balance - outstanding
+  }
   recentPurchases: Array<{
     id: string
     purchaseNumber: string
@@ -255,6 +260,12 @@ export interface CustomerDashboardData {
     totalAmount: number
     outstandingBalance: number
     createdAt: Date
+    items: string[]
+  }>
+  upcomingPayments: Array<{
+    purchaseNumber: string
+    dueDate: Date | null
+    outstandingBalance: number
   }>
   notifications: Array<{
     id: string
@@ -283,11 +294,20 @@ export async function getCustomerDashboard(): Promise<CustomerDashboardData | nu
         purchases: {
           orderBy: { createdAt: "desc" },
           take: 5,
+          include: {
+            items: {
+              select: { productName: true },
+            },
+          },
         },
         notifications: {
           orderBy: { createdAt: "desc" },
           take: 10,
           where: { isRead: false },
+        },
+        walletTransactions: {
+          where: { status: "CONFIRMED", type: "DEPOSIT" },
+          select: { amount: true },
         },
       },
     })
@@ -305,6 +325,26 @@ export async function getCustomerDashboard(): Promise<CustomerDashboardData | nu
     )
     const totalPaid = allPurchases.reduce((sum, p) => sum + Number(p.amountPaid), 0)
     const activePurchases = allPurchases.filter((p) => p.status === "ACTIVE").length
+
+    // Wallet calculations
+    const walletBalance = Number(customer.walletBalance)
+    const totalDeposited = customer.walletTransactions.reduce((sum, t) => sum + Number(t.amount), 0)
+    const netBalance = walletBalance - totalOwed
+
+    // Upcoming payments (active purchases with due dates)
+    const upcomingPayments = allPurchases
+      .filter((p) => p.status === "ACTIVE" && Number(p.outstandingBalance) > 0)
+      .sort((a, b) => {
+        if (!a.dueDate) return 1
+        if (!b.dueDate) return -1
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+      })
+      .slice(0, 3)
+      .map((p) => ({
+        purchaseNumber: p.purchaseNumber,
+        dueDate: p.dueDate,
+        outstandingBalance: Number(p.outstandingBalance),
+      }))
 
     return {
       customer: {
@@ -326,6 +366,11 @@ export async function getCustomerDashboard(): Promise<CustomerDashboardData | nu
         totalOwed,
         totalPaid,
       },
+      wallet: {
+        balance: walletBalance,
+        totalDeposited,
+        netBalance,
+      },
       recentPurchases: customer.purchases.map((p) => ({
         id: p.id,
         purchaseNumber: p.purchaseNumber,
@@ -333,7 +378,9 @@ export async function getCustomerDashboard(): Promise<CustomerDashboardData | nu
         totalAmount: Number(p.totalAmount),
         outstandingBalance: Number(p.outstandingBalance),
         createdAt: p.createdAt,
+        items: p.items.map((i) => i.productName),
       })),
+      upcomingPayments,
       notifications: customer.notifications.map((n) => ({
         id: n.id,
         title: n.title,

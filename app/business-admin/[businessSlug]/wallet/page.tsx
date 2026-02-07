@@ -35,7 +35,7 @@ export default async function WalletPage({ params }: Props) {
         <div className="glass-card p-4">
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Net Balance</p>
           {(() => {
-            const netBalance = summary.totalWalletBalance - summary.totalOutstanding
+            const netBalance = -summary.totalOutstanding
             return (
               <>
                 <p className={`text-2xl font-bold ${netBalance >= 0 ? "text-green-400" : "text-red-400"}`}>

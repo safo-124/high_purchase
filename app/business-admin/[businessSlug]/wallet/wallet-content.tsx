@@ -286,8 +286,8 @@ export function WalletContent({
               </thead>
               <tbody className="divide-y divide-white/5">
                 {filteredCustomers.map((c) => {
-                  // Net balance = deposits - outstanding (negative means they owe money)
-                  const netBalance = c.walletBalance - c.totalOutstanding
+                  // Net balance = negative of outstanding (negative means they owe money)
+                  const netBalance = -c.totalOutstanding
                   return (
                   <tr key={c.id} className="hover:bg-white/[0.02]">
                     <td className="px-6 py-4">
