@@ -17,7 +17,8 @@ import { toast } from "sonner"
 import { 
   ShoppingCart, Plus, Trash2, Package, Store, User, CreditCard, 
   Banknote, Clock, ChevronRight, Search, X, Check, Sparkles,
-  ArrowLeft, Receipt, Wallet, Calendar, Users, Printer, Download, FileText
+  ArrowLeft, Receipt, Wallet, Calendar, Users, Printer, Download, FileText,
+  Smartphone, Building2
 } from "lucide-react"
 
 interface Shop {
@@ -73,6 +74,7 @@ export function NewSaleContent({ businessSlug, shops }: NewSaleContentProps) {
   const [downPayment, setDownPayment] = useState("")
   const [tenorDays, setTenorDays] = useState(30)
   const [purchaseType, setPurchaseType] = useState<BusinessPurchaseType>("CREDIT")
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "MOBILE_MONEY" | "BANK_TRANSFER" | "CARD" | "WALLET">("CASH")
 
   // New customer modal
   const [showNewCustomer, setShowNewCustomer] = useState(false)
@@ -237,6 +239,16 @@ export function NewSaleContent({ businessSlug, shops }: NewSaleContentProps) {
   const handleSubmit = async () => {
     if (!selectedShopSlug || cart.length === 0 || !customerId) return
     
+    // Validate wallet balance if wallet payment selected
+    const effectiveDownPayment = purchaseType === "CASH" ? subtotal : downPaymentNum
+    if (paymentMethod === "WALLET" && effectiveDownPayment > 0) {
+      const customerWalletBalance = selectedCustomer?.walletBalance || 0
+      if (customerWalletBalance < effectiveDownPayment) {
+        toast.error(`Insufficient wallet balance. Available: GH₵${customerWalletBalance.toLocaleString()}, Required: GH₵${effectiveDownPayment.toLocaleString()}`)
+        return
+      }
+    }
+    
     setIsLoading(true)
 
     const result = await createBusinessSale(businessSlug, {
@@ -248,9 +260,10 @@ export function NewSaleContent({ businessSlug, shops }: NewSaleContentProps) {
         quantity: item.quantity,
         unitPrice: item.unitPrice,
       })),
-      downPayment: purchaseType === "CASH" ? subtotal : downPaymentNum,
+      downPayment: effectiveDownPayment,
       purchaseType,
       tenorDays,
+      paymentMethod,
     })
 
     if (result.success && result.data) {
@@ -352,6 +365,7 @@ export function NewSaleContent({ businessSlug, shops }: NewSaleContentProps) {
         lastName: data.lastName,
         phone: data.phone,
         email: newEmail || null,
+        walletBalance: 0, // New customers start with 0 balance
       }])
       
       setCustomerId(data.id)
@@ -841,6 +855,122 @@ export function NewSaleContent({ businessSlug, shops }: NewSaleContentProps) {
                   </div>
                 </div>
               )}
+
+              {/* Payment Method Selection */}
+              <div className="glass-card rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 flex items-center justify-center">
+                    <CreditCard className="w-6 h-6 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-white">Payment Method</h2>
+                    <p className="text-sm text-slate-400">
+                      {purchaseType === "CASH" ? "How will the full payment be made?" : "How will the down payment be made?"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {/* Cash */}
+                  <button
+                    onClick={() => setPaymentMethod("CASH")}
+                    className={`p-4 rounded-xl border transition-all flex flex-col items-center gap-2 ${
+                      paymentMethod === "CASH"
+                        ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
+                        : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                    }`}
+                  >
+                    <Banknote className="w-6 h-6" />
+                    <span className="text-sm font-medium">Cash</span>
+                  </button>
+
+                  {/* Mobile Money */}
+                  <button
+                    onClick={() => setPaymentMethod("MOBILE_MONEY")}
+                    className={`p-4 rounded-xl border transition-all flex flex-col items-center gap-2 ${
+                      paymentMethod === "MOBILE_MONEY"
+                        ? "bg-yellow-500/20 border-yellow-500/50 text-yellow-400"
+                        : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                    }`}
+                  >
+                    <Smartphone className="w-6 h-6" />
+                    <span className="text-sm font-medium">Mobile Money</span>
+                  </button>
+
+                  {/* Bank Transfer */}
+                  <button
+                    onClick={() => setPaymentMethod("BANK_TRANSFER")}
+                    className={`p-4 rounded-xl border transition-all flex flex-col items-center gap-2 ${
+                      paymentMethod === "BANK_TRANSFER"
+                        ? "bg-blue-500/20 border-blue-500/50 text-blue-400"
+                        : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                    }`}
+                  >
+                    <Building2 className="w-6 h-6" />
+                    <span className="text-sm font-medium">Bank Transfer</span>
+                  </button>
+
+                  {/* Card */}
+                  <button
+                    onClick={() => setPaymentMethod("CARD")}
+                    className={`p-4 rounded-xl border transition-all flex flex-col items-center gap-2 ${
+                      paymentMethod === "CARD"
+                        ? "bg-purple-500/20 border-purple-500/50 text-purple-400"
+                        : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                    }`}
+                  >
+                    <CreditCard className="w-6 h-6" />
+                    <span className="text-sm font-medium">Card</span>
+                  </button>
+
+                  {/* Wallet */}
+                  <button
+                    onClick={() => setPaymentMethod("WALLET")}
+                    className={`p-4 rounded-xl border transition-all flex flex-col items-center gap-2 ${
+                      paymentMethod === "WALLET"
+                        ? "bg-pink-500/20 border-pink-500/50 text-pink-400"
+                        : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                    }`}
+                  >
+                    <Wallet className="w-6 h-6" />
+                    <span className="text-sm font-medium">Wallet</span>
+                    {selectedCustomer && (
+                      <span className="text-xs opacity-75">
+                        GH₵{(selectedCustomer.walletBalance || 0).toLocaleString()}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Wallet balance warning */}
+                {paymentMethod === "WALLET" && selectedCustomer && (
+                  <div className={`mt-4 p-3 rounded-xl ${
+                    (selectedCustomer.walletBalance || 0) >= (purchaseType === "CASH" ? subtotal : downPaymentNum)
+                      ? "bg-green-500/10 border border-green-500/30"
+                      : "bg-red-500/10 border border-red-500/30"
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <Wallet className={`w-4 h-4 ${
+                        (selectedCustomer.walletBalance || 0) >= (purchaseType === "CASH" ? subtotal : downPaymentNum)
+                          ? "text-green-400"
+                          : "text-red-400"
+                      }`} />
+                      <span className={`text-sm ${
+                        (selectedCustomer.walletBalance || 0) >= (purchaseType === "CASH" ? subtotal : downPaymentNum)
+                          ? "text-green-400"
+                          : "text-red-400"
+                      }`}>
+                        Wallet Balance: GH₵{(selectedCustomer.walletBalance || 0).toLocaleString()}
+                        {(selectedCustomer.walletBalance || 0) < (purchaseType === "CASH" ? subtotal : downPaymentNum) && (
+                          <span className="ml-2">
+                            (Need GH₵{(purchaseType === "CASH" ? subtotal : downPaymentNum).toLocaleString()})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Complete Sale Button */}
               <button

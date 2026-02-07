@@ -3200,8 +3200,9 @@ export async function confirmPayment(
 
       if (!existingWaybill) {
         // Generate waybill number
-        const waybillCount = await prisma.waybill.count()
-        waybillNumber = `WB-${year}-${String(waybillCount + 1).padStart(5, "0")}`
+        const timestamp = Date.now().toString(36).toUpperCase()
+        const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+        waybillNumber = `WB-${year}-${timestamp}${random}`
 
         await prisma.waybill.create({
           data: {
@@ -4907,8 +4908,9 @@ export async function createSale(
     // AUTO-GENERATE WAYBILL for CASH sales (they are completed immediately)
     if (payload.purchaseType === "CASH" && outstandingBalance === 0) {
       const year = new Date().getFullYear()
-      const waybillCount = await prisma.waybill.count()
-      const waybillNumber = `WB-${year}-${String(waybillCount + 1).padStart(5, "0")}`
+      const timestamp = Date.now().toString(36).toUpperCase()
+      const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+      const waybillNumber = `WB-${year}-${timestamp}${random}`
 
       await prisma.waybill.create({
         data: {

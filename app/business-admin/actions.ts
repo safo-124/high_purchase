@@ -4650,8 +4650,9 @@ export async function confirmBusinessPayment(
       })
 
       if (!existingWaybill) {
-        const waybillCount = await prisma.waybill.count()
-        waybillNumber = `WB-${year}-${String(waybillCount + 1).padStart(5, "0")}`
+        const timestamp = Date.now().toString(36).toUpperCase()
+        const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+        waybillNumber = `WB-${year}-${timestamp}${random}`
 
         await prisma.waybill.create({
           data: {
@@ -4915,6 +4916,7 @@ export interface CustomerForBusinessSale {
   lastName: string
   phone: string
   email: string | null
+  walletBalance: number
 }
 
 export interface CollectorForBusinessSale {
@@ -5009,10 +5011,14 @@ export async function getShopCustomersForSale(
       lastName: true,
       phone: true,
       email: true,
+      walletBalance: true,
     },
   })
 
-  return customers
+  return customers.map(c => ({
+    ...c,
+    walletBalance: Number(c.walletBalance),
+  }))
 }
 
 /**
@@ -5067,6 +5073,7 @@ export interface BusinessSalePayload {
   downPayment: number
   tenorDays: number
   purchaseType: BusinessPurchaseType
+  paymentMethod?: "CASH" | "MOBILE_MONEY" | "BANK_TRANSFER" | "CARD" | "WALLET"
 }
 
 /**
@@ -5127,7 +5134,11 @@ export async function createBusinessSale(
     })
 
     if (shopProducts.length !== payload.items.length) {
-      return { success: false, error: "One or more products not found in this shop" }
+      // Find which products are missing
+      const foundProductIds = shopProducts.map(sp => sp.productId)
+      const missingItems = payload.items.filter(item => !foundProductIds.includes(item.productId))
+      const missingNames = missingItems.map(item => item.productName).join(", ")
+      return { success: false, error: `Products not available in this shop: ${missingNames}. Please ensure products are added to the shop's inventory.` }
     }
 
     // Check stock for each item
@@ -5242,17 +5253,54 @@ export async function createBusinessSale(
       // Create payment record
       // For CASH: record full payment; for others: record down payment if > 0
       const paymentAmount = payload.purchaseType === "CASH" ? totalAmount : downPayment
+      const paymentMethod = payload.paymentMethod || "CASH"
+      
       if (paymentAmount > 0) {
+        // Handle wallet payment - check balance and deduct
+        if (paymentMethod === "WALLET") {
+          const customerForWallet = await tx.customer.findUnique({
+            where: { id: customer.id },
+            select: { walletBalance: true },
+          })
+          
+          if (!customerForWallet || Number(customerForWallet.walletBalance) < paymentAmount) {
+            throw new Error(`Insufficient wallet balance. Available: GH₵${Number(customerForWallet?.walletBalance || 0).toFixed(2)}, Required: GH₵${paymentAmount.toFixed(2)}`)
+          }
+          
+          // Deduct from wallet
+          await tx.customer.update({
+            where: { id: customer.id },
+            data: { walletBalance: { decrement: paymentAmount } },
+          })
+          
+          // Create wallet transaction record
+          await tx.walletTransaction.create({
+            data: {
+              customerId: customer.id,
+              shopId: shop.id,
+              type: "PURCHASE",
+              amount: new Prisma.Decimal(paymentAmount),
+              balanceBefore: customerForWallet.walletBalance,
+              balanceAfter: new Prisma.Decimal(Number(customerForWallet.walletBalance) - paymentAmount),
+              description: `Payment for purchase ${purchaseNumber}`,
+              status: "CONFIRMED",
+              confirmedAt: new Date(),
+            },
+          })
+        }
+        
         await tx.payment.create({
           data: {
             purchaseId: newPurchase.id,
             amount: new Prisma.Decimal(paymentAmount),
-            paymentMethod: "CASH",
+            paymentMethod,
             status: "COMPLETED",
             isConfirmed: true,
             confirmedAt: new Date(),
             paidAt: new Date(),
-            notes: payload.purchaseType === "CASH" ? "Full cash payment (Business Admin)" : "Down payment at time of purchase (Business Admin)",
+            notes: payload.purchaseType === "CASH" 
+              ? `Full ${paymentMethod.toLowerCase().replace("_", " ")} payment (Business Admin)` 
+              : `Down payment via ${paymentMethod.toLowerCase().replace("_", " ")} at time of purchase (Business Admin)`,
           },
         })
       }
@@ -5287,8 +5335,10 @@ export async function createBusinessSale(
     // AUTO-GENERATE WAYBILL for CASH sales (they are completed immediately)
     if (payload.purchaseType === "CASH" && outstandingBalance === 0) {
       const year = new Date().getFullYear()
-      const waybillCount = await prisma.waybill.count()
-      const waybillNumber = `WB-${year}-${String(waybillCount + 1).padStart(5, "0")}`
+      // Use timestamp + random to ensure uniqueness
+      const timestamp = Date.now().toString(36).toUpperCase()
+      const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+      const waybillNumber = `WB-${year}-${timestamp}${random}`
 
       await prisma.waybill.create({
         data: {
@@ -5355,6 +5405,10 @@ export async function createBusinessSale(
     }
   } catch (error) {
     console.error("Error creating business sale:", error)
+    // Return more specific error if available
+    if (error instanceof Error) {
+      return { success: false, error: `Failed to create sale: ${error.message}` }
+    }
     return { success: false, error: "Failed to create sale" }
   }
 }
@@ -6225,8 +6279,9 @@ export async function generateBusinessWaybill(
     }
 
     const year = new Date().getFullYear()
-    const waybillCount = await prisma.waybill.count()
-    const waybillNumber = `WB-${year}-${String(waybillCount + 1).padStart(5, "0")}`
+    const timestamp = Date.now().toString(36).toUpperCase()
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+    const waybillNumber = `WB-${year}-${timestamp}${random}`
 
     const waybill = await prisma.waybill.create({
       data: {
