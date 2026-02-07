@@ -247,6 +247,7 @@ export async function getMyPendingDeposits(shopSlug: string): Promise<WalletTran
 
 /**
  * Shop Admin: Confirm a pending wallet deposit (if business allows)
+ * When confirming deposits, automatically applies funds to outstanding purchases
  */
 export async function shopAdminConfirmDeposit(
   shopSlug: string,
@@ -273,7 +274,40 @@ export async function shopAdminConfirmDeposit(
       return { success: false, error: "Transaction not found or already processed" }
     }
 
-    // Update transaction and customer balance
+    const depositAmount = Number(transaction.amount)
+    const customer = transaction.customer
+
+    // Get all active purchases with outstanding balance for this customer
+    const outstandingPurchases = await prisma.purchase.findMany({
+      where: {
+        customerId: transaction.customerId,
+        status: { in: ["ACTIVE", "PENDING"] },
+        outstandingBalance: { gt: 0 },
+      },
+      orderBy: { dueDate: "asc" }, // Pay oldest due first
+    })
+
+    let paymentsApplied: { purchaseId: string; purchaseNumber: string; amountApplied: number }[] = []
+    let remainingFunds = depositAmount
+
+    // Calculate payments to apply
+    for (const purchase of outstandingPurchases) {
+      if (remainingFunds <= 0) break
+
+      const outstanding = Number(purchase.outstandingBalance)
+      const paymentAmount = Math.min(remainingFunds, outstanding)
+
+      if (paymentAmount > 0) {
+        paymentsApplied.push({
+          purchaseId: purchase.id,
+          purchaseNumber: purchase.purchaseNumber,
+          amountApplied: paymentAmount,
+        })
+        remainingFunds -= paymentAmount
+      }
+    }
+
+    // Update transaction, customer balance, and apply payments in a transaction
     await prisma.$transaction(async (tx) => {
       await tx.walletTransaction.update({
         where: { id: transactionId },
@@ -297,6 +331,96 @@ export async function shopAdminConfirmDeposit(
           walletBalance: { increment: balanceChange },
         },
       })
+
+      // Apply payments to outstanding purchases
+      for (const payment of paymentsApplied) {
+        // Get current purchase data
+        const purchase = await tx.purchase.findUnique({
+          where: { id: payment.purchaseId },
+        })
+
+        if (!purchase) continue
+
+        const newAmountPaid = Number(purchase.amountPaid) + payment.amountApplied
+        const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
+        const isCompleted = newOutstanding <= 0
+
+        // Create payment record
+        await tx.payment.create({
+          data: {
+            purchaseId: payment.purchaseId,
+            amount: payment.amountApplied,
+            paymentMethod: "WALLET",
+            status: "COMPLETED",
+            isConfirmed: true,
+            confirmedById: membership?.id || null,
+            confirmedAt: new Date(),
+            paidAt: new Date(),
+            notes: `Wallet deposit payment`,
+          },
+        })
+
+        // Update purchase
+        await tx.purchase.update({
+          where: { id: payment.purchaseId },
+          data: {
+            amountPaid: newAmountPaid,
+            outstandingBalance: Math.max(0, newOutstanding),
+            status: isCompleted ? "COMPLETED" : purchase.status === "PENDING" ? "ACTIVE" : purchase.status,
+          },
+        })
+
+        // If purchase is completed, auto-generate waybill and deduct stock
+        if (isCompleted && purchase.purchaseType !== "CASH") {
+          // Deduct stock
+          const purchaseItems = await tx.purchaseItem.findMany({
+            where: { purchaseId: purchase.id },
+          })
+
+          for (const item of purchaseItems) {
+            if (item.productId) {
+              await tx.shopProduct.updateMany({
+                where: { 
+                  shopId: shop.id,
+                  productId: item.productId 
+                },
+                data: { stockQuantity: { decrement: item.quantity } },
+              })
+            }
+          }
+
+          // Check if waybill already exists
+          const existingWaybill = await tx.waybill.findUnique({
+            where: { purchaseId: purchase.id },
+          })
+
+          if (!existingWaybill) {
+            const year = new Date().getFullYear()
+            const timestamp = Date.now().toString(36).toUpperCase()
+            const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+            const waybillNumber = `WB-${year}-${timestamp}${random}`
+
+            await tx.waybill.create({
+              data: {
+                waybillNumber,
+                purchaseId: purchase.id,
+                recipientName: `${customer.firstName} ${customer.lastName}`,
+                recipientPhone: customer.phone,
+                deliveryAddress: customer.address || "N/A",
+                deliveryCity: customer.city,
+                deliveryRegion: customer.region,
+                specialInstructions: `Payment completed via wallet deposit. Ready for delivery.`,
+                generatedById: user.id,
+              },
+            })
+
+            await tx.purchase.update({
+              where: { id: purchase.id },
+              data: { deliveryStatus: "SCHEDULED" },
+            })
+          }
+        }
+      }
     })
 
     await createAuditLog({
@@ -305,12 +429,15 @@ export async function shopAdminConfirmDeposit(
       entityType: "WALLET_TRANSACTION",
       entityId: transactionId,
       metadata: {
-        customer: `${transaction.customer.firstName} ${transaction.customer.lastName}`,
+        customer: `${customer.firstName} ${customer.lastName}`,
         amount: Number(transaction.amount),
+        paymentsApplied: paymentsApplied.length > 0 ? paymentsApplied : undefined,
       },
     })
 
     revalidatePath(`/shop-admin/${shopSlug}/wallet`)
+    revalidatePath(`/shop-admin/${shopSlug}/customers`)
+    revalidatePath(`/shop-admin/${shopSlug}/pending-payments`)
     return { success: true }
   } catch (error) {
     console.error("Error confirming deposit:", error)

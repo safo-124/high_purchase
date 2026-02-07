@@ -320,9 +320,15 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
     
     const result = await getBusinessCustomerPurchases(businessSlug, customer.id)
     if (result.success && result.data) {
-      setPaymentModal(prev => ({ ...prev, purchases: result.data as Purchase[], loading: false }))
-      if (result.data.length > 0) {
-        setSelectedPurchaseId(result.data[0].id)
+      const purchases = result.data as Purchase[]
+      setPaymentModal(prev => ({ ...prev, purchases, loading: false }))
+      if (purchases.length > 1) {
+        // Default to "all" if multiple purchases
+        setSelectedPurchaseId("all")
+        const totalOutstanding = purchases.reduce((sum, p) => sum + p.outstandingBalance, 0)
+        setPaymentAmount(totalOutstanding.toString())
+      } else if (purchases.length > 0) {
+        setSelectedPurchaseId(purchases[0].id)
       }
     } else {
       toast.error(result.error || "Failed to load purchases")
@@ -342,7 +348,54 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
       return
     }
 
-    // Prevent overpayment
+    // Handle "all purchases" selection
+    if (selectedPurchaseId === "all") {
+      const totalOutstanding = paymentModal.purchases.reduce((sum, p) => sum + p.outstandingBalance, 0)
+      if (amount > totalOutstanding) {
+        toast.error(`Amount cannot exceed total outstanding balance of ₵${totalOutstanding.toLocaleString()}`)
+        return
+      }
+      
+      startTransition(async () => {
+        let remainingAmount = amount
+        let successCount = 0
+        let errorMessage = ""
+        
+        // Apply payments to purchases in order (oldest first based on order in array)
+        for (const purchase of paymentModal.purchases) {
+          if (remainingAmount <= 0) break
+          
+          const paymentForThis = Math.min(remainingAmount, purchase.outstandingBalance)
+          if (paymentForThis <= 0) continue
+          
+          const result = await recordPaymentAsBusinessAdmin(businessSlug, {
+            purchaseId: purchase.id,
+            amount: paymentForThis,
+            paymentMethod,
+            reference: paymentReference ? `${paymentReference} (${purchase.purchaseNumber})` : undefined,
+          })
+          
+          if (result.success) {
+            successCount++
+            remainingAmount -= paymentForThis
+          } else {
+            errorMessage = result.error || "Failed to record payment"
+            break
+          }
+        }
+        
+        if (successCount > 0) {
+          toast.success(`Payment applied to ${successCount} purchase(s)`)
+          setPaymentModal({ open: false, customer: null, purchases: [], loading: false })
+          router.refresh()
+        } else if (errorMessage) {
+          toast.error(errorMessage)
+        }
+      })
+      return
+    }
+
+    // Single purchase payment
     const selectedPurchase = paymentModal.purchases.find(p => p.id === selectedPurchaseId)
     if (selectedPurchase && amount > selectedPurchase.outstandingBalance) {
       toast.error(`Amount cannot exceed outstanding balance of ₵${selectedPurchase.outstandingBalance.toLocaleString()}`)
@@ -1009,16 +1062,28 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                   <div className="flex gap-2">
                     <select
                       value={selectedPurchaseId}
-                      onChange={(e) => setSelectedPurchaseId(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedPurchaseId(e.target.value)
+                        // Auto-set max amount when "all" is selected
+                        if (e.target.value === "all") {
+                          const totalOutstanding = paymentModal.purchases.reduce((sum, p) => sum + p.outstandingBalance, 0)
+                          setPaymentAmount(totalOutstanding.toString())
+                        }
+                      }}
                       className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
                     >
+                      {paymentModal.purchases.length > 1 && (
+                        <option value="all" className="bg-slate-800">
+                          📦 All Purchases - Total Outstanding: ₵{paymentModal.purchases.reduce((sum, p) => sum + p.outstandingBalance, 0).toLocaleString()}
+                        </option>
+                      )}
                       {paymentModal.purchases.map((purchase) => (
                         <option key={purchase.id} value={purchase.id} className="bg-slate-800">
                           {purchase.purchaseNumber} - Outstanding: ₵{purchase.outstandingBalance.toLocaleString()}
                         </option>
                       ))}
                     </select>
-                    {selectedPurchaseId && paymentModal.customer && (
+                    {selectedPurchaseId && selectedPurchaseId !== "all" && paymentModal.customer && (
                       <button
                         onClick={() => {
                           setPaymentModal({ open: false, customer: null, purchases: [], loading: false })
@@ -1034,9 +1099,14 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                       </button>
                     )}
                   </div>
-                  {selectedPurchaseId && (
+                  {selectedPurchaseId && selectedPurchaseId !== "all" && (
                     <div className="mt-2 text-xs text-slate-500">
                       {paymentModal.purchases.find(p => p.id === selectedPurchaseId)?.items.map(i => `${i.productName} ×${i.quantity}`).join(", ")}
+                    </div>
+                  )}
+                  {selectedPurchaseId === "all" && (
+                    <div className="mt-2 text-xs text-slate-500">
+                      {paymentModal.purchases.length} purchases: {paymentModal.purchases.map(p => p.purchaseNumber).join(", ")}
                     </div>
                   )}
                 </div>
@@ -1052,8 +1122,9 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                       type="number"
                       value={paymentAmount}
                       onChange={(e) => {
-                        const selectedPurchase = paymentModal.purchases.find(p => p.id === selectedPurchaseId)
-                        const maxAmount = selectedPurchase?.outstandingBalance || 0
+                        const maxAmount = selectedPurchaseId === "all" 
+                          ? paymentModal.purchases.reduce((sum, p) => sum + p.outstandingBalance, 0)
+                          : (paymentModal.purchases.find(p => p.id === selectedPurchaseId)?.outstandingBalance || 0)
                         const value = parseFloat(e.target.value)
                         if (!isNaN(value) && value > maxAmount) {
                           setPaymentAmount(maxAmount.toString())
@@ -1063,14 +1134,18 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                       }}
                       placeholder="0.00"
                       min="0"
-                      max={paymentModal.purchases.find(p => p.id === selectedPurchaseId)?.outstandingBalance || undefined}
+                      max={selectedPurchaseId === "all" 
+                        ? paymentModal.purchases.reduce((sum, p) => sum + p.outstandingBalance, 0) 
+                        : (paymentModal.purchases.find(p => p.id === selectedPurchaseId)?.outstandingBalance || undefined)}
                       step="0.01"
                       className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
                     />
                   </div>
                   {selectedPurchaseId && (
                     <p className="mt-1 text-xs text-slate-500">
-                      Max: ₵{paymentModal.purchases.find(p => p.id === selectedPurchaseId)?.outstandingBalance.toLocaleString() || "0"}
+                      Max: ₵{selectedPurchaseId === "all" 
+                        ? paymentModal.purchases.reduce((sum, p) => sum + p.outstandingBalance, 0).toLocaleString() 
+                        : (paymentModal.purchases.find(p => p.id === selectedPurchaseId)?.outstandingBalance.toLocaleString() || "0")}
                     </p>
                   )}
                 </div>

@@ -4605,10 +4605,41 @@ export async function confirmBusinessPayment(
       },
     })
 
+    // Credit customer wallet with the confirmed payment amount
+    // This increases their wallet balance (reduces the negative balance from purchase debt)
+    const customer = purchase.customer
+    const currentWalletBalance = Number(customer.walletBalance || 0)
+    const paymentAmount = Number(payment.amount)
+    const newWalletBalance = currentWalletBalance + paymentAmount
+
+    await prisma.customer.update({
+      where: { id: customer.id },
+      data: {
+        walletBalance: newWalletBalance,
+      },
+    })
+
+    // Create wallet transaction record for the payment credit
+    await prisma.walletTransaction.create({
+      data: {
+        customerId: customer.id,
+        shopId: customer.shopId,
+        type: "DEPOSIT",
+        amount: paymentAmount,
+        balanceBefore: currentWalletBalance,
+        balanceAfter: newWalletBalance,
+        status: "CONFIRMED",
+        description: `Payment confirmed for ${purchase.purchaseNumber}`,
+        reference: purchase.purchaseNumber,
+        confirmedAt: new Date(),
+      },
+    })
+
     // Generate Progress Invoice for this payment
     const year = new Date().getFullYear()
-    const invoiceCount = await prisma.progressInvoice.count()
-    const invoiceNumber = `INV-${year}-${String(invoiceCount + 1).padStart(6, "0")}`
+    const timestamp = Date.now().toString(36).toUpperCase()
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+    const invoiceNumber = `INV-${year}-${timestamp}${random}`
 
     // Get collector info if available
     let collectorName: string | null = null
@@ -5307,6 +5338,42 @@ export async function createBusinessSale(
 
       return newPurchase
     })
+
+    // For LAYAWAY/CREDIT purchases, debit the outstanding amount from wallet (as debt)
+    // This creates a negative wallet balance representing what the customer owes
+    if (payload.purchaseType !== "CASH" && outstandingBalance > 0) {
+      const customerForDebt = await prisma.customer.findUnique({
+        where: { id: customer.id },
+        select: { walletBalance: true },
+      })
+      
+      const currentWalletBalance = Number(customerForDebt?.walletBalance || 0)
+      const newWalletBalance = currentWalletBalance - outstandingBalance
+      
+      // Deduct outstanding amount from wallet (will go negative)
+      await prisma.customer.update({
+        where: { id: customer.id },
+        data: {
+          walletBalance: newWalletBalance,
+        },
+      })
+
+      // Create wallet transaction record for the debt
+      await prisma.walletTransaction.create({
+        data: {
+          customerId: customer.id,
+          shopId: shop.id,
+          type: "PURCHASE",
+          amount: outstandingBalance,
+          balanceBefore: currentWalletBalance,
+          balanceAfter: newWalletBalance,
+          status: "CONFIRMED",
+          description: `${payload.purchaseType} purchase debt for ${purchaseNumber}`,
+          reference: purchaseNumber,
+          confirmedAt: new Date(),
+        },
+      })
+    }
 
     // Create audit log with all product info
     const productNames = payload.items.map(item => item.productName).join(", ")

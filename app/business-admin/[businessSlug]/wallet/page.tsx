@@ -31,17 +31,31 @@ export default async function WalletPage({ params }: Props) {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <div className="glass-card p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Wallet Balance</p>
-          <p className="text-2xl font-bold text-green-400">
-            GHS {summary.totalWalletBalance.toLocaleString()}
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Net Balance</p>
+          {(() => {
+            const netBalance = summary.totalWalletBalance - summary.totalOutstanding
+            return (
+              <>
+                <p className={`text-2xl font-bold ${netBalance >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  GHS {netBalance.toLocaleString()}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">{netBalance >= 0 ? "Credit" : "Owed to business"}</p>
+              </>
+            )
+          })()}
+        </div>
+        <div className="glass-card p-4">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Outstanding</p>
+          <p className="text-2xl font-bold text-amber-400">
+            GHS {summary.totalOutstanding.toLocaleString()}
           </p>
-          <p className="text-xs text-slate-500 mt-1">{summary.customersWithBalance} customers</p>
+          <p className="text-xs text-slate-500 mt-1">{summary.customersWithOutstanding} customers owe</p>
         </div>
         <div className="glass-card p-4">
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Pending Confirmations</p>
-          <p className="text-2xl font-bold text-amber-400">{summary.pendingTransactions}</p>
+          <p className="text-2xl font-bold text-purple-400">{summary.pendingTransactions}</p>
           <p className="text-xs text-slate-500 mt-1">Awaiting approval</p>
         </div>
         <div className="glass-card p-4">

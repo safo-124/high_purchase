@@ -277,14 +277,18 @@ export function WalletContent({
                 <tr className="border-b border-white/5">
                   <th className="text-left px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Customer</th>
                   <th className="text-left px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Shop</th>
-                  <th className="text-right px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Balance</th>
+                  <th className="text-right px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Net Balance</th>
+                  <th className="text-right px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Outstanding</th>
                   <th className="text-right px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Pending</th>
                   <th className="text-right px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Total Deposited</th>
                   <th className="text-right px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {filteredCustomers.map((c) => (
+                {filteredCustomers.map((c) => {
+                  // Net balance = deposits - outstanding (negative means they owe money)
+                  const netBalance = c.walletBalance - c.totalOutstanding
+                  return (
                   <tr key={c.id} className="hover:bg-white/[0.02]">
                     <td className="px-6 py-4">
                       <div>
@@ -294,9 +298,27 @@ export function WalletContent({
                     </td>
                     <td className="px-6 py-4 text-slate-300">{c.shopName}</td>
                     <td className="px-6 py-4 text-right">
-                      <span className={`font-semibold ${c.walletBalance > 0 ? "text-green-400" : "text-slate-500"}`}>
-                        {formatCurrency(c.walletBalance)}
-                      </span>
+                      <div>
+                        <span className={`font-semibold ${netBalance > 0 ? "text-green-400" : netBalance < 0 ? "text-red-400" : "text-slate-500"}`}>
+                          {formatCurrency(netBalance)}
+                        </span>
+                        {netBalance < 0 && (
+                          <p className="text-xs text-red-400/70">owes</p>
+                        )}
+                        {netBalance > 0 && (
+                          <p className="text-xs text-green-400/70">credit</p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {c.totalOutstanding > 0 ? (
+                        <div>
+                          <span className="font-semibold text-amber-400">{formatCurrency(c.totalOutstanding)}</span>
+                          <p className="text-xs text-slate-500">{c.activePurchases} purchase{c.activePurchases !== 1 ? "s" : ""}</p>
+                        </div>
+                      ) : (
+                        <span className="text-green-400 text-sm">Cleared</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       {c.pendingDeposits > 0 ? (
@@ -315,7 +337,7 @@ export function WalletContent({
                       </button>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>

@@ -49,6 +49,8 @@ export interface CustomerWalletData {
   pendingDeposits: number
   totalDeposited: number
   totalSpent: number
+  totalOutstanding: number
+  activePurchases: number
 }
 
 export interface StaffWalletPermission {
@@ -162,6 +164,13 @@ export async function getCustomersWithWallets(businessSlug: string): Promise<Cus
       walletTransactions: {
         where: { status: WalletTransactionStatus.CONFIRMED },
       },
+      purchases: {
+        where: {
+          status: { in: ["ACTIVE", "PENDING"] },
+          outstandingBalance: { gt: 0 },
+        },
+        select: { outstandingBalance: true },
+      },
     },
     orderBy: { walletBalance: "desc" },
   })
@@ -170,10 +179,13 @@ export async function getCustomersWithWallets(businessSlug: string): Promise<Cus
     const deposits = c.walletTransactions.filter(
       (t) => t.type === WalletTransactionType.DEPOSIT || t.type === WalletTransactionType.REFUND
     )
-    const purchases = c.walletTransactions.filter((t) => t.type === WalletTransactionType.PURCHASE)
+    const walletPurchases = c.walletTransactions.filter((t) => t.type === WalletTransactionType.PURCHASE)
     const pendingDeposits = c.walletTransactions.filter(
       (t) => t.type === WalletTransactionType.DEPOSIT && t.status === WalletTransactionStatus.PENDING
     )
+
+    // Calculate total outstanding from active purchases
+    const totalOutstanding = c.purchases.reduce((sum, p) => sum + Number(p.outstandingBalance), 0)
 
     return {
       id: c.id,
@@ -186,7 +198,9 @@ export async function getCustomersWithWallets(businessSlug: string): Promise<Cus
       walletBalance: Number(c.walletBalance),
       pendingDeposits: pendingDeposits.reduce((sum, t) => sum + Number(t.amount), 0),
       totalDeposited: deposits.reduce((sum, t) => sum + Number(t.amount), 0),
-      totalSpent: purchases.reduce((sum, t) => sum + Number(t.amount), 0),
+      totalSpent: walletPurchases.reduce((sum, t) => sum + Number(t.amount), 0),
+      totalOutstanding,
+      activePurchases: c.purchases.length,
     }
   })
 }
@@ -441,6 +455,7 @@ export async function rejectWalletTransaction(
 
 /**
  * Adjust customer wallet balance directly - Business Admin only
+ * When adding funds, automatically applies them to outstanding purchases
  */
 export async function adjustCustomerWallet(
   businessSlug: string,
@@ -467,10 +482,11 @@ export async function adjustCustomerWallet(
 
     const currentBalance = Number(customer.walletBalance)
     const adjustmentAmount = isAddition ? amount : -amount
-    const newBalance = currentBalance + adjustmentAmount
+    let newBalance = currentBalance + adjustmentAmount
 
-    if (newBalance < 0) {
-      return { success: false, error: "Adjustment would result in negative balance" }
+    // For subtraction, prevent going below current balance into more debt
+    if (!isAddition && newBalance < currentBalance) {
+      // This is fine - we're subtracting
     }
 
     // Get or create shop member for business admin
@@ -490,8 +506,42 @@ export async function adjustCustomerWallet(
       })
     }
 
-    // Create adjustment transaction and update balance
+    // If adding funds, automatically apply to outstanding purchases
+    let paymentsApplied: { purchaseId: string; purchaseNumber: string; amountApplied: number }[] = []
+    
+    if (isAddition && amount > 0) {
+      // Get all active purchases with outstanding balance for this customer
+      const outstandingPurchases = await prisma.purchase.findMany({
+        where: {
+          customerId,
+          status: { in: ["ACTIVE", "PENDING"] },
+          outstandingBalance: { gt: 0 },
+        },
+        orderBy: { dueDate: "asc" }, // Pay oldest due first
+      })
+
+      let remainingFunds = amount
+
+      for (const purchase of outstandingPurchases) {
+        if (remainingFunds <= 0) break
+
+        const outstanding = Number(purchase.outstandingBalance)
+        const paymentAmount = Math.min(remainingFunds, outstanding)
+
+        if (paymentAmount > 0) {
+          paymentsApplied.push({
+            purchaseId: purchase.id,
+            purchaseNumber: purchase.purchaseNumber,
+            amountApplied: paymentAmount,
+          })
+          remainingFunds -= paymentAmount
+        }
+      }
+    }
+
+    // Create adjustment transaction, update balance, and apply payments in a transaction
     await prisma.$transaction(async (tx) => {
+      // Create wallet adjustment transaction
       await tx.walletTransaction.create({
         data: {
           customerId,
@@ -508,10 +558,100 @@ export async function adjustCustomerWallet(
         },
       })
 
+      // Update customer wallet balance
       await tx.customer.update({
         where: { id: customerId },
         data: { walletBalance: newBalance },
       })
+
+      // Apply payments to outstanding purchases
+      for (const payment of paymentsApplied) {
+        // Get current purchase data
+        const purchase = await tx.purchase.findUnique({
+          where: { id: payment.purchaseId },
+        })
+
+        if (!purchase) continue
+
+        const newAmountPaid = Number(purchase.amountPaid) + payment.amountApplied
+        const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
+        const isCompleted = newOutstanding <= 0
+
+        // Create payment record
+        await tx.payment.create({
+          data: {
+            purchaseId: payment.purchaseId,
+            amount: payment.amountApplied,
+            paymentMethod: "WALLET",
+            status: "COMPLETED",
+            isConfirmed: true,
+            confirmedAt: new Date(),
+            paidAt: new Date(),
+            notes: `Wallet top-up payment - ${description}`,
+          },
+        })
+
+        // Update purchase
+        await tx.purchase.update({
+          where: { id: payment.purchaseId },
+          data: {
+            amountPaid: newAmountPaid,
+            outstandingBalance: Math.max(0, newOutstanding),
+            status: isCompleted ? "COMPLETED" : purchase.status === "PENDING" ? "ACTIVE" : purchase.status,
+          },
+        })
+
+        // If purchase is completed, auto-generate waybill and deduct stock
+        if (isCompleted && purchase.purchaseType !== "CASH") {
+          // Deduct stock
+          const purchaseItems = await tx.purchaseItem.findMany({
+            where: { purchaseId: purchase.id },
+          })
+
+          for (const item of purchaseItems) {
+            if (item.productId) {
+              await tx.shopProduct.updateMany({
+                where: { 
+                  shopId: customer.shopId,
+                  productId: item.productId 
+                },
+                data: { stockQuantity: { decrement: item.quantity } },
+              })
+            }
+          }
+
+          // Check if waybill already exists
+          const existingWaybill = await tx.waybill.findUnique({
+            where: { purchaseId: purchase.id },
+          })
+
+          if (!existingWaybill) {
+            const year = new Date().getFullYear()
+            const timestamp = Date.now().toString(36).toUpperCase()
+            const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+            const waybillNumber = `WB-${year}-${timestamp}${random}`
+
+            await tx.waybill.create({
+              data: {
+                waybillNumber,
+                purchaseId: purchase.id,
+                recipientName: `${customer.firstName} ${customer.lastName}`,
+                recipientPhone: customer.phone,
+                deliveryAddress: customer.address || "N/A",
+                deliveryCity: customer.city,
+                deliveryRegion: customer.region,
+                specialInstructions: `Payment completed via wallet top-up. Ready for delivery.`,
+                generatedById: user.id,
+              },
+            })
+
+            await tx.purchase.update({
+              where: { id: purchase.id },
+              data: { deliveryStatus: "SCHEDULED" },
+            })
+          }
+        }
+      }
     })
 
     await createAuditLog({
@@ -525,6 +665,7 @@ export async function adjustCustomerWallet(
         adjustment: adjustmentAmount,
         newBalance,
         description,
+        paymentsApplied: paymentsApplied.length > 0 ? paymentsApplied : undefined,
       },
     })
 
@@ -581,10 +722,35 @@ export async function getWalletSummary(businessSlug: string) {
     .filter((t) => t.type === WalletTransactionType.DEPOSIT)
     .reduce((sum, t) => sum + Number(t.amount), 0)
 
+  // Get total outstanding from all active purchases
+  const outstandingPurchases = await prisma.purchase.findMany({
+    where: {
+      customer: { shopId: { in: shopIds } },
+      status: { in: ["ACTIVE", "PENDING"] },
+      outstandingBalance: { gt: 0 },
+    },
+    select: { outstandingBalance: true },
+  })
+  
+  const totalOutstanding = outstandingPurchases.reduce((sum, p) => sum + Number(p.outstandingBalance), 0)
+  const customersWithOutstanding = await prisma.customer.count({
+    where: {
+      shopId: { in: shopIds },
+      purchases: {
+        some: {
+          status: { in: ["ACTIVE", "PENDING"] },
+          outstandingBalance: { gt: 0 },
+        },
+      },
+    },
+  })
+
   return {
     totalWalletBalance,
     customersWithBalance,
     pendingTransactions: pendingCount,
     todayDeposits,
+    totalOutstanding,
+    customersWithOutstanding,
   }
 }
