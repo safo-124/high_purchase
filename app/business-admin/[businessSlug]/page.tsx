@@ -3,6 +3,7 @@ import { requireBusinessAdmin } from "../../../lib/auth"
 import { getBusinessStats, getBusinessShops } from "../actions"
 import { CreateShopDialog } from "./create-shop-dialog"
 import { ShopActions } from "./shop-actions"
+import { DashboardContent } from "./dashboard-content"
 
 interface Props {
   params: Promise<{ businessSlug: string }>
@@ -17,11 +18,17 @@ export default async function BusinessDashboard({ params }: Props) {
   return (
     <div className="p-8">
       {/* Business Header */}
-      <div className="glass-card p-6 mb-8">
-        <div className="flex items-center gap-6">
+      <div className="glass-card p-6 mb-8 relative overflow-hidden">
+        {/* Animated Background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-24 -right-24 w-64 h-64 bg-gradient-to-br from-cyan-500/10 to-blue-500/5 rounded-full blur-3xl" />
+          <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-gradient-to-br from-purple-500/10 to-pink-500/5 rounded-full blur-3xl" />
+        </div>
+        
+        <div className="relative z-10 flex items-center gap-6">
           {/* Logo */}
           {business.logoUrl ? (
-            <div className="w-20 h-20 rounded-2xl overflow-hidden bg-white/10 border-2 border-white/20 shadow-lg shadow-cyan-500/10 flex-shrink-0">
+            <div className="w-20 h-20 rounded-2xl overflow-hidden bg-white/10 border-2 border-white/20 shadow-lg shadow-cyan-500/10 flex-shrink-0 ring-4 ring-cyan-500/20">
               <Image
                 src={business.logoUrl}
                 alt={business.name}
@@ -91,118 +98,34 @@ export default async function BusinessDashboard({ params }: Props) {
       </div>
 
       {/* Welcome Section */}
-      <div className="mb-10">
+      <div className="mb-8">
         <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">
-            Welcome back, <span className="text-gradient">{user.name?.split(' ')[0]}</span>
+            Welcome back, <span className="text-gradient">{user.name?.split(' ')[0]}</span> 👋
           </h2>
           <p className="text-slate-400">
-            Manage your shops and view business performance.
+            Here&apos;s an overview of your business performance and analytics.
           </p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-          {/* Total Shops */}
-          <div className="glass-card stat-card stat-card-purple p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl icon-container flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-              <span className="text-xs text-slate-500 bg-white/5 px-2 py-1 rounded-full">Shops</span>
-            </div>
-            <div className="mb-2">
-              <span className="text-5xl font-bold text-white">{stats.totalShops}</span>
-            </div>
-            <p className="text-slate-400 text-sm">Total Shops</p>
-            <div className="mt-4 pt-4 border-t border-white/5">
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                </svg>
-                Your retail locations
-              </div>
-            </div>
-          </div>
-
-          {/* Active Shops */}
-          <div className="glass-card stat-card stat-card-green p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/15 border border-green-500/30 flex items-center justify-center">
-                <svg className="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <span className="text-xs text-green-400/80 bg-green-500/10 px-2 py-1 rounded-full border border-green-500/20">Active</span>
-            </div>
-            <div className="mb-2">
-              <span className="text-5xl font-bold text-green-400">{stats.activeShops}</span>
-            </div>
-            <p className="text-slate-400 text-sm">Active Shops</p>
-            <div className="mt-4 pt-4 border-t border-white/5">
-              <div className="flex items-center gap-2 text-xs text-green-400/70">
-                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                Operational
-              </div>
-            </div>
-          </div>
-
-          {/* Total Products */}
-          <div className="glass-card stat-card p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/15 border border-blue-500/30 flex items-center justify-center">
-                <svg className="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                </svg>
-              </div>
-              <span className="text-xs text-blue-400/80 bg-blue-500/10 px-2 py-1 rounded-full border border-blue-500/20">Products</span>
-            </div>
-            <div className="mb-2">
-              <span className="text-5xl font-bold text-blue-400">{stats.totalProducts}</span>
-            </div>
-            <p className="text-slate-400 text-sm">Total Products</p>
-            <div className="mt-4 pt-4 border-t border-white/5">
-              <div className="flex items-center gap-2 text-xs text-blue-400/70">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4" />
-                </svg>
-                Across all shops
-              </div>
-            </div>
-          </div>
-
-          {/* Total Customers */}
-          <div className="glass-card stat-card p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-500/15 border border-amber-500/30 flex items-center justify-center">
-                <svg className="w-6 h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-              <span className="text-xs text-amber-400/80 bg-amber-500/10 px-2 py-1 rounded-full border border-amber-500/20">Customers</span>
-            </div>
-            <div className="mb-2">
-              <span className="text-5xl font-bold text-amber-400">{stats.totalCustomers}</span>
-            </div>
-            <p className="text-slate-400 text-sm">Total Customers</p>
-            <div className="mt-4 pt-4 border-t border-white/5">
-              <div className="flex items-center gap-2 text-xs text-amber-400/70">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-                Across all shops
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Dashboard Analytics */}
+        <DashboardContent 
+          stats={stats} 
+          businessName={business.name}
+          currency={'GHS'}
+        />
 
         {/* Shops Section */}
+        <div className="mt-10">
         <div className="glass-card overflow-hidden">
-          <div className="p-6 border-b border-white/5">
+          <div className="p-6 border-b border-white/5 bg-gradient-to-r from-purple-500/5 to-transparent">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
-                <h3 className="text-lg font-semibold text-white">Your Shops</h3>
+                <h3 className="text-xl font-semibold text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                  Your Shops
+                </h3>
                 <p className="text-sm text-slate-400">{shops.length} shop{shops.length !== 1 ? "s" : ""} in this business</p>
               </div>
               <CreateShopDialog businessSlug={businessSlug} />
@@ -295,6 +218,7 @@ export default async function BusinessDashboard({ params }: Props) {
               </table>
             </div>
           )}
+        </div>
         </div>
       </div>
   )

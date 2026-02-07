@@ -877,19 +877,153 @@ export async function deleteShop(businessSlug: string, shopId: string): Promise<
 export async function getBusinessStats(businessSlug: string) {
   const { business } = await requireBusinessAdmin(businessSlug)
 
-  const [shopCount, activeShops, totalProducts, totalCustomers, totalPurchases] = await Promise.all([
+  // Get date ranges for analytics
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfWeek = new Date(now)
+  startOfWeek.setDate(now.getDate() - now.getDay())
+  startOfWeek.setHours(0, 0, 0, 0)
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const startOfYear = new Date(now.getFullYear(), 0, 1)
+  
+  // Get last 6 months for revenue chart
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+
+  const [
+    shopCount, 
+    activeShops, 
+    totalProducts, 
+    totalCustomers, 
+    totalPurchases,
+    totalStaff,
+    purchases,
+    payments,
+    recentCustomers,
+    monthlyPurchases
+  ] = await Promise.all([
     prisma.shop.count({ where: { businessId: business.id } }),
     prisma.shop.count({ where: { businessId: business.id, isActive: true } }),
-    prisma.product.count({ 
-      where: { businessId: business.id } 
+    prisma.product.count({ where: { businessId: business.id } }),
+    prisma.customer.count({ where: { shop: { businessId: business.id } } }),
+    prisma.purchase.count({ where: { customer: { shop: { businessId: business.id } } } }),
+    prisma.shopMember.count({ where: { shop: { businessId: business.id }, isActive: true } }),
+    // Get all purchases for analytics
+    prisma.purchase.findMany({
+      where: { customer: { shop: { businessId: business.id } } },
+      select: {
+        id: true,
+        totalAmount: true,
+        purchaseType: true,
+        status: true,
+        createdAt: true,
+        dueDate: true,
+      }
     }),
-    prisma.customer.count({ 
-      where: { shop: { businessId: business.id } } 
+    // Get all payments for analytics
+    prisma.payment.findMany({
+      where: { 
+        purchase: { customer: { shop: { businessId: business.id } } },
+        isConfirmed: true 
+      },
+      select: {
+        amount: true,
+        createdAt: true,
+        paymentMethod: true,
+      }
     }),
-    prisma.purchase.count({ 
-      where: { customer: { shop: { businessId: business.id } } } 
+    // Get recent customers (last 30 days)
+    prisma.customer.count({
+      where: {
+        shop: { businessId: business.id },
+        createdAt: { gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) }
+      }
     }),
+    // Get monthly purchases for the last 6 months
+    prisma.purchase.groupBy({
+      by: ['createdAt'],
+      where: {
+        customer: { shop: { businessId: business.id } },
+        createdAt: { gte: sixMonthsAgo }
+      },
+      _sum: { totalAmount: true },
+      _count: true,
+    })
   ])
+
+  // Calculate revenue metrics
+  const totalRevenue = purchases.reduce((sum, p) => sum + Number(p.totalAmount), 0)
+  const totalCollected = payments.reduce((sum, p) => sum + Number(p.amount), 0)
+  const totalOutstanding = totalRevenue - totalCollected
+
+  // Calculate today's revenue
+  const todayPayments = payments.filter(p => new Date(p.createdAt) >= startOfToday)
+  const todayRevenue = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0)
+
+  // Calculate this week's revenue
+  const weekPayments = payments.filter(p => new Date(p.createdAt) >= startOfWeek)
+  const weekRevenue = weekPayments.reduce((sum, p) => sum + Number(p.amount), 0)
+
+  // Calculate this month's revenue
+  const monthPayments = payments.filter(p => new Date(p.createdAt) >= startOfMonth)
+  const monthRevenue = monthPayments.reduce((sum, p) => sum + Number(p.amount), 0)
+
+  // Sale type distribution for pie chart
+  const cashSales = purchases.filter(p => p.purchaseType === "CASH").length
+  const creditSales = purchases.filter(p => p.purchaseType === "CREDIT").length
+  const layawaySales = purchases.filter(p => p.purchaseType === "LAYAWAY").length
+
+  // Status distribution
+  const activePurchases = purchases.filter(p => p.status === "ACTIVE").length
+  const completedPurchases = purchases.filter(p => p.status === "COMPLETED").length
+  const overduePurchases = purchases.filter(p => p.status === "ACTIVE" && p.dueDate && new Date(p.dueDate) < now).length
+
+  // Payment method distribution
+  const cashPayments = payments.filter(p => p.paymentMethod === "CASH").length
+  const mobilePayments = payments.filter(p => p.paymentMethod === "MOBILE_MONEY").length
+  const bankPayments = payments.filter(p => p.paymentMethod === "BANK_TRANSFER").length
+  const walletPayments = payments.filter(p => p.paymentMethod === "WALLET").length
+
+  // Monthly revenue data for chart (last 6 months)
+  const monthlyData: { month: string; revenue: number; payments: number }[] = []
+  for (let i = 5; i >= 0; i--) {
+    const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59)
+    const monthName = monthStart.toLocaleString('default', { month: 'short' })
+    
+    const monthPaymentsData = payments.filter(p => {
+      const date = new Date(p.createdAt)
+      return date >= monthStart && date <= monthEnd
+    })
+    
+    const monthPurchasesData = purchases.filter(p => {
+      const date = new Date(p.createdAt)
+      return date >= monthStart && date <= monthEnd
+    })
+    
+    monthlyData.push({
+      month: monthName,
+      revenue: monthPaymentsData.reduce((sum, p) => sum + Number(p.amount), 0),
+      payments: monthPurchasesData.length
+    })
+  }
+
+  // Calculate growth percentages
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59)
+  const twoMonthsAgoStart = new Date(now.getFullYear(), now.getMonth() - 2, 1)
+  const twoMonthsAgoEnd = new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59)
+
+  const lastMonthRevenue = payments
+    .filter(p => new Date(p.createdAt) >= lastMonthStart && new Date(p.createdAt) <= lastMonthEnd)
+    .reduce((sum, p) => sum + Number(p.amount), 0)
+  
+  const twoMonthsAgoRevenue = payments
+    .filter(p => new Date(p.createdAt) >= twoMonthsAgoStart && new Date(p.createdAt) <= twoMonthsAgoEnd)
+    .reduce((sum, p) => sum + Number(p.amount), 0)
+
+  const revenueGrowth = twoMonthsAgoRevenue > 0 
+    ? ((lastMonthRevenue - twoMonthsAgoRevenue) / twoMonthsAgoRevenue) * 100 
+    : 0
 
   return {
     totalShops: shopCount,
@@ -898,6 +1032,38 @@ export async function getBusinessStats(businessSlug: string) {
     totalProducts,
     totalCustomers,
     totalPurchases,
+    totalStaff,
+    // Revenue metrics
+    totalRevenue,
+    totalCollected,
+    totalOutstanding,
+    todayRevenue,
+    weekRevenue,
+    monthRevenue,
+    revenueGrowth: Math.round(revenueGrowth * 10) / 10,
+    // Recent activity
+    recentCustomers,
+    // Sale type distribution (for pie chart)
+    saleTypeDistribution: {
+      cash: cashSales,
+      credit: creditSales,
+      layaway: layawaySales,
+    },
+    // Status distribution
+    statusDistribution: {
+      active: activePurchases,
+      completed: completedPurchases,
+      overdue: overduePurchases,
+    },
+    // Payment method distribution (for pie chart)
+    paymentMethodDistribution: {
+      cash: cashPayments,
+      mobileMoney: mobilePayments,
+      bank: bankPayments,
+      wallet: walletPayments,
+    },
+    // Monthly data for line chart
+    monthlyData,
   }
 }
 
@@ -7048,69 +7214,236 @@ export async function getBusinessDailyReports(
   const shopIds = shops.map((s) => s.id)
   const shopMap = new Map(shops.map((s) => [s.id, { name: s.name, slug: s.shopSlug }]))
 
-  const where: Prisma.DailyReportWhereInput = {
-    shopId: filters?.shopId ? filters.shopId : { in: shopIds },
-  }
+  // Get date range - default to last 30 days
+  const endDate = filters?.endDate ? new Date(filters.endDate) : new Date()
+  const startDate = filters?.startDate ? new Date(filters.startDate) : new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000)
+  startDate.setHours(0, 0, 0, 0)
+  endDate.setHours(23, 59, 59, 999)
 
-  if (filters?.startDate) {
-    where.reportDate = { ...where.reportDate as object, gte: new Date(filters.startDate) }
-  }
-  if (filters?.endDate) {
-    where.reportDate = { ...where.reportDate as object, lte: new Date(filters.endDate) }
-  }
-  if (filters?.reportType) {
-    where.reportType = filters.reportType
-  }
-  if (filters?.status) {
-    where.status = filters.status
-  }
-
-  const reports = await prisma.dailyReport.findMany({
-    where,
+  // Get all purchases (sales) for the date range
+  const purchases = await prisma.purchase.findMany({
+    where: {
+      customer: { shopId: filters?.shopId ? filters.shopId : { in: shopIds } },
+      createdAt: { gte: startDate, lte: endDate },
+    },
     include: {
-      shopMember: {
+      customer: {
         include: {
-          user: {
-            select: { name: true },
+          shop: { select: { id: true, name: true, shopSlug: true } },
+        },
+      },
+      items: { select: { quantity: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  // Get all payments (collections) for the date range
+  const payments = await prisma.payment.findMany({
+    where: {
+      purchase: { customer: { shopId: filters?.shopId ? filters.shopId : { in: shopIds } } },
+      isConfirmed: true,
+      createdAt: { gte: startDate, lte: endDate },
+    },
+    include: {
+      collector: {
+        include: {
+          user: { select: { id: true, name: true } },
+          shop: { select: { id: true, name: true, shopSlug: true } },
+        },
+      },
+      purchase: {
+        include: {
+          customer: {
+            include: {
+              shop: { select: { id: true, name: true, shopSlug: true } },
+            },
           },
         },
       },
     },
-    orderBy: { reportDate: "desc" },
-    take: 200,
+    orderBy: { createdAt: "desc" },
   })
 
-  // Get reviewer names in batch
-  const reviewerIds = reports.filter((r) => r.reviewedById).map((r) => r.reviewedById!)
-  const reviewers = await prisma.user.findMany({
-    where: { id: { in: reviewerIds } },
-    select: { id: true, name: true },
+  // Get new customers for the date range
+  const newCustomers = await prisma.customer.findMany({
+    where: {
+      shopId: filters?.shopId ? filters.shopId : { in: shopIds },
+      createdAt: { gte: startDate, lte: endDate },
+    },
+    select: {
+      createdAt: true,
+      shopId: true,
+    },
   })
-  const reviewerMap = new Map(reviewers.map((r) => [r.id, r.name]))
 
-  return reports.map((report) => ({
-    id: report.id,
-    reportDate: report.reportDate,
-    reportType: report.reportType,
-    status: report.status,
-    staffName: report.shopMember.user.name || "Unknown",
-    staffRole: report.shopMember.role,
-    shopName: shopMap.get(report.shopId)?.name || "Unknown Shop",
-    shopSlug: shopMap.get(report.shopId)?.slug || "",
-    totalSalesAmount: report.totalSalesAmount ? Number(report.totalSalesAmount) : null,
-    newCustomersCount: report.newCustomersCount,
-    newPurchasesCount: report.newPurchasesCount,
-    itemsSoldCount: report.itemsSoldCount,
-    customersVisited: report.customersVisited,
-    paymentsCollected: report.paymentsCollected,
-    totalCollected: report.totalCollected ? Number(report.totalCollected) : null,
-    notes: report.notes,
-    reviewedAt: report.reviewedAt,
-    reviewNotes: report.reviewNotes,
-    reviewedByName: report.reviewedById ? reviewerMap.get(report.reviewedById) || null : null,
-    createdAt: report.createdAt,
-    updatedAt: report.updatedAt,
-  }))
+  // Helper to format date as YYYY-MM-DD
+  const formatDateKey = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  // Aggregate data by date and shop
+  const activityMap = new Map<string, {
+    dateKey: string
+    date: Date
+    shopId: string
+    shopName: string
+    shopSlug: string
+    salesAmount: number
+    purchasesCount: number
+    itemsSold: number
+    collectionsAmount: number
+    paymentsCount: number
+    newCustomersCount: number
+    collectorNames: Set<string>
+  }>()
+
+  // Process purchases (sales)
+  for (const purchase of purchases) {
+    const dateKey = formatDateKey(new Date(purchase.createdAt))
+    const shop = purchase.customer.shop
+    const key = `${dateKey}-${shop.id}-SALES`
+    
+    if (!activityMap.has(key)) {
+      activityMap.set(key, {
+        dateKey,
+        date: new Date(purchase.createdAt),
+        shopId: shop.id,
+        shopName: shop.name,
+        shopSlug: shop.shopSlug,
+        salesAmount: 0,
+        purchasesCount: 0,
+        itemsSold: 0,
+        collectionsAmount: 0,
+        paymentsCount: 0,
+        newCustomersCount: 0,
+        collectorNames: new Set(),
+      })
+    }
+    
+    const activity = activityMap.get(key)!
+    activity.salesAmount += Number(purchase.totalAmount)
+    activity.purchasesCount += 1
+    activity.itemsSold += purchase.items.reduce((sum, item) => sum + item.quantity, 0)
+  }
+
+  // Process payments (collections)
+  for (const payment of payments) {
+    const dateKey = formatDateKey(new Date(payment.createdAt))
+    const shop = payment.collector?.shop || payment.purchase.customer.shop
+    const key = `${dateKey}-${shop.id}-COLLECTION`
+    
+    if (!activityMap.has(key)) {
+      activityMap.set(key, {
+        dateKey,
+        date: new Date(payment.createdAt),
+        shopId: shop.id,
+        shopName: shop.name,
+        shopSlug: shop.shopSlug,
+        salesAmount: 0,
+        purchasesCount: 0,
+        itemsSold: 0,
+        collectionsAmount: 0,
+        paymentsCount: 0,
+        newCustomersCount: 0,
+        collectorNames: new Set(),
+      })
+    }
+    
+    const activity = activityMap.get(key)!
+    activity.collectionsAmount += Number(payment.amount)
+    activity.paymentsCount += 1
+    if (payment.collector?.user.name) {
+      activity.collectorNames.add(payment.collector.user.name)
+    }
+  }
+
+  // Process new customers
+  for (const customer of newCustomers) {
+    const dateKey = formatDateKey(new Date(customer.createdAt))
+    const key = `${dateKey}-${customer.shopId}-SALES`
+    
+    if (activityMap.has(key)) {
+      activityMap.get(key)!.newCustomersCount += 1
+    }
+  }
+
+  // Convert to reports array
+  const reports: BusinessStaffDailyReportData[] = []
+  
+  for (const [key, activity] of activityMap) {
+    const isSales = key.endsWith('-SALES')
+    const isCollection = key.endsWith('-COLLECTION')
+    
+    // Skip if filtering by type
+    if (filters?.reportType === "SALES" && !isSales) continue
+    if (filters?.reportType === "COLLECTION" && !isCollection) continue
+    
+    // Create sales report
+    if (isSales && activity.salesAmount > 0) {
+      reports.push({
+        id: `auto-sales-${activity.dateKey}-${activity.shopId}`,
+        reportDate: activity.date,
+        reportType: "SALES",
+        status: "REVIEWED", // Auto-generated are considered reviewed
+        staffName: "Shop Activity",
+        staffRole: "SALES_STAFF",
+        shopName: activity.shopName,
+        shopSlug: activity.shopSlug,
+        totalSalesAmount: activity.salesAmount,
+        newCustomersCount: activity.newCustomersCount,
+        newPurchasesCount: activity.purchasesCount,
+        itemsSoldCount: activity.itemsSold,
+        customersVisited: null,
+        paymentsCollected: null,
+        totalCollected: null,
+        notes: `Auto-generated from ${activity.purchasesCount} purchase(s)`,
+        reviewedAt: null,
+        reviewNotes: null,
+        reviewedByName: null,
+        createdAt: activity.date,
+        updatedAt: activity.date,
+      })
+    }
+    
+    // Create collection report
+    if (isCollection && activity.collectionsAmount > 0) {
+      const collectorName = activity.collectorNames.size > 0 
+        ? Array.from(activity.collectorNames).join(", ")
+        : "Shop Collections"
+      
+      reports.push({
+        id: `auto-collection-${activity.dateKey}-${activity.shopId}`,
+        reportDate: activity.date,
+        reportType: "COLLECTION",
+        status: "REVIEWED",
+        staffName: collectorName,
+        staffRole: "DEBT_COLLECTOR",
+        shopName: activity.shopName,
+        shopSlug: activity.shopSlug,
+        totalSalesAmount: null,
+        newCustomersCount: null,
+        newPurchasesCount: null,
+        itemsSoldCount: null,
+        customersVisited: activity.paymentsCount,
+        paymentsCollected: activity.paymentsCount,
+        totalCollected: activity.collectionsAmount,
+        notes: `Auto-generated from ${activity.paymentsCount} payment(s)`,
+        reviewedAt: null,
+        reviewNotes: null,
+        reviewedByName: null,
+        createdAt: activity.date,
+        updatedAt: activity.date,
+      })
+    }
+  }
+
+  // Sort by date descending
+  reports.sort((a, b) => new Date(b.reportDate).getTime() - new Date(a.reportDate).getTime())
+
+  return reports
 }
 
 /**
@@ -7165,6 +7498,278 @@ export async function reviewDailyReportAsBusinessAdmin(
     console.error("Error reviewing daily report:", error)
     return { success: false, error: "Failed to review report" }
   }
+}
+
+/**
+ * Get staff activity data for calendar view
+ */
+export interface StaffActivityData {
+  id: string
+  name: string
+  email: string
+  role: string
+  shopName: string
+  shopSlug: string
+  isActive: boolean
+}
+
+export interface DayActivitySummary {
+  date: string
+  totalSales: number
+  totalCollections: number
+  salesCount: number
+  collectionsCount: number
+  newCustomers: number
+  paymentsCount: number
+  staffActivities: {
+    staffId: string
+    staffName: string
+    staffRole: string
+    shopName: string
+    salesAmount: number
+    collectionsAmount: number
+    newCustomers: number
+    paymentsCount: number
+    itemsSold: number
+  }[]
+}
+
+export async function getStaffActivityForMonth(
+  businessSlug: string,
+  year: number,
+  month: number
+): Promise<{
+  staff: StaffActivityData[]
+  dailyActivities: Record<string, DayActivitySummary>
+  monthSummary: {
+    totalSales: number
+    totalCollections: number
+    totalStaff: number
+    activeDays: number
+  }
+}> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  // Get all staff for the business
+  const staffMembers = await prisma.shopMember.findMany({
+    where: {
+      shop: { businessId: business.id },
+      role: { in: ["SALES_STAFF", "DEBT_COLLECTOR"] },
+    },
+    include: {
+      user: { select: { id: true, name: true, email: true } },
+      shop: { select: { name: true, shopSlug: true } },
+    },
+  })
+
+  const staff: StaffActivityData[] = staffMembers.map((m) => ({
+    id: m.id,
+    name: m.user.name || "Unknown",
+    email: m.user.email,
+    role: m.role,
+    shopName: m.shop.name,
+    shopSlug: m.shop.shopSlug,
+    isActive: m.isActive,
+  }))
+
+  // Get all shops for this business
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true },
+  })
+  const shopIds = shops.map((s) => s.id)
+
+  // Calculate date range for the month
+  const startDate = new Date(year, month - 1, 1)
+  const endDate = new Date(year, month, 0, 23, 59, 59)
+
+  // Get all payments for the month
+  const payments = await prisma.payment.findMany({
+    where: {
+      purchase: { customer: { shopId: { in: shopIds } } },
+      isConfirmed: true,
+      createdAt: { gte: startDate, lte: endDate },
+    },
+    select: {
+      amount: true,
+      createdAt: true,
+      collectorId: true,
+      purchase: {
+        select: {
+          customer: {
+            select: {
+              shop: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  // Get all purchases (sales) for the month
+  const purchases = await prisma.purchase.findMany({
+    where: {
+      customer: { shopId: { in: shopIds } },
+      createdAt: { gte: startDate, lte: endDate },
+    },
+    select: {
+      totalAmount: true,
+      createdAt: true,
+      customer: {
+        select: {
+          shop: { select: { id: true, name: true } },
+        },
+      },
+      items: { select: { quantity: true } },
+    },
+  })
+
+  // Get new customers for the month
+  const newCustomers = await prisma.customer.findMany({
+    where: {
+      shopId: { in: shopIds },
+      createdAt: { gte: startDate, lte: endDate },
+    },
+    select: {
+      createdAt: true,
+      shop: { select: { id: true, name: true } },
+    },
+  })
+
+  // Get daily reports for more accurate staff attribution
+  const dailyReports = await prisma.dailyReport.findMany({
+    where: {
+      shopId: { in: shopIds },
+      reportDate: { gte: startDate, lte: endDate },
+    },
+    include: {
+      shopMember: {
+        include: {
+          user: { select: { name: true } },
+          shop: { select: { name: true } },
+        },
+      },
+    },
+  })
+
+  // Build daily activities map
+  const dailyActivities: Record<string, DayActivitySummary> = {}
+
+  // Process daily reports
+  for (const report of dailyReports) {
+    const dateKey = new Date(report.reportDate).toISOString().split("T")[0]
+    
+    if (!dailyActivities[dateKey]) {
+      dailyActivities[dateKey] = {
+        date: dateKey,
+        totalSales: 0,
+        totalCollections: 0,
+        salesCount: 0,
+        collectionsCount: 0,
+        newCustomers: 0,
+        paymentsCount: 0,
+        staffActivities: [],
+      }
+    }
+
+    const activity = dailyActivities[dateKey]
+    
+    if (report.reportType === "SALES") {
+      activity.totalSales += Number(report.totalSalesAmount || 0)
+      activity.salesCount += 1
+      activity.newCustomers += report.newCustomersCount || 0
+    } else if (report.reportType === "COLLECTION") {
+      activity.totalCollections += Number(report.totalCollected || 0)
+      activity.collectionsCount += 1
+      activity.paymentsCount += report.paymentsCollected || 0
+    }
+
+    // Add staff activity
+    activity.staffActivities.push({
+      staffId: report.shopMemberId,
+      staffName: report.shopMember.user.name || "Unknown",
+      staffRole: report.shopMember.role,
+      shopName: report.shopMember.shop.name,
+      salesAmount: report.reportType === "SALES" ? Number(report.totalSalesAmount || 0) : 0,
+      collectionsAmount: report.reportType === "COLLECTION" ? Number(report.totalCollected || 0) : 0,
+      newCustomers: report.newCustomersCount || 0,
+      paymentsCount: report.paymentsCollected || 0,
+      itemsSold: report.itemsSoldCount || 0,
+    })
+  }
+
+  // If no daily reports, use raw payment/purchase data
+  for (const payment of payments) {
+    const dateKey = new Date(payment.createdAt).toISOString().split("T")[0]
+    if (!dailyActivities[dateKey]) {
+      dailyActivities[dateKey] = {
+        date: dateKey,
+        totalSales: 0,
+        totalCollections: 0,
+        salesCount: 0,
+        collectionsCount: 0,
+        newCustomers: 0,
+        paymentsCount: 0,
+        staffActivities: [],
+      }
+    }
+    // Only count if not already counted from reports
+    if (dailyActivities[dateKey].collectionsCount === 0) {
+      dailyActivities[dateKey].totalCollections += Number(payment.amount)
+      dailyActivities[dateKey].paymentsCount += 1
+    }
+  }
+
+  for (const purchase of purchases) {
+    const dateKey = new Date(purchase.createdAt).toISOString().split("T")[0]
+    if (!dailyActivities[dateKey]) {
+      dailyActivities[dateKey] = {
+        date: dateKey,
+        totalSales: 0,
+        totalCollections: 0,
+        salesCount: 0,
+        collectionsCount: 0,
+        newCustomers: 0,
+        paymentsCount: 0,
+        staffActivities: [],
+      }
+    }
+    // Only count if not already counted from reports
+    if (dailyActivities[dateKey].salesCount === 0) {
+      dailyActivities[dateKey].totalSales += Number(purchase.totalAmount)
+      dailyActivities[dateKey].salesCount += 1
+    }
+  }
+
+  for (const customer of newCustomers) {
+    const dateKey = new Date(customer.createdAt).toISOString().split("T")[0]
+    if (!dailyActivities[dateKey]) {
+      dailyActivities[dateKey] = {
+        date: dateKey,
+        totalSales: 0,
+        totalCollections: 0,
+        salesCount: 0,
+        collectionsCount: 0,
+        newCustomers: 0,
+        paymentsCount: 0,
+        staffActivities: [],
+      }
+    }
+    // Only count if not already counted from reports
+    if (dailyActivities[dateKey].newCustomers === 0 || dailyActivities[dateKey].staffActivities.length === 0) {
+      dailyActivities[dateKey].newCustomers += 1
+    }
+  }
+
+  // Calculate month summary
+  const monthSummary = {
+    totalSales: Object.values(dailyActivities).reduce((sum, d) => sum + d.totalSales, 0),
+    totalCollections: Object.values(dailyActivities).reduce((sum, d) => sum + d.totalCollections, 0),
+    totalStaff: staff.filter((s) => s.isActive).length,
+    activeDays: Object.keys(dailyActivities).length,
+  }
+
+  return { staff, dailyActivities, monthSummary }
 }
 
 // ============================================
