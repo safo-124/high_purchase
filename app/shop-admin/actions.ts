@@ -5301,7 +5301,7 @@ export async function getShopDailyReports(
   const endDate = filters?.endDate ? new Date(filters.endDate) : new Date()
   const startDate = filters?.startDate ? new Date(filters.startDate) : new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000)
   startDate.setHours(0, 0, 0, 0)
-  endDate.setHours(23, 59, 59, 999)
+  endDate.setHours(23, 59, 59, 999) 
 
   // Get all purchases (sales) for the date range
   const purchases = await prisma.purchase.findMany({
