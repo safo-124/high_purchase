@@ -366,6 +366,7 @@ export function NewSaleContent({ businessSlug, shops }: NewSaleContentProps) {
         phone: data.phone,
         email: newEmail || null,
         walletBalance: 0, // New customers start with 0 balance
+        totalOutstanding: 0, // New customers start with 0 outstanding
       }])
       
       setCustomerId(data.id)
