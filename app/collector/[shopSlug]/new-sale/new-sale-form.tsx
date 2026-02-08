@@ -617,7 +617,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
                 <div>
                   <label className="block text-sm text-slate-400 mb-1">ID Type</label>
                   <select value={newIdType} onChange={(e) => setNewIdType(e.target.value)}
-                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm">
+                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm [&>option]:bg-slate-800 [&>option]:text-white">
                     <option value="">Select</option>
                     {ID_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
@@ -644,7 +644,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
                 <div>
                   <label className="block text-sm text-slate-400 mb-1">Region</label>
                   <select value={newRegion} onChange={(e) => setNewRegion(e.target.value)}
-                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm">
+                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm [&>option]:bg-slate-800 [&>option]:text-white">
                     <option value="">Select</option>
                     {GHANA_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
