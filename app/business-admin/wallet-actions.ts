@@ -166,7 +166,7 @@ export async function getCustomersWithWallets(businessSlug: string): Promise<Cus
       },
       purchases: {
         where: {
-          status: { in: ["ACTIVE", "PENDING"] },
+          status: { in: ["ACTIVE", "OVERDUE"] },
           outstandingBalance: { gt: 0 },
         },
         select: { outstandingBalance: true },
@@ -726,7 +726,7 @@ export async function getWalletSummary(businessSlug: string) {
   const outstandingPurchases = await prisma.purchase.findMany({
     where: {
       customer: { shopId: { in: shopIds } },
-      status: { in: ["ACTIVE", "PENDING"] },
+      status: { in: ["ACTIVE", "OVERDUE"] },
       outstandingBalance: { gt: 0 },
     },
     select: { outstandingBalance: true },
@@ -738,7 +738,7 @@ export async function getWalletSummary(businessSlug: string) {
       shopId: { in: shopIds },
       purchases: {
         some: {
-          status: { in: ["ACTIVE", "PENDING"] },
+          status: { in: ["ACTIVE", "OVERDUE"] },
           outstandingBalance: { gt: 0 },
         },
       },

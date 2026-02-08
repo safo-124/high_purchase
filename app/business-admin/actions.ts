@@ -4948,6 +4948,7 @@ export interface CustomerForBusinessSale {
   phone: string
   email: string | null
   walletBalance: number
+  totalOutstanding: number
 }
 
 export interface CollectorForBusinessSale {
@@ -5043,13 +5044,29 @@ export async function getShopCustomersForSale(
       phone: true,
       email: true,
       walletBalance: true,
+      purchases: {
+        where: {
+          status: { in: ["ACTIVE", "OVERDUE"] },
+        },
+        select: {
+          outstandingBalance: true,
+        },
+      },
     },
   })
 
-  return customers.map(c => ({
-    ...c,
-    walletBalance: Number(c.walletBalance),
-  }))
+  return customers.map(c => {
+    const totalOutstanding = c.purchases.reduce((sum, p) => sum + Number(p.outstandingBalance), 0)
+    return {
+      id: c.id,
+      firstName: c.firstName,
+      lastName: c.lastName,
+      phone: c.phone,
+      email: c.email,
+      walletBalance: Number(c.walletBalance),
+      totalOutstanding,
+    }
+  })
 }
 
 /**

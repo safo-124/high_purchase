@@ -934,42 +934,49 @@ export function NewSaleContent({ businessSlug, shops }: NewSaleContentProps) {
                   >
                     <Wallet className="w-6 h-6" />
                     <span className="text-sm font-medium">Wallet</span>
-                    {selectedCustomer && (
-                      <span className="text-xs opacity-75">
-                        GH₵{(selectedCustomer.walletBalance || 0).toLocaleString()}
-                      </span>
-                    )}
+                    {selectedCustomer && (() => {
+                      const netWallet = (selectedCustomer.walletBalance || 0) - (selectedCustomer.totalOutstanding || 0)
+                      return (
+                        <span className={`text-xs ${netWallet >= 0 ? "opacity-75" : "text-red-400"}`}>
+                          GH₵{netWallet.toLocaleString()}
+                        </span>
+                      )
+                    })()}
                   </button>
                 </div>
 
                 {/* Wallet balance warning */}
-                {paymentMethod === "WALLET" && selectedCustomer && (
-                  <div className={`mt-4 p-3 rounded-xl ${
-                    (selectedCustomer.walletBalance || 0) >= (purchaseType === "CASH" ? subtotal : downPaymentNum)
-                      ? "bg-green-500/10 border border-green-500/30"
-                      : "bg-red-500/10 border border-red-500/30"
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      <Wallet className={`w-4 h-4 ${
-                        (selectedCustomer.walletBalance || 0) >= (purchaseType === "CASH" ? subtotal : downPaymentNum)
-                          ? "text-green-400"
-                          : "text-red-400"
-                      }`} />
-                      <span className={`text-sm ${
-                        (selectedCustomer.walletBalance || 0) >= (purchaseType === "CASH" ? subtotal : downPaymentNum)
-                          ? "text-green-400"
-                          : "text-red-400"
-                      }`}>
-                        Wallet Balance: GH₵{(selectedCustomer.walletBalance || 0).toLocaleString()}
-                        {(selectedCustomer.walletBalance || 0) < (purchaseType === "CASH" ? subtotal : downPaymentNum) && (
-                          <span className="ml-2">
-                            (Need GH₵{(purchaseType === "CASH" ? subtotal : downPaymentNum).toLocaleString()})
-                          </span>
-                        )}
-                      </span>
+                {paymentMethod === "WALLET" && selectedCustomer && (() => {
+                  const netWallet = (selectedCustomer.walletBalance || 0) - (selectedCustomer.totalOutstanding || 0)
+                  const requiredAmount = purchaseType === "CASH" ? subtotal : downPaymentNum
+                  return (
+                    <div className={`mt-4 p-3 rounded-xl ${
+                      netWallet >= requiredAmount
+                        ? "bg-green-500/10 border border-green-500/30"
+                        : "bg-red-500/10 border border-red-500/30"
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <Wallet className={`w-4 h-4 ${
+                          netWallet >= requiredAmount
+                            ? "text-green-400"
+                            : "text-red-400"
+                        }`} />
+                        <span className={`text-sm ${
+                          netWallet >= requiredAmount
+                            ? "text-green-400"
+                            : "text-red-400"
+                        }`}>
+                          Wallet Balance: GH₵{netWallet.toLocaleString()}
+                          {netWallet < requiredAmount && (
+                            <span className="ml-2">
+                              (Need GH₵{requiredAmount.toLocaleString()})
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )
+                })()}
               </div>
 
               {/* Complete Sale Button */}

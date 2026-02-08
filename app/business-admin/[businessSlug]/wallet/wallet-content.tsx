@@ -280,7 +280,7 @@ export function WalletContent({
                   <th className="text-right px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Net Balance</th>
                   <th className="text-right px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Outstanding</th>
                   <th className="text-right px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Pending</th>
-                  <th className="text-right px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Total Deposited</th>
+                  <th className="text-right px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Wallet Balance</th>
                   <th className="text-right px-6 py-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
@@ -327,7 +327,16 @@ export function WalletContent({
                         <span className="text-slate-500">—</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-right text-slate-300">{formatCurrency(c.totalDeposited)}</td>
+                    <td className="px-6 py-4 text-right">
+                      {(() => {
+                        const walletNet = c.walletBalance - c.totalOutstanding
+                        return (
+                          <span className={`font-semibold ${walletNet >= 0 ? "text-green-400" : "text-red-400"}`}>
+                            {formatCurrency(walletNet)}
+                          </span>
+                        )
+                      })()}
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => setAdjustModal(c)}
