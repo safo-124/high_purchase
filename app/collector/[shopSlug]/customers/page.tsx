@@ -1,5 +1,5 @@
 import { requireCollectorForShop } from "@/lib/auth"
-import { getAssignedCustomers } from "../../actions"
+import { getAssignedCustomers, getCollectorDashboard } from "../../actions"
 import { CustomersContent } from "./customers-content"
 
 interface CollectorCustomersPageProps {
@@ -10,7 +10,10 @@ export default async function CollectorCustomersPage({ params }: CollectorCustom
   const { shopSlug } = await params
   await requireCollectorForShop(shopSlug)
 
-  const customers = await getAssignedCustomers(shopSlug)
+  const [customers, dashboard] = await Promise.all([
+    getAssignedCustomers(shopSlug),
+    getCollectorDashboard(shopSlug),
+  ])
 
   return (
     <div className="p-4 sm:p-6">
@@ -49,7 +52,11 @@ export default async function CollectorCustomersPage({ params }: CollectorCustom
         </div>
 
         {/* Customers List with Search */}
-        <CustomersContent customers={customers} shopSlug={shopSlug} />
+        <CustomersContent 
+          customers={customers} 
+          shopSlug={shopSlug} 
+          canCreateCustomers={dashboard.canCreateCustomers}
+        />
     </div>
   )
 }

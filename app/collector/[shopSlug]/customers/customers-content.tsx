@@ -2,6 +2,10 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { createCustomerAsCollector } from "../../actions"
+import { toast } from "sonner"
+import { Plus, X } from "lucide-react"
 
 interface Customer {
   id: string
@@ -18,10 +22,34 @@ interface Customer {
 interface CustomersContentProps {
   customers: Customer[]
   shopSlug: string
+  canCreateCustomers: boolean
 }
 
-export function CustomersContent({ customers, shopSlug }: CustomersContentProps) {
+const GHANA_REGIONS = [
+  "Greater Accra", "Ashanti", "Central", "Eastern", "Northern", "Western",
+  "Volta", "Upper East", "Upper West", "Bono", "Bono East", "Ahafo",
+  "Western North", "Oti", "North East", "Savannah",
+]
+
+const ID_TYPES = ["Ghana Card", "Voter ID", "Passport", "Driver's License", "NHIS Card", "SSNIT Card"]
+
+export function CustomersContent({ customers: initialCustomers, shopSlug, canCreateCustomers }: CustomersContentProps) {
+  const router = useRouter()
+  const [customers, setCustomers] = useState(initialCustomers)
   const [searchQuery, setSearchQuery] = useState("")
+  
+  // New customer modal state
+  const [showNewCustomer, setShowNewCustomer] = useState(false)
+  const [newCustomerLoading, setNewCustomerLoading] = useState(false)
+  const [newFirstName, setNewFirstName] = useState("")
+  const [newLastName, setNewLastName] = useState("")
+  const [newPhone, setNewPhone] = useState("")
+  const [newEmail, setNewEmail] = useState("")
+  const [newIdType, setNewIdType] = useState("")
+  const [newIdNumber, setNewIdNumber] = useState("")
+  const [newAddress, setNewAddress] = useState("")
+  const [newCity, setNewCity] = useState("")
+  const [newRegion, setNewRegion] = useState("")
 
   // Filter customers based on search query
   const filteredCustomers = customers.filter((customer) => {
@@ -41,34 +69,94 @@ export function CustomersContent({ customers, shopSlug }: CustomersContentProps)
   // Sort by outstanding balance (highest first)
   const sortedCustomers = [...filteredCustomers].sort((a, b) => b.totalOwed - a.totalOwed)
 
+  const resetNewCustomerForm = () => {
+    setNewFirstName(""); setNewLastName(""); setNewPhone(""); setNewEmail("")
+    setNewIdType(""); setNewIdNumber(""); setNewAddress(""); setNewCity(""); setNewRegion("")
+  }
+
+  const handleNewCustomer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setNewCustomerLoading(true)
+
+    const result = await createCustomerAsCollector(shopSlug, {
+      firstName: newFirstName,
+      lastName: newLastName,
+      phone: newPhone,
+      email: newEmail || undefined,
+      idType: newIdType || undefined,
+      idNumber: newIdNumber || undefined,
+      address: newAddress || undefined,
+      city: newCity || undefined,
+      region: newRegion || undefined,
+    })
+
+    if (result.success && result.data) {
+      const data = result.data as { id: string; firstName: string; lastName: string; phone: string }
+      toast.success(`Customer "${data.firstName} ${data.lastName}" created!`)
+      
+      // Add new customer to list
+      setCustomers([...customers, {
+        id: data.id,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phone: data.phone,
+        email: newEmail || null,
+        address: newAddress || null,
+        activePurchases: 0,
+        totalOwed: 0,
+        totalPaid: 0,
+      }])
+      
+      setShowNewCustomer(false)
+      resetNewCustomerForm()
+      router.refresh()
+    } else {
+      toast.error(result.error || "Failed to create customer")
+    }
+
+    setNewCustomerLoading(false)
+  }
+
   return (
     <>
-      {/* Search Bar */}
+      {/* Search Bar with New Customer Button */}
       <div className="glass-card p-4 rounded-xl mb-6">
-        <div className="relative">
-          <svg 
-            className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search by name, phone, email, or address..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 text-sm"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded-lg transition-colors"
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1">
+            <svg 
+              className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
             >
-              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search by name, phone, email, or address..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 text-sm"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          
+          {canCreateCustomers && (
+            <button
+              onClick={() => setShowNewCustomer(true)}
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-500/20 text-emerald-400 rounded-xl hover:bg-emerald-500/30 transition-all text-sm font-medium whitespace-nowrap"
+            >
+              <Plus className="w-5 h-5" />
+              New Customer
             </button>
           )}
         </div>
@@ -89,7 +177,16 @@ export function CustomersContent({ customers, shopSlug }: CustomersContentProps)
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">No customers assigned</h3>
-            <p className="text-slate-400 text-sm">Ask your shop admin to assign customers to you</p>
+            <p className="text-slate-400 text-sm mb-4">Ask your shop admin to assign customers to you</p>
+            {canCreateCustomers && (
+              <button
+                onClick={() => setShowNewCustomer(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-xl hover:bg-emerald-500/30 transition-all text-sm font-medium"
+              >
+                <Plus className="w-4 h-4" />
+                Create New Customer
+              </button>
+            )}
           </div>
         ) : filteredCustomers.length === 0 ? (
           <div className="p-12 text-center">
@@ -238,6 +335,176 @@ export function CustomersContent({ customers, shopSlug }: CustomersContentProps)
           </>
         )}
       </div>
+
+      {/* New Customer Modal */}
+      {showNewCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-white/10 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">Create New Customer</h3>
+              <button
+                onClick={() => { setShowNewCustomer(false); resetNewCustomerForm() }}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleNewCustomer} className="p-6 space-y-4">
+              {/* Required Fields */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                    First Name <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newFirstName}
+                    onChange={(e) => setNewFirstName(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                    placeholder="John"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                    Last Name <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newLastName}
+                    onChange={(e) => setNewLastName(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                    placeholder="Doe"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Phone Number <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="tel"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                  placeholder="0XX XXX XXXX"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                  placeholder="john@example.com"
+                />
+              </div>
+
+              {/* ID Information */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">ID Type</label>
+                  <select
+                    value={newIdType}
+                    onChange={(e) => setNewIdType(e.target.value)}
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                  >
+                    <option value="">Select ID Type</option>
+                    {ID_TYPES.map((type) => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">ID Number</label>
+                  <input
+                    type="text"
+                    value={newIdNumber}
+                    onChange={(e) => setNewIdNumber(e.target.value)}
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                    placeholder="GHA-XXXXXXXXX-X"
+                  />
+                </div>
+              </div>
+
+              {/* Address */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Address</label>
+                <input
+                  type="text"
+                  value={newAddress}
+                  onChange={(e) => setNewAddress(e.target.value)}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                  placeholder="Street address"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">City</label>
+                  <input
+                    type="text"
+                    value={newCity}
+                    onChange={(e) => setNewCity(e.target.value)}
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                    placeholder="Accra"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">Region</label>
+                  <select
+                    value={newRegion}
+                    onChange={(e) => setNewRegion(e.target.value)}
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                  >
+                    <option value="">Select Region</option>
+                    {GHANA_REGIONS.map((region) => (
+                      <option key={region} value={region}>{region}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => { setShowNewCustomer(false); resetNewCustomerForm() }}
+                  className="flex-1 px-4 py-2.5 bg-white/5 text-slate-300 rounded-xl hover:bg-white/10 transition-all text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={newCustomerLoading || !newFirstName || !newLastName || !newPhone}
+                  className="flex-1 px-4 py-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl hover:bg-emerald-500/30 transition-all text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {newCustomerLoading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      Create Customer
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   )
 }
