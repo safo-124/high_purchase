@@ -561,22 +561,494 @@ export async function toggleBusinessSupplyCatalog(businessId: string, enabled: b
 }
 
 /**
- * Get dashboard stats for super admin
+ * Get comprehensive dashboard stats for super admin
  */
 export async function getSuperAdminStats() {
   await requireSuperAdmin()
 
-  const [businessCount, shopCount, userCount, activeBusinesses] = await Promise.all([
+  const now = new Date()
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+  const [
+    businessCount,
+    activeBusinesses,
+    shopCount,
+    userCount,
+    customerCount,
+    newUsersThisMonth,
+    newCustomersThisMonth,
+    activeUsers,
+    // Purchase stats
+    totalPurchases,
+    cashPurchases,
+    layawayPurchases,
+    creditPurchases,
+    activePurchases,
+    completedPurchases,
+    overduePurchases,
+    defaultedPurchases,
+    pendingPurchases,
+    // Payment stats
+    pendingPayments,
+    // Financial aggregates
+    revenueAgg,
+    collectedAgg,
+    outstandingAgg,
+    thisMonthRevenueAgg,
+    lastMonthRevenueAgg,
+    // POS
+    posTransactionCount,
+    posRevenueAgg,
+  ] = await Promise.all([
     prisma.business.count(),
+    prisma.business.count({ where: { isActive: true } }),
     prisma.shop.count(),
     prisma.user.count({ where: { role: { not: "SUPER_ADMIN" } } }),
-    prisma.business.count({ where: { isActive: true } }),
+    prisma.customer.count(),
+    prisma.user.count({ where: { role: { not: "SUPER_ADMIN" }, createdAt: { gte: startOfMonth } } }),
+    prisma.customer.count({ where: { createdAt: { gte: startOfMonth } } }),
+    prisma.user.count({ where: { role: { not: "SUPER_ADMIN" }, lastSeenAt: { gte: thirtyDaysAgo } } }),
+    // Purchases
+    prisma.purchase.count(),
+    prisma.purchase.count({ where: { purchaseType: "CASH" } }),
+    prisma.purchase.count({ where: { purchaseType: "LAYAWAY" } }),
+    prisma.purchase.count({ where: { purchaseType: "CREDIT" } }),
+    prisma.purchase.count({ where: { status: "ACTIVE" } }),
+    prisma.purchase.count({ where: { status: "COMPLETED" } }),
+    prisma.purchase.count({ where: { status: "OVERDUE" } }),
+    prisma.purchase.count({ where: { status: "DEFAULTED" } }),
+    prisma.purchase.count({ where: { status: "PENDING" } }),
+    // Pending payments
+    prisma.payment.count({ where: { status: "PENDING" } }),
+    // Revenue = total amount from all purchases
+    prisma.purchase.aggregate({ _sum: { totalAmount: true } }),
+    // Collected = total confirmed payments
+    prisma.payment.aggregate({ _sum: { amount: true }, where: { status: "COMPLETED" } }),
+    // Outstanding
+    prisma.purchase.aggregate({ _sum: { outstandingBalance: true }, where: { status: { in: ["ACTIVE", "OVERDUE"] } } }),
+    // This month revenue
+    prisma.purchase.aggregate({ _sum: { totalAmount: true }, where: { createdAt: { gte: startOfMonth } } }),
+    // Last month revenue
+    prisma.purchase.aggregate({ _sum: { totalAmount: true }, where: { createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } } }),
+    // POS
+    prisma.posTransaction.count({ where: { status: "COMPLETED" } }),
+    prisma.posTransaction.aggregate({ _sum: { totalAmount: true }, where: { status: "COMPLETED" } }),
   ])
+
+  const totalRevenue = Number(revenueAgg._sum.totalAmount || 0)
+  const totalCollected = Number(collectedAgg._sum.amount || 0)
+  const totalOutstanding = Number(outstandingAgg._sum.outstandingBalance || 0)
+  const thisMonthRevenue = Number(thisMonthRevenueAgg._sum.totalAmount || 0)
+  const lastMonthRevenue = Number(lastMonthRevenueAgg._sum.totalAmount || 0)
+  const posRevenue = Number(posRevenueAgg._sum.totalAmount || 0)
+
+  const revenueGrowth = lastMonthRevenue > 0
+    ? ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100
+    : thisMonthRevenue > 0 ? 100 : 0
+
+  const totalActive = activePurchases + overduePurchases
+  const defaultRate = totalActive > 0 ? (overduePurchases / totalActive) * 100 : 0
+  const collectionRate = totalRevenue > 0 ? (totalCollected / totalRevenue) * 100 : 0
 
   return {
     totalBusinesses: businessCount,
     activeBusinesses,
+    suspendedBusinesses: businessCount - activeBusinesses,
     totalShops: shopCount,
     totalUsers: userCount,
+    totalCustomers: customerCount,
+    newUsersThisMonth,
+    newCustomersThisMonth,
+    activeUsers,
+    totalPurchases,
+    purchasesByType: { cash: cashPurchases, layaway: layawayPurchases, credit: creditPurchases },
+    purchasesByStatus: { pending: pendingPurchases, active: activePurchases, completed: completedPurchases, overdue: overduePurchases, defaulted: defaultedPurchases },
+    pendingPayments,
+    totalRevenue,
+    totalCollected,
+    totalOutstanding,
+    thisMonthRevenue,
+    lastMonthRevenue,
+    revenueGrowth,
+    defaultRate,
+    collectionRate,
+    posTransactions: posTransactionCount,
+    posRevenue,
+  }
+}
+
+/**
+ * Get monthly revenue data for last 12 months (for chart)
+ */
+export async function getRevenueChartData() {
+  await requireSuperAdmin()
+
+  const months: { month: string; revenue: number; payments: number; purchases: number }[] = []
+  const now = new Date()
+
+  for (let i = 11; i >= 0; i--) {
+    const start = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999)
+
+    const [revenueAgg, paymentsAgg, purchaseCount] = await Promise.all([
+      prisma.purchase.aggregate({ _sum: { totalAmount: true }, where: { createdAt: { gte: start, lte: end } } }),
+      prisma.payment.aggregate({ _sum: { amount: true }, where: { status: "COMPLETED", createdAt: { gte: start, lte: end } } }),
+      prisma.purchase.count({ where: { createdAt: { gte: start, lte: end } } }),
+    ])
+
+    months.push({
+      month: start.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+      revenue: Number(revenueAgg._sum.totalAmount || 0),
+      payments: Number(paymentsAgg._sum.amount || 0),
+      purchases: purchaseCount,
+    })
+  }
+
+  return months
+}
+
+/**
+ * Get top businesses ranked by revenue
+ */
+export async function getTopBusinesses() {
+  await requireSuperAdmin()
+
+  const businesses = await prisma.business.findMany({
+    where: { isActive: true },
+    include: {
+      _count: { select: { shops: true } },
+      shops: {
+        include: {
+          customers: { select: { id: true } },
+          _count: { select: { customers: true } },
+        },
+      },
+    },
+  })
+
+  const businessStats = await Promise.all(
+    businesses.map(async (biz) => {
+      const shopIds = biz.shops.map((s) => s.id)
+      const customerIds = biz.shops.flatMap((s) => s.customers.map((c) => c.id))
+
+      const [revenueAgg, collectedAgg, activePurchases, overduePurchases] = await Promise.all([
+        customerIds.length > 0
+          ? prisma.purchase.aggregate({ _sum: { totalAmount: true }, where: { customerId: { in: customerIds } } })
+          : { _sum: { totalAmount: null } },
+        customerIds.length > 0
+          ? prisma.payment.aggregate({ _sum: { amount: true }, where: { status: "COMPLETED", purchase: { customerId: { in: customerIds } } } })
+          : { _sum: { amount: null } },
+        customerIds.length > 0
+          ? prisma.purchase.count({ where: { customerId: { in: customerIds }, status: "ACTIVE" } })
+          : 0,
+        customerIds.length > 0
+          ? prisma.purchase.count({ where: { customerId: { in: customerIds }, status: "OVERDUE" } })
+          : 0,
+      ])
+
+      const revenue = Number(revenueAgg._sum.totalAmount || 0)
+      const collected = Number(collectedAgg._sum.amount || 0)
+      const totalCustomers = biz.shops.reduce((sum, s) => sum + s._count.customers, 0)
+      const collectionRate = revenue > 0 ? (collected / revenue) * 100 : 0
+
+      return {
+        id: biz.id,
+        name: biz.name,
+        slug: biz.businessSlug,
+        shopCount: biz._count.shops,
+        totalCustomers,
+        revenue,
+        collected,
+        activePurchases,
+        overduePurchases,
+        collectionRate,
+      }
+    })
+  )
+
+  return businessStats.sort((a, b) => b.revenue - a.revenue).slice(0, 10)
+}
+
+/**
+ * Get platform health metrics
+ */
+export async function getPlatformHealth() {
+  await requireSuperAdmin()
+
+  const now = new Date()
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
+  const [
+    newBusinessesThisMonth,
+    emailsSent,
+    emailsFailed,
+    smsSent,
+    smsFailed,
+    posTotal,
+    customersByRegion,
+  ] = await Promise.all([
+    prisma.business.count({ where: { createdAt: { gte: startOfMonth } } }),
+    prisma.emailLog.count({ where: { status: "SENT" } }),
+    prisma.emailLog.count({ where: { status: "FAILED" } }),
+    prisma.smsLog.count({ where: { status: { in: ["SENT", "DELIVERED"] } } }),
+    prisma.smsLog.count({ where: { status: "FAILED" } }),
+    prisma.posTransaction.count({ where: { status: "COMPLETED" } }),
+    prisma.customer.groupBy({ by: ["region"], _count: { id: true }, orderBy: { _count: { id: "desc" } } }),
+  ])
+
+  const regionData = customersByRegion
+    .filter((r) => r.region)
+    .map((r) => ({ region: r.region || "Unknown", count: r._count.id }))
+    .slice(0, 10)
+
+  return {
+    newBusinessesThisMonth,
+    emailStats: { sent: emailsSent, failed: emailsFailed, total: emailsSent + emailsFailed },
+    smsStats: { sent: smsSent, failed: smsFailed, total: smsSent + smsFailed },
+    posTransactions: posTotal,
+    customersByRegion: regionData,
+  }
+}
+
+/**
+ * Get platform alerts (businesses/accounts needing attention)
+ */
+export async function getPlatformAlerts() {
+  await requireSuperAdmin()
+
+  const now = new Date()
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+  // Businesses with overdue purchases
+  const businessesWithOverdue = await prisma.business.findMany({
+    where: {
+      isActive: true,
+      shops: {
+        some: {
+          customers: {
+            some: {
+              purchases: {
+                some: { status: "OVERDUE" },
+              },
+            },
+          },
+        },
+      },
+    },
+    include: {
+      shops: {
+        include: {
+          customers: {
+            include: {
+              purchases: {
+                where: { status: "OVERDUE" },
+                select: { id: true, outstandingBalance: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  const overdueAlerts = businessesWithOverdue.map((biz) => {
+    const overduePurchases = biz.shops.flatMap((s) =>
+      s.customers.flatMap((c) => c.purchases)
+    )
+    const overdueAmount = overduePurchases.reduce(
+      (sum, p) => sum + Number(p.outstandingBalance),
+      0
+    )
+    return {
+      id: biz.id,
+      name: biz.name,
+      slug: biz.businessSlug,
+      overdueCount: overduePurchases.length,
+      overdueAmount,
+    }
+  }).filter((a) => a.overdueCount > 0).sort((a, b) => b.overdueAmount - a.overdueAmount).slice(0, 5)
+
+  // Inactive businesses (no new purchases in 30 days)
+  const allActiveBusinesses = await prisma.business.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      name: true,
+      businessSlug: true,
+      shops: {
+        select: {
+          customers: {
+            select: {
+              purchases: {
+                where: { createdAt: { gte: thirtyDaysAgo } },
+                select: { id: true },
+                take: 1,
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  const inactiveBusinesses = allActiveBusinesses
+    .filter((biz) => {
+      const hasRecentPurchase = biz.shops.some((s) =>
+        s.customers.some((c) => c.purchases.length > 0)
+      )
+      return !hasRecentPurchase
+    })
+    .map((biz) => ({ id: biz.id, name: biz.name, slug: biz.businessSlug }))
+
+  // Inactive staff (not logged in for 30+ days)
+  const inactiveStaff = await prisma.user.findMany({
+    where: {
+      role: { in: ["BUSINESS_ADMIN", "SHOP_ADMIN", "SALES_STAFF", "DEBT_COLLECTOR"] },
+      OR: [
+        { lastSeenAt: { lt: thirtyDaysAgo } },
+        { lastSeenAt: null },
+      ],
+    },
+    select: { id: true, name: true, email: true, role: true, lastSeenAt: true },
+    orderBy: { lastSeenAt: { sort: "asc", nulls: "first" } },
+    take: 10,
+  })
+
+  return { overdueAlerts, inactiveBusinesses, inactiveStaff }
+}
+
+/**
+ * Get all audit logs with pagination and filtering
+ */
+export async function getAuditLogs(params: {
+  page?: number
+  pageSize?: number
+  action?: string
+  search?: string
+}) {
+  await requireSuperAdmin()
+
+  const page = params.page || 1
+  const pageSize = params.pageSize || 25
+  const skip = (page - 1) * pageSize
+
+  const where: Record<string, unknown> = {}
+  if (params.action) where.action = params.action
+  if (params.search) {
+    where.OR = [
+      { actor: { name: { contains: params.search, mode: "insensitive" } } },
+      { actor: { email: { contains: params.search, mode: "insensitive" } } },
+      { action: { contains: params.search, mode: "insensitive" } },
+      { entityType: { contains: params.search, mode: "insensitive" } },
+    ]
+  }
+
+  const [logs, total] = await Promise.all([
+    prisma.auditLog.findMany({
+      where,
+      include: { actor: { select: { id: true, name: true, email: true, role: true } } },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: pageSize,
+    }),
+    prisma.auditLog.count({ where }),
+  ])
+
+  // Get distinct action types for filter dropdown
+  const actionTypes = await prisma.auditLog.findMany({
+    distinct: ["action"],
+    select: { action: true },
+    orderBy: { action: "asc" },
+  })
+
+  return {
+    logs: logs.map((l) => ({
+      id: l.id,
+      action: l.action,
+      entityType: l.entityType,
+      entityId: l.entityId,
+      metadata: l.metadata as Record<string, unknown> | null,
+      createdAt: l.createdAt,
+      actor: l.actor,
+    })),
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+    actionTypes: actionTypes.map((a) => a.action),
+  }
+}
+
+/**
+ * Get all platform users with pagination and filtering
+ */
+export async function getPlatformUsers(params: {
+  page?: number
+  pageSize?: number
+  role?: string
+  search?: string
+}) {
+  await requireSuperAdmin()
+
+  const page = params.page || 1
+  const pageSize = params.pageSize || 25
+  const skip = (page - 1) * pageSize
+
+  const where: Record<string, unknown> = {
+    role: { not: "SUPER_ADMIN" },
+  }
+  if (params.role) where.role = params.role
+  if (params.search) {
+    where.OR = [
+      { name: { contains: params.search, mode: "insensitive" } },
+      { email: { contains: params.search, mode: "insensitive" } },
+    ]
+  }
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      include: {
+        businessMemberships: {
+          where: { isActive: true },
+          include: { business: { select: { name: true, businessSlug: true } } },
+        },
+        memberships: {
+          where: { isActive: true },
+          include: { shop: { select: { name: true, shopSlug: true } } },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: pageSize,
+    }),
+    prisma.user.count({ where }),
+  ])
+
+  return {
+    users: users.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      lastSeenAt: u.lastSeenAt,
+      createdAt: u.createdAt,
+      businesses: u.businessMemberships.map((m) => ({
+        name: m.business.name,
+        slug: m.business.businessSlug,
+      })),
+      shops: u.memberships.map((m) => ({
+        name: m.shop.name,
+        slug: m.shop.shopSlug,
+        role: m.role,
+      })),
+    })),
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
   }
 }

@@ -68,6 +68,12 @@ export default async function BusinessesPage() {
               <Link href="/super-admin/businesses" className="nav-link active text-white text-sm font-medium">
                 Businesses
               </Link>
+              <Link href="/super-admin/users" className="nav-link text-slate-300 hover:text-white text-sm font-medium">
+                Users
+              </Link>
+              <Link href="/super-admin/audit-logs" className="nav-link text-slate-300 hover:text-white text-sm font-medium">
+                Audit Logs
+              </Link>
             </nav>
 
             {/* User Menu */}
