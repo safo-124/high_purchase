@@ -1052,3 +1052,310 @@ export async function getPlatformUsers(params: {
     totalPages: Math.ceil(total / pageSize),
   }
 }
+
+/**
+ * Get detailed usage/record counts for a single business
+ */
+export async function getBusinessUsage(businessId: string) {
+  await requireSuperAdmin()
+
+  const business = await prisma.business.findUnique({
+    where: { id: businessId },
+    include: {
+      members: {
+        where: { isActive: true },
+        include: { user: { select: { id: true, name: true, email: true, lastSeenAt: true } } },
+      },
+      shops: {
+        select: {
+          id: true,
+          name: true,
+          shopSlug: true,
+          isActive: true,
+          createdAt: true,
+          _count: {
+            select: {
+              customers: true,
+              members: true,
+              shopProducts: true,
+              dailyReports: true,
+              walletTransactions: true,
+            },
+          },
+        },
+      },
+      policy: true,
+      emailSettings: { select: { id: true } },
+      smsSettings: { select: { id: true } },
+    },
+  })
+
+  if (!business) throw new Error("Business not found")
+
+  // Get shop IDs for this business
+  const shopIds = business.shops.map((s) => s.id)
+
+  // Count all records across this business's shops in parallel
+  const [
+    totalCustomers,
+    activeCustomers,
+    totalProducts,
+    activeProducts,
+    totalShopProducts,
+    totalPurchases,
+    activePurchases,
+    completedPurchases,
+    overduePurchases,
+    defaultedPurchases,
+    totalPayments,
+    totalPurchaseItems,
+    totalInvoices,
+    totalPurchaseInvoices,
+    totalWaybills,
+    totalPosTransactions,
+    totalEmailLogs,
+    totalSmsLogs,
+    totalConversations,
+    totalInAppMessages,
+    totalDailyReports,
+    totalWalletTransactions,
+    totalMembers,
+    totalCategories,
+    totalBrands,
+    totalTaxes,
+    totalSuppliers,
+    totalSupplyCategories,
+    totalSupplyItems,
+    // Financial aggregates
+    revenueAgg,
+    collectedAgg,
+    outstandingAgg,
+    posRevenueAgg,
+    walletBalanceAgg,
+    // Recent activity
+    recentAuditLogs,
+    lastPurchase,
+    lastPayment,
+  ] = await Promise.all([
+    // Customer counts
+    prisma.customer.count({ where: { shopId: { in: shopIds } } }),
+    prisma.customer.count({ where: { shopId: { in: shopIds }, isActive: true } }),
+    // Product counts
+    prisma.product.count({ where: { businessId } }),
+    prisma.product.count({ where: { businessId, isActive: true } }),
+    prisma.shopProduct.count({ where: { shopId: { in: shopIds } } }),
+    // Purchase counts
+    prisma.purchase.count({ where: { customer: { shopId: { in: shopIds } } } }),
+    prisma.purchase.count({ where: { customer: { shopId: { in: shopIds } }, status: "ACTIVE" } }),
+    prisma.purchase.count({ where: { customer: { shopId: { in: shopIds } }, status: "COMPLETED" } }),
+    prisma.purchase.count({ where: { customer: { shopId: { in: shopIds } }, status: "OVERDUE" } }),
+    prisma.purchase.count({ where: { customer: { shopId: { in: shopIds } }, status: "DEFAULTED" } }),
+    // Payment count
+    prisma.payment.count({ where: { purchase: { customer: { shopId: { in: shopIds } } } } }),
+    // Purchase items
+    prisma.purchaseItem.count({ where: { purchase: { customer: { shopId: { in: shopIds } } } } }),
+    // Invoices
+    prisma.progressInvoice.count({ where: { purchase: { customer: { shopId: { in: shopIds } } } } }),
+    prisma.purchaseInvoice.count({ where: { purchase: { customer: { shopId: { in: shopIds } } } } }),
+    // Waybills
+    prisma.waybill.count({ where: { purchase: { customer: { shopId: { in: shopIds } } } } }),
+    // POS
+    prisma.posTransaction.count({ where: { businessId } }),
+    // Email/SMS logs
+    prisma.emailLog.count({ where: { businessId } }),
+    prisma.smsLog.count({ where: { businessId } }),
+    // Conversations & messages
+    prisma.conversation.count({ where: { businessId } }),
+    prisma.inAppMessage.count({ where: { conversation: { businessId } } }),
+    // Daily reports
+    prisma.dailyReport.count({ where: { shopId: { in: shopIds } } }),
+    // Wallet transactions
+    prisma.walletTransaction.count({ where: { shopId: { in: shopIds } } }),
+    // Staff (shop members)
+    prisma.shopMember.count({ where: { shopId: { in: shopIds }, isActive: true } }),
+    // Categories, Brands, Taxes
+    prisma.category.count({ where: { businessId } }),
+    prisma.brand.count({ where: { businessId } }),
+    prisma.tax.count({ where: { businessId } }),
+    // Supply catalog
+    prisma.supplier.count({ where: { businessId } }),
+    prisma.supplyCategory.count({ where: { businessId } }),
+    prisma.supplyItem.count({ where: { businessId } }),
+    // Financial aggregates
+    prisma.purchase.aggregate({
+      where: { customer: { shopId: { in: shopIds } } },
+      _sum: { totalAmount: true },
+    }),
+    prisma.payment.aggregate({
+      where: { purchase: { customer: { shopId: { in: shopIds } } }, status: "COMPLETED" },
+      _sum: { amount: true },
+    }),
+    prisma.purchase.aggregate({
+      where: { customer: { shopId: { in: shopIds } }, status: { in: ["ACTIVE", "OVERDUE"] } },
+      _sum: { outstandingBalance: true },
+    }),
+    prisma.posTransaction.aggregate({
+      where: { businessId, status: "COMPLETED" },
+      _sum: { totalAmount: true },
+    }),
+    prisma.customer.aggregate({
+      where: { shopId: { in: shopIds } },
+      _sum: { walletBalance: true },
+    }),
+    // Recent audit logs for this business
+    prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { entityId: businessId },
+          { entityId: { in: shopIds } },
+          { actorUserId: { in: business.members.map((m) => m.user.id) } },
+        ],
+      },
+      include: { actor: { select: { name: true, email: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    }),
+    // Last purchase date
+    prisma.purchase.findFirst({
+      where: { customer: { shopId: { in: shopIds } } },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    }),
+    // Last payment date
+    prisma.payment.findFirst({
+      where: { purchase: { customer: { shopId: { in: shopIds } } } },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    }),
+  ])
+
+  // Monthly activity — purchases in last 6 months
+  const sixMonthsAgo = new Date()
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+  const monthlyPurchases = await prisma.purchase.groupBy({
+    by: ["createdAt"],
+    where: {
+      customer: { shopId: { in: shopIds } },
+      createdAt: { gte: sixMonthsAgo },
+    },
+    _count: true,
+  })
+
+  // Aggregate monthly from raw groupBy
+  const monthlyMap = new Map<string, number>()
+  for (const row of monthlyPurchases) {
+    const key = `${row.createdAt.getFullYear()}-${String(row.createdAt.getMonth() + 1).padStart(2, "0")}`
+    monthlyMap.set(key, (monthlyMap.get(key) || 0) + row._count)
+  }
+  const monthlyActivity = Array.from(monthlyMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, count]) => ({
+      month: new Date(month + "-01").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+      purchases: count,
+    }))
+
+  const totalRecords =
+    totalCustomers +
+    totalProducts +
+    totalShopProducts +
+    totalPurchases +
+    totalPayments +
+    totalPurchaseItems +
+    totalInvoices +
+    totalPurchaseInvoices +
+    totalWaybills +
+    totalPosTransactions +
+    totalEmailLogs +
+    totalSmsLogs +
+    totalConversations +
+    totalInAppMessages +
+    totalDailyReports +
+    totalWalletTransactions +
+    totalMembers +
+    totalCategories +
+    totalBrands +
+    totalTaxes +
+    totalSuppliers +
+    totalSupplyCategories +
+    totalSupplyItems
+
+  return {
+    business: {
+      id: business.id,
+      name: business.name,
+      businessSlug: business.businessSlug,
+      country: business.country,
+      isActive: business.isActive,
+      posEnabled: business.posEnabled,
+      supplyCatalogEnabled: business.supplyCatalogEnabled,
+      logoUrl: business.logoUrl,
+      address: business.address,
+      phone: business.phone,
+      email: business.email,
+      website: business.website,
+      createdAt: business.createdAt,
+      hasPolicy: !!business.policy,
+      hasEmailSettings: !!business.emailSettings,
+      hasSmsSettings: !!business.smsSettings,
+    },
+    admins: business.members.map((m) => ({
+      id: m.user.id,
+      name: m.user.name,
+      email: m.user.email,
+      lastSeenAt: m.user.lastSeenAt,
+    })),
+    shops: business.shops,
+    counts: {
+      totalRecords,
+      shops: business.shops.length,
+      customers: { total: totalCustomers, active: activeCustomers },
+      products: { total: totalProducts, active: activeProducts },
+      shopProducts: totalShopProducts,
+      purchases: {
+        total: totalPurchases,
+        active: activePurchases,
+        completed: completedPurchases,
+        overdue: overduePurchases,
+        defaulted: defaultedPurchases,
+      },
+      payments: totalPayments,
+      purchaseItems: totalPurchaseItems,
+      invoices: totalInvoices,
+      purchaseInvoices: totalPurchaseInvoices,
+      waybills: totalWaybills,
+      posTransactions: totalPosTransactions,
+      emailLogs: totalEmailLogs,
+      smsLogs: totalSmsLogs,
+      conversations: totalConversations,
+      inAppMessages: totalInAppMessages,
+      dailyReports: totalDailyReports,
+      walletTransactions: totalWalletTransactions,
+      staff: totalMembers,
+      categories: totalCategories,
+      brands: totalBrands,
+      taxes: totalTaxes,
+      suppliers: totalSuppliers,
+      supplyCategories: totalSupplyCategories,
+      supplyItems: totalSupplyItems,
+    },
+    financials: {
+      totalRevenue: Number(revenueAgg._sum.totalAmount || 0),
+      totalCollected: Number(collectedAgg._sum.amount || 0),
+      totalOutstanding: Number(outstandingAgg._sum.outstandingBalance || 0),
+      posRevenue: Number(posRevenueAgg._sum.totalAmount || 0),
+      walletBalance: Number(walletBalanceAgg._sum.walletBalance || 0),
+    },
+    activity: {
+      lastPurchaseAt: lastPurchase?.createdAt || null,
+      lastPaymentAt: lastPayment?.createdAt || null,
+      recentLogs: recentAuditLogs.map((l) => ({
+        id: l.id,
+        action: l.action,
+        entityType: l.entityType,
+        createdAt: l.createdAt,
+        actorName: l.actor?.name || l.actor?.email || "System",
+      })),
+      monthlyActivity,
+    },
+  }
+}

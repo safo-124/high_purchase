@@ -220,9 +220,9 @@ export default async function BusinessesPage() {
                               {business.name.charAt(0).toUpperCase()}
                             </span>
                           </div>
-                          <span className="font-medium text-white group-hover:text-purple-300 transition-colors">
+                          <Link href={`/super-admin/businesses/${business.id}`} className="font-medium text-white group-hover:text-purple-300 transition-colors hover:underline">
                             {business.name}
-                          </span>
+                          </Link>
                         </div>
                       </td>
                       <td className="px-6 py-4">
