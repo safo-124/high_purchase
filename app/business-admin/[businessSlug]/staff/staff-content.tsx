@@ -8,6 +8,10 @@ import {
   deleteStaffMember,
   toggleStaffActive,
   toggleStaffPosAccess,
+  createAccountant,
+  updateAccountant,
+  deleteAccountant,
+  toggleAccountantActive,
 } from "../../actions"
 import { CollectorDetailsModal } from "./collector-details-modal"
 import { SalesStaffDetailsModal } from "./sales-staff-details-modal"
@@ -51,12 +55,14 @@ const roleColors: Record<string, { bg: string; text: string; border: string }> =
   SHOP_ADMIN: { bg: "bg-purple-500/10", text: "text-purple-400", border: "border-purple-500/20" },
   SALES_STAFF: { bg: "bg-cyan-500/10", text: "text-cyan-400", border: "border-cyan-500/20" },
   DEBT_COLLECTOR: { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/20" },
+  ACCOUNTANT: { bg: "bg-teal-500/10", text: "text-teal-400", border: "border-teal-500/20" },
 }
 
 const roleLabels: Record<string, string> = {
   SHOP_ADMIN: "Shop Admin",
   SALES_STAFF: "Sales Staff",
   DEBT_COLLECTOR: "Collector",
+  ACCOUNTANT: "Accountant",
 }
 
 type ModalMode = "create" | "edit" | null
@@ -67,7 +73,7 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
   
   const [searchQuery, setSearchQuery] = useState("")
   const [shopFilter, setShopFilter] = useState<string>("all")
-  const [roleFilter, setRoleFilter] = useState<"all" | "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR">("all")
+  const [roleFilter, setRoleFilter] = useState<"all" | "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR" | "ACCOUNTANT">("all")
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all")
   
   // Modal state
@@ -91,11 +97,16 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
     guarantorPhone: "",
     guarantorRelationship: "",
     address: "",
-    role: "SALES_STAFF" as "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR",
+    role: "SALES_STAFF" as "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR" | "ACCOUNTANT",
     shopId: "",
     isActive: true,
     canSellProducts: false,
     canCreateCustomers: false,
+    // Accountant permissions
+    canConfirmPayments: false,
+    canExportData: true,
+    canViewProfitMargins: true,
+    canRecordExpenses: false,
   })
 
   // Filter staff
@@ -148,6 +159,10 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
       isActive: true,
       canSellProducts: false,
       canCreateCustomers: false,
+      canConfirmPayments: false,
+      canExportData: true,
+      canViewProfitMargins: true,
+      canRecordExpenses: false,
     })
     setFormError(null)
     setModalMode("create")
@@ -168,11 +183,15 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
       guarantorPhone: member.userGuarantorPhone || "",
       guarantorRelationship: member.userGuarantorRelationship || "",
       address: member.userAddress || "",
-      role: member.role as "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR",
+      role: member.role as "SHOP_ADMIN" | "SALES_STAFF" | "DEBT_COLLECTOR" | "ACCOUNTANT",
       shopId: shop?.id || "",
       isActive: member.isActive,
       canSellProducts: member.canSellProducts || false,
       canCreateCustomers: member.canCreateCustomers || false,
+      canConfirmPayments: false,
+      canExportData: true,
+      canViewProfitMargins: true,
+      canRecordExpenses: false,
     })
     setFormError(null)
     setModalMode("edit")
@@ -187,6 +206,37 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
+
+    // For accountant role, use the accountant-specific actions
+    if (formData.role === "ACCOUNTANT") {
+      const form = new FormData()
+      form.set("name", formData.name)
+      form.set("email", formData.email)
+      form.set("password", formData.password)
+      form.set("phone", formData.phone)
+      form.set("isActive", formData.isActive.toString())
+      form.set("canConfirmPayments", formData.canConfirmPayments.toString())
+      form.set("canExportData", formData.canExportData.toString())
+      form.set("canViewProfitMargins", formData.canViewProfitMargins.toString())
+      form.set("canRecordExpenses", formData.canRecordExpenses.toString())
+
+      startTransition(async () => {
+        let result
+        if (modalMode === "create") {
+          result = await createAccountant(businessSlug, form)
+        } else if (modalMode === "edit" && editingMember) {
+          result = await updateAccountant(businessSlug, editingMember.id, form)
+        }
+        
+        if (result?.success) {
+          closeModal()
+          router.refresh()
+        } else {
+          setFormError(result?.error || "An error occurred")
+        }
+      })
+      return
+    }
 
     const form = new FormData()
     form.set("name", formData.name)
@@ -227,7 +277,11 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
     if (!deleteConfirm) return
 
     startTransition(async () => {
-      const result = await deleteStaffMember(businessSlug, deleteConfirm.id)
+      // Use deleteAccountant for accountants (business-wide members)
+      const isAccountant = deleteConfirm.shopSlug === "business-wide"
+      const result = isAccountant 
+        ? await deleteAccountant(businessSlug, deleteConfirm.id)
+        : await deleteStaffMember(businessSlug, deleteConfirm.id)
       if (result.success) {
         setDeleteConfirm(null)
         router.refresh()
@@ -239,7 +293,13 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
 
   const handleToggleActive = async (member: StaffMember) => {
     startTransition(async () => {
-      await toggleStaffActive(businessSlug, member.id)
+      // Use toggleAccountantActive for accountants (business-wide members)
+      const isAccountant = member.shopSlug === "business-wide"
+      if (isAccountant) {
+        await toggleAccountantActive(businessSlug, member.id)
+      } else {
+        await toggleStaffActive(businessSlug, member.id)
+      }
       router.refresh()
     })
   }
@@ -302,6 +362,7 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
               <option value="SHOP_ADMIN">Shop Admins</option>
               <option value="SALES_STAFF">Sales Staff</option>
               <option value="DEBT_COLLECTOR">Collectors</option>
+              <option value="ACCOUNTANT">Accountants</option>
             </select>
 
             {/* Status Filter */}
@@ -642,7 +703,8 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                 </div>
               </div>
 
-              {/* ID Card Information Section */}
+              {/* ID Card Information Section - Not required for accountants */}
+              {formData.role !== "ACCOUNTANT" && (
               <div>
                 <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -681,8 +743,10 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                   </div>
                 </div>
               </div>
+              )}
 
-              {/* Guarantor Information Section */}
+              {/* Guarantor Information Section - Not required for accountants */}
+              {formData.role !== "ACCOUNTANT" && (
               <div>
                 <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -727,6 +791,7 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Role & Shop Section */}
               <div>
@@ -747,24 +812,30 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                       <option value="SHOP_ADMIN" className="bg-slate-800 text-white">Shop Admin</option>
                       <option value="SALES_STAFF" className="bg-slate-800 text-white">Sales Staff</option>
                       <option value="DEBT_COLLECTOR" className="bg-slate-800 text-white">Collector</option>
+                      <option value="ACCOUNTANT" className="bg-slate-800 text-white">Accountant</option>
                     </select>
+                    {formData.role === "ACCOUNTANT" && (
+                      <p className="text-xs text-teal-400 mt-1">Accountants have business-wide access, not tied to a specific shop</p>
+                    )}
                   </div>
 
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-2">Shop *</label>
-                    <select
-                      value={formData.shopId}
-                      onChange={(e) => setFormData({ ...formData, shopId: e.target.value })}
-                      className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
-                      required
-                    >
-                      {shops.map((shop) => (
-                        <option key={shop.id} value={shop.id} className="bg-slate-800 text-white">
-                          {shop.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {formData.role !== "ACCOUNTANT" && (
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Shop *</label>
+                      <select
+                        value={formData.shopId}
+                        onChange={(e) => setFormData({ ...formData, shopId: e.target.value })}
+                        className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-cyan-500/50"
+                        required
+                      >
+                        {shops.map((shop) => (
+                          <option key={shop.id} value={shop.id} className="bg-slate-800 text-white">
+                            {shop.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 {/* Collector Permissions - only shown when role is DEBT_COLLECTOR */}
@@ -801,6 +872,72 @@ export function StaffContent({ staff, shops, businessSlug }: StaffContentProps) 
                         <label htmlFor="canCreateCustomers" className="text-sm text-slate-300">
                           Can Create Customers
                           <span className="block text-xs text-slate-500">Allow this collector to create new customer accounts</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Accountant Permissions - only shown when role is ACCOUNTANT */}
+                {formData.role === "ACCOUNTANT" && (
+                  <div className="mt-4 p-4 bg-teal-500/5 border border-teal-500/20 rounded-xl">
+                    <h5 className="text-sm font-semibold text-teal-400 mb-3 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                      Accountant Permissions
+                    </h5>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id="canExportData"
+                          checked={formData.canExportData}
+                          onChange={(e) => setFormData({ ...formData, canExportData: e.target.checked })}
+                          className="w-4 h-4 rounded border-teal-500/30 bg-white/5 text-teal-500 focus:ring-teal-500"
+                        />
+                        <label htmlFor="canExportData" className="text-sm text-slate-300">
+                          Export Data
+                          <span className="block text-xs text-slate-500">Download payment, customer, and report data as CSV</span>
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id="canViewProfitMargins"
+                          checked={formData.canViewProfitMargins}
+                          onChange={(e) => setFormData({ ...formData, canViewProfitMargins: e.target.checked })}
+                          className="w-4 h-4 rounded border-teal-500/30 bg-white/5 text-teal-500 focus:ring-teal-500"
+                        />
+                        <label htmlFor="canViewProfitMargins" className="text-sm text-slate-300">
+                          View Profit Margins
+                          <span className="block text-xs text-slate-500">Access product costs and profit analysis reports</span>
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id="canConfirmPayments"
+                          checked={formData.canConfirmPayments}
+                          onChange={(e) => setFormData({ ...formData, canConfirmPayments: e.target.checked })}
+                          className="w-4 h-4 rounded border-teal-500/30 bg-white/5 text-teal-500 focus:ring-teal-500"
+                        />
+                        <label htmlFor="canConfirmPayments" className="text-sm text-slate-300">
+                          Confirm Payments
+                          <span className="block text-xs text-slate-500">Approve and confirm pending payment records</span>
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id="canRecordExpenses"
+                          checked={formData.canRecordExpenses}
+                          onChange={(e) => setFormData({ ...formData, canRecordExpenses: e.target.checked })}
+                          className="w-4 h-4 rounded border-teal-500/30 bg-white/5 text-teal-500 focus:ring-teal-500"
+                        />
+                        <label htmlFor="canRecordExpenses" className="text-sm text-slate-300">
+                          Record Expenses
+                          <span className="block text-xs text-slate-500">Add and manage business expense entries</span>
                         </label>
                       </div>
                     </div>

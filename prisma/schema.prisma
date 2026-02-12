@@ -165,6 +165,11 @@ model BusinessMember {
   businessId String
   role       Role     @default(BUSINESS_ADMIN)
   isActive   Boolean  @default(true)
+  // Accountant-specific permissions
+  canConfirmPayments   Boolean  @default(false) // Allow accountant to confirm payments
+  canExportData        Boolean  @default(true)  // Allow exporting financial data
+  canViewProfitMargins Boolean  @default(true)  // Allow viewing cost prices and profit margins
+  canRecordExpenses    Boolean  @default(false) // Allow recording business expenses
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   business   Business @relation("BusinessMembers", fields: [businessId], references: [id], onDelete: Cascade)
@@ -871,6 +876,7 @@ model SmsLog {
 enum Role {
   SUPER_ADMIN
   BUSINESS_ADMIN
+  ACCOUNTANT
   SHOP_ADMIN
   SALES_STAFF
   DEBT_COLLECTOR

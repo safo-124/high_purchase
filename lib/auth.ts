@@ -175,6 +175,115 @@ export async function requireBusinessAdmin(businessSlug: string) {
 }
 
 /**
+ * Require user to be an ACCOUNTANT for a specific business
+ * Returns { user, business, membership } if authorized
+ * Redirects to appropriate error page if not
+ */
+export async function requireAccountant(businessSlug: string) {
+  const user = await getSessionUser()
+
+  if (!user) {
+    redirect("/login")
+  }
+
+  // SUPER_ADMIN and BUSINESS_ADMIN can access accountant pages
+  if (user.role === "SUPER_ADMIN") {
+    const business = await prisma.business.findUnique({
+      where: { businessSlug },
+    })
+
+    if (!business) {
+      redirect("/accountant/select-business?error=business-not-found")
+    }
+
+    if (!business.isActive) {
+      redirect("/accountant/select-business?error=business-suspended")
+    }
+
+    // Create a virtual membership for super admin with all permissions
+    const membership = {
+      id: "super-admin",
+      role: "ACCOUNTANT" as const,
+      isActive: true,
+      canConfirmPayments: true,
+      canExportData: true,
+      canViewProfitMargins: true,
+      canRecordExpenses: true,
+    }
+
+    return { user, business, membership }
+  }
+
+  // Check for business membership as ACCOUNTANT or BUSINESS_ADMIN
+  const business = await prisma.business.findUnique({
+    where: { businessSlug },
+    include: {
+      members: {
+        where: {
+          userId: user.id,
+          role: { in: ["ACCOUNTANT", "BUSINESS_ADMIN"] },
+          isActive: true,
+        },
+      },
+    },
+  })
+
+  if (!business) {
+    redirect("/accountant/select-business?error=business-not-found")
+  }
+
+  if (!business.isActive) {
+    redirect("/accountant/select-business?error=business-suspended")
+  }
+
+  const membership = business.members[0]
+  if (!membership) {
+    redirect("/accountant/select-business?error=no-access")
+  }
+
+  // If BUSINESS_ADMIN, grant all permissions
+  if (membership.role === "BUSINESS_ADMIN") {
+    return {
+      user,
+      business,
+      membership: {
+        ...membership,
+        canConfirmPayments: true,
+        canExportData: true,
+        canViewProfitMargins: true,
+        canRecordExpenses: true,
+      },
+    }
+  }
+
+  return { user, business, membership }
+}
+
+/**
+ * Get all businesses a user has ACCOUNTANT or BUSINESS_ADMIN access to
+ */
+export async function getAccountantBusinessMemberships(userId: string) {
+  return await prisma.businessMember.findMany({
+    where: {
+      userId,
+      role: { in: ["ACCOUNTANT", "BUSINESS_ADMIN"] },
+      isActive: true,
+      business: {
+        isActive: true,
+      },
+    },
+    include: {
+      business: true,
+    },
+    orderBy: {
+      business: {
+        name: "asc",
+      },
+    },
+  })
+}
+
+/**
  * Get all businesses a user has BUSINESS_ADMIN access to
  */
 export async function getUserBusinessMemberships(userId: string) {

@@ -9179,3 +9179,400 @@ export async function updateSupplyItemStock(
     return { success: false, error: "Failed to update stock" }
   }
 }
+
+// ============================================================================
+// Accountant Management
+// ============================================================================
+
+/**
+ * Create a new accountant for the business
+ */
+export async function createAccountant(
+  businessSlug: string,
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const name = formData.get("name") as string
+    const email = formData.get("email") as string
+    const password = formData.get("password") as string
+    const phone = formData.get("phone") as string
+    const canConfirmPayments = formData.get("canConfirmPayments") === "true"
+    const canExportData = formData.get("canExportData") === "true"
+    const canViewProfitMargins = formData.get("canViewProfitMargins") === "true"
+    const canRecordExpenses = formData.get("canRecordExpenses") === "true"
+
+    // Validation
+    if (!name || name.trim().length === 0) {
+      return { success: false, error: "Name is required" }
+    }
+
+    if (!email || !EMAIL_REGEX.test(email)) {
+      return { success: false, error: "Valid email is required" }
+    }
+
+    if (!password || password.length < 6) {
+      return { success: false, error: "Password must be at least 6 characters" }
+    }
+
+    // Check if email already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    })
+
+    let accountantUser
+
+    if (existingUser) {
+      // Check if already a member of this business
+      const existingMember = await prisma.businessMember.findFirst({
+        where: { userId: existingUser.id, businessId: business.id },
+      })
+
+      if (existingMember) {
+        return { success: false, error: "This user is already a member of this business" }
+      }
+
+      accountantUser = existingUser
+    } else {
+      // Create new user
+      const hashedPassword = await bcrypt.hash(password, 10)
+
+      accountantUser = await prisma.user.create({
+        data: {
+          email: email.toLowerCase(),
+          name: name.trim(),
+          passwordHash: hashedPassword,
+          role: "ACCOUNTANT" as Role,
+          phone: phone?.trim() || null,
+        },
+      })
+    }
+
+    // Create business membership
+    await prisma.businessMember.create({
+      data: {
+        businessId: business.id,
+        userId: accountantUser.id,
+        role: "ACCOUNTANT",
+        isActive: true,
+        canConfirmPayments,
+        canExportData,
+        canViewProfitMargins,
+        canRecordExpenses,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CREATE",
+      entityType: "BusinessMember",
+      entityId: accountantUser.id,
+      metadata: {
+        businessId: business.id,
+        role: "ACCOUNTANT",
+        email: email.toLowerCase(),
+      },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/settings/accountants`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error creating accountant:", error)
+    return { success: false, error: "Failed to create accountant" }
+  }
+}
+
+/**
+ * Update accountant permissions
+ */
+export async function updateAccountantPermissions(
+  businessSlug: string,
+  membershipId: string,
+  permissions: {
+    canConfirmPayments: boolean
+    canExportData: boolean
+    canViewProfitMargins: boolean
+    canRecordExpenses: boolean
+  }
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const membership = await prisma.businessMember.findFirst({
+      where: {
+        id: membershipId,
+        businessId: business.id,
+        role: "ACCOUNTANT",
+      },
+    })
+
+    if (!membership) {
+      return { success: false, error: "Accountant not found" }
+    }
+
+    await prisma.businessMember.update({
+      where: { id: membershipId },
+      data: {
+        canConfirmPayments: permissions.canConfirmPayments,
+        canExportData: permissions.canExportData,
+        canViewProfitMargins: permissions.canViewProfitMargins,
+        canRecordExpenses: permissions.canRecordExpenses,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "UPDATE",
+      entityType: "BusinessMember",
+      entityId: membershipId,
+      metadata: { permissions },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/settings/accountants`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error updating accountant permissions:", error)
+    return { success: false, error: "Failed to update permissions" }
+  }
+}
+
+/**
+ * Toggle accountant active status
+ */
+export async function toggleAccountantActive(
+  businessSlug: string,
+  membershipId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const membership = await prisma.businessMember.findFirst({
+      where: {
+        id: membershipId,
+        businessId: business.id,
+        role: "ACCOUNTANT",
+      },
+    })
+
+    if (!membership) {
+      return { success: false, error: "Accountant not found" }
+    }
+
+    const newStatus = !membership.isActive
+
+    await prisma.businessMember.update({
+      where: { id: membershipId },
+      data: { isActive: newStatus },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: newStatus ? "ACTIVATE" : "DEACTIVATE",
+      entityType: "BusinessMember",
+      entityId: membershipId,
+      metadata: { role: "ACCOUNTANT" },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/settings/accountants`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error toggling accountant status:", error)
+    return { success: false, error: "Failed to update status" }
+  }
+}
+
+/**
+ * Delete accountant from business
+ */
+export async function deleteAccountant(
+  businessSlug: string,
+  membershipId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const membership = await prisma.businessMember.findFirst({
+      where: {
+        id: membershipId,
+        businessId: business.id,
+        role: "ACCOUNTANT",
+      },
+      include: { user: true },
+    })
+
+    if (!membership) {
+      return { success: false, error: "Accountant not found" }
+    }
+
+    await prisma.businessMember.delete({
+      where: { id: membershipId },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "DELETE",
+      entityType: "BusinessMember",
+      entityId: membershipId,
+      metadata: { email: membership.user.email, role: "ACCOUNTANT" },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/settings/accountants`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting accountant:", error)
+    return { success: false, error: "Failed to remove accountant" }
+  }
+}
+
+/**
+ * Get all accountants for the business staff directory
+ */
+export async function getBusinessAccountants(businessSlug: string) {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const accountants = await prisma.businessMember.findMany({
+    where: {
+      businessId: business.id,
+      role: "ACCOUNTANT",
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  return accountants.map((acc) => ({
+    id: acc.id,
+    userId: acc.user.id,
+    userName: acc.user.name,
+    userEmail: acc.user.email,
+    userPhone: acc.user.phone,
+    userGender: null,
+    userIdCardType: null,
+    userIdCardNumber: null,
+    userGuarantorName: null,
+    userGuarantorPhone: null,
+    userGuarantorRelationship: null,
+    userAddress: null,
+    role: "ACCOUNTANT" as const,
+    isActive: acc.isActive,
+    posAccess: false,
+    shopName: "All Shops",
+    shopSlug: "business-wide",
+    createdAt: acc.createdAt,
+    canSellProducts: false,
+    canCreateCustomers: false,
+    // Accountant-specific permissions
+    canConfirmPayments: acc.canConfirmPayments,
+    canExportData: acc.canExportData,
+    canViewProfitMargins: acc.canViewProfitMargins,
+    canRecordExpenses: acc.canRecordExpenses,
+  }))
+}
+
+/**
+ * Update an accountant's information
+ */
+export async function updateAccountant(
+  businessSlug: string,
+  membershipId: string,
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    const name = formData.get("name") as string
+    const email = formData.get("email") as string
+    const password = formData.get("password") as string
+    const phone = formData.get("phone") as string
+    const isActive = formData.get("isActive") === "true"
+    const canConfirmPayments = formData.get("canConfirmPayments") === "true"
+    const canExportData = formData.get("canExportData") === "true"
+    const canViewProfitMargins = formData.get("canViewProfitMargins") === "true"
+    const canRecordExpenses = formData.get("canRecordExpenses") === "true"
+
+    if (!name || !email) {
+      return { success: false, error: "Name and email are required" }
+    }
+
+    // Find the accountant membership
+    const membership = await prisma.businessMember.findFirst({
+      where: {
+        id: membershipId,
+        businessId: business.id,
+        role: "ACCOUNTANT",
+      },
+      include: { user: true },
+    })
+
+    if (!membership) {
+      return { success: false, error: "Accountant not found" }
+    }
+
+    // Check if email is being changed and if it's already in use
+    if (email !== membership.user.email) {
+      const existingUser = await prisma.user.findUnique({
+        where: { email },
+      })
+      if (existingUser && existingUser.id !== membership.userId) {
+        return { success: false, error: "Email is already in use" }
+      }
+    }
+
+    // Update user info
+    const userUpdateData: {
+      name: string
+      email: string
+      phone: string | null
+      passwordHash?: string
+    } = {
+      name,
+      email,
+      phone: phone || null,
+    }
+
+    if (password) {
+      const bcrypt = await import("bcryptjs")
+      userUpdateData.passwordHash = await bcrypt.hash(password, 10)
+    }
+
+    await prisma.user.update({
+      where: { id: membership.userId },
+      data: userUpdateData,
+    })
+
+    // Update membership info
+    await prisma.businessMember.update({
+      where: { id: membershipId },
+      data: {
+        isActive,
+        canConfirmPayments,
+        canExportData,
+        canViewProfitMargins,
+        canRecordExpenses,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "UPDATE",
+      entityType: "BusinessMember",
+      entityId: membershipId,
+      metadata: { name, email, permissions: { canConfirmPayments, canExportData, canViewProfitMargins, canRecordExpenses } },
+    })
+
+    revalidatePath(`/business-admin/${businessSlug}/staff`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error updating accountant:", error)
+    return { success: false, error: "Failed to update accountant" }
+  }
+}

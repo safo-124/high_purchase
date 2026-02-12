@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has a valid role for login
-    if (!["SUPER_ADMIN", "BUSINESS_ADMIN", "SHOP_ADMIN", "SALES_STAFF", "DEBT_COLLECTOR"].includes(user.role)) {
+    if (!["SUPER_ADMIN", "BUSINESS_ADMIN", "SHOP_ADMIN", "SALES_STAFF", "DEBT_COLLECTOR", "ACCOUNTANT"].includes(user.role)) {
       return NextResponse.json(
         { error: "Access denied. Authorized users only." },
         { status: 403 }
@@ -93,6 +93,8 @@ export async function POST(request: NextRequest) {
       redirectPath = "/sales-staff/select-shop"
     } else if (user.role === "DEBT_COLLECTOR") {
       redirectPath = "/collector/select-shop"
+    } else if (user.role === "ACCOUNTANT") {
+      redirectPath = "/accountant/select-business"
     }
 
     return NextResponse.json({

@@ -1,4 +1,4 @@
-import { getBusinessStaff, getBusinessShops } from "../../actions"
+import { getBusinessStaff, getBusinessShops, getBusinessAccountants } from "../../actions"
 import { StaffContent } from "./staff-content"
 
 interface Props {
@@ -7,15 +7,20 @@ interface Props {
 
 export default async function BusinessStaffPage({ params }: Props) {
   const { businessSlug } = await params
-  const [staff, shops] = await Promise.all([
+  const [shopStaff, shops, accountants] = await Promise.all([
     getBusinessStaff(businessSlug),
     getBusinessShops(businessSlug),
+    getBusinessAccountants(businessSlug),
   ])
+
+  // Merge shop staff and accountants
+  const staff = [...shopStaff, ...accountants]
 
   // Calculate totals by role
   const shopAdmins = staff.filter(s => s.role === "SHOP_ADMIN")
   const salesStaff = staff.filter(s => s.role === "SALES_STAFF")
   const collectors = staff.filter(s => s.role === "DEBT_COLLECTOR")
+  const accountantCount = accountants.length
   const activeStaff = staff.filter(s => s.isActive)
 
   return (
@@ -29,7 +34,7 @@ export default async function BusinessStaffPage({ params }: Props) {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
         <div className="glass-card p-4">
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Staff</p>
           <p className="text-2xl font-bold text-white">{staff.length}</p>
@@ -49,6 +54,11 @@ export default async function BusinessStaffPage({ params }: Props) {
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Collectors</p>
           <p className="text-2xl font-bold text-amber-400">{collectors.length}</p>
           <p className="text-xs text-slate-500 mt-1">Collecting payments</p>
+        </div>
+        <div className="glass-card p-4">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Accountants</p>
+          <p className="text-2xl font-bold text-teal-400">{accountantCount}</p>
+          <p className="text-xs text-slate-500 mt-1">Financial access</p>
         </div>
         <div className="glass-card p-4">
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Shops</p>
