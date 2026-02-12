@@ -1186,3 +1186,303 @@ enum WalletTransactionStatus {
   CONFIRMED     // Confirmed and reflected in balance
   REJECTED      // Rejected by admin
 }
+
+// ========== ACCOUNTANT PORTAL MODELS ==========
+
+// Expense - Track business expenses
+model Expense {
+  id              String          @id @default(cuid())
+  businessId      String
+  shopId          String?         // Optional - expense can be business-wide or shop-specific
+  category        ExpenseCategory
+  customCategory  String?         // If category is OTHER
+  description     String
+  amount          Decimal         @db.Decimal(12, 2)
+  vendor          String?         // Who was paid
+  reference       String?         // Receipt/invoice reference
+  receiptUrl      String?         // Uploaded receipt image
+  expenseDate     DateTime        @db.Date
+  paymentMethod   PaymentMethod?
+  isRecurring     Boolean         @default(false)
+  recurringPeriod String?         // monthly, weekly, annually
+  status          ExpenseStatus   @default(PENDING)
+  approvedById    String?         // BusinessMember who approved
+  approvedAt      DateTime?
+  rejectedReason  String?
+  notes           String?
+  createdById     String          // BusinessMember who created
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([businessId])
+  @@index([shopId])
+  @@index([category])
+  @@index([expenseDate])
+  @@index([status])
+}
+
+// Budget - Track budget allocations and compare to actual spending
+model Budget {
+  id              String        @id @default(cuid())
+  businessId      String
+  shopId          String?       // Optional - budget can be business-wide or shop-specific
+  name            String
+  category        ExpenseCategory?
+  customCategory  String?
+  amount          Decimal       @db.Decimal(12, 2)
+  period          BudgetPeriod
+  startDate       DateTime      @db.Date
+  endDate         DateTime      @db.Date
+  notes           String?
+  isActive        Boolean       @default(true)
+  createdById     String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([businessId])
+  @@index([shopId])
+  @@index([period])
+  @@index([startDate])
+  @@index([endDate])
+}
+
+// PaymentDispute - Handle payment discrepancies
+model PaymentDispute {
+  id              String            @id @default(cuid())
+  businessId      String
+  paymentId       String
+  disputeType     DisputeType
+  description     String            @db.Text
+  disputedAmount  Decimal           @db.Decimal(12, 2)
+  expectedAmount  Decimal?          @db.Decimal(12, 2)
+  evidence        String?           // URL to uploaded evidence
+  status          DisputeStatus     @default(OPEN)
+  resolution      String?           @db.Text
+  resolvedAmount  Decimal?          @db.Decimal(12, 2)
+  raisedById      String            // AccountantMember who raised dispute
+  assignedToId    String?           // Who is handling the dispute
+  resolvedById    String?           // Who resolved the dispute
+  resolvedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([businessId])
+  @@index([paymentId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Refund - Track refunds to customers
+model Refund {
+  id              String          @id @default(cuid())
+  businessId      String
+  purchaseId      String
+  customerId      String
+  reason          RefundReason
+  customReason    String?
+  amount          Decimal         @db.Decimal(12, 2)
+  refundMethod    PaymentMethod
+  status          RefundStatus    @default(PENDING)
+  reference       String?         // Transaction reference
+  processedAt     DateTime?
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectedReason  String?
+  notes           String?
+  requestedById   String          // Who requested the refund
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([businessId])
+  @@index([purchaseId])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// AccountantNote - Notes attached to transactions/payments
+model AccountantNote {
+  id              String          @id @default(cuid())
+  businessId      String
+  entityType      NoteEntityType  // Payment, Purchase, Customer, etc.
+  entityId        String
+  content         String          @db.Text
+  isInternal      Boolean         @default(true) // Internal only or visible to others
+  isPinned        Boolean         @default(false)
+  createdById     String          // BusinessMember who created
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([businessId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// DailyCashSummary - End of day cash reports
+model DailyCashSummary {
+  id                  String                  @id @default(cuid())
+  businessId          String
+  shopId              String
+  summaryDate         DateTime                @db.Date
+  // Opening balance
+  openingCash         Decimal                 @db.Decimal(12, 2)
+  openingMomo         Decimal                 @default(0) @db.Decimal(12, 2)
+  openingBank         Decimal                 @default(0) @db.Decimal(12, 2)
+  // Sales/Collections
+  cashCollected       Decimal                 @default(0) @db.Decimal(12, 2)
+  momoCollected       Decimal                 @default(0) @db.Decimal(12, 2)
+  bankCollected       Decimal                 @default(0) @db.Decimal(12, 2)
+  // Expenses paid out
+  cashExpenses        Decimal                 @default(0) @db.Decimal(12, 2)
+  momoExpenses        Decimal                 @default(0) @db.Decimal(12, 2)
+  bankExpenses        Decimal                 @default(0) @db.Decimal(12, 2)
+  // Closing balance (calculated)
+  closingCash         Decimal                 @db.Decimal(12, 2)
+  closingMomo         Decimal                 @default(0) @db.Decimal(12, 2)
+  closingBank         Decimal                 @default(0) @db.Decimal(12, 2)
+  // Variance
+  cashVariance        Decimal                 @default(0) @db.Decimal(12, 2)
+  varianceExplanation String?
+  // Status
+  status              DailyCashSummaryStatus  @default(DRAFT)
+  submittedAt         DateTime?
+  submittedById       String?
+  reviewedAt          DateTime?
+  reviewedById        String?
+  reviewNotes         String?
+  notes               String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@unique([shopId, summaryDate])
+  @@index([businessId])
+  @@index([shopId])
+  @@index([summaryDate])
+  @@index([status])
+}
+
+// Commission - Track staff commissions
+model Commission {
+  id              String            @id @default(cuid())
+  businessId      String
+  shopId          String
+  staffMemberId   String            // ShopMember who earned commission
+  staffRole       Role
+  sourceType      CommissionSource  // What action generated commission
+  sourceId        String            // Purchase or Payment ID
+  baseAmount      Decimal           @db.Decimal(12, 2) // Amount commission calculated on
+  rate            Decimal           @db.Decimal(5, 4)  // Commission rate (e.g., 0.05 for 5%)
+  amount          Decimal           @db.Decimal(12, 2) // Calculated commission amount
+  status          CommissionStatus  @default(PENDING)
+  paidAt          DateTime?
+  paidById        String?
+  paymentRef      String?           // Payment reference when paid
+  notes           String?
+  periodStart     DateTime          @db.Date
+  periodEnd       DateTime          @db.Date
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([businessId])
+  @@index([shopId])
+  @@index([staffMemberId])
+  @@index([status])
+  @@index([periodStart, periodEnd])
+}
+
+// Enums for new accountant models
+enum ExpenseCategory {
+  RENT
+  UTILITIES
+  SALARIES
+  SUPPLIES
+  TRANSPORT
+  MARKETING
+  MAINTENANCE
+  INSURANCE
+  TAXES
+  BANK_CHARGES
+  COMMUNICATION
+  INVENTORY
+  EQUIPMENT
+  PROFESSIONAL_SERVICES
+  OTHER
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum BudgetPeriod {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum DisputeType {
+  AMOUNT_MISMATCH
+  DUPLICATE_PAYMENT
+  UNAUTHORIZED_PAYMENT
+  MISSING_PAYMENT
+  WRONG_CUSTOMER
+  FRAUDULENT
+  OTHER
+}
+
+enum DisputeStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  CLOSED
+  ESCALATED
+}
+
+enum RefundReason {
+  PRODUCT_DEFECT
+  WRONG_PRODUCT
+  CUSTOMER_REQUEST
+  OVERCHARGE
+  DUPLICATE_CHARGE
+  DELIVERY_FAILURE
+  OTHER
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  PROCESSING
+  COMPLETED
+  REJECTED
+}
+
+enum NoteEntityType {
+  PAYMENT
+  PURCHASE
+  CUSTOMER
+  EXPENSE
+  REFUND
+  DISPUTE
+}
+
+enum DailyCashSummaryStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+  APPROVED
+}
+
+enum CommissionSource {
+  SALE
+  COLLECTION
+}
+
+enum CommissionStatus {
+  PENDING
+  APPROVED
+  PAID
+  CANCELLED
+}

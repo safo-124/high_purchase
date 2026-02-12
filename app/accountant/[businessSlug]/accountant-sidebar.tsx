@@ -41,8 +41,8 @@ export function AccountantSidebar({
 
   const baseUrl = `/accountant/${businessSlug}`
 
-  // Navigation items for accountant
-  const navItems: NavItem[] = [
+  // Main navigation items
+  const mainNavItems: NavItem[] = [
     {
       name: "Dashboard",
       href: `${baseUrl}/dashboard`,
@@ -70,6 +70,59 @@ export function AccountantSidebar({
         </svg>
       ),
     },
+  ]
+
+  // Financial management items
+  const financialNavItems: NavItem[] = [
+    {
+      name: "Expenses",
+      href: `${baseUrl}/expenses`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+        </svg>
+      ),
+    },
+    {
+      name: "Cash Summary",
+      href: `${baseUrl}/cash-summary`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+        </svg>
+      ),
+    },
+    {
+      name: "Cash Flow",
+      href: `${baseUrl}/cash-flow`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+        </svg>
+      ),
+    },
+    {
+      name: "Budgets",
+      href: `${baseUrl}/budgets`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      ),
+    },
+    {
+      name: "Commissions",
+      href: `${baseUrl}/commissions`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+    },
+  ]
+
+  // Analytics/Reports items
+  const analyticsNavItems: NavItem[] = [
     {
       name: "Reports",
       href: `${baseUrl}/reports`,
@@ -88,24 +141,101 @@ export function AccountantSidebar({
         </svg>
       ),
     },
-  ]
-
-  // Add exports if permitted
-  if (permissions.canExportData) {
-    navItems.push({
-      name: "Exports",
-      href: `${baseUrl}/exports`,
+    {
+      name: "Bad Debts",
+      href: `${baseUrl}/bad-debts`,
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
       ),
-    })
-  }
+    },
+    {
+      name: "Collections",
+      href: `${baseUrl}/collection-efficiency`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        </svg>
+      ),
+    },
+    {
+      name: "By Category",
+      href: `${baseUrl}/revenue-category`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+        </svg>
+      ),
+    },
+    {
+      name: "Staff Performance",
+      href: `${baseUrl}/staff-performance`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      ),
+    },
+  ]
 
-  // Add profit report if permitted
+  // Compliance items
+  const complianceNavItems: NavItem[] = [
+    {
+      name: "Audit Trail",
+      href: `${baseUrl}/audit-trail`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+        </svg>
+      ),
+    },
+    {
+      name: "Tax Reports",
+      href: `${baseUrl}/tax-reports`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+        </svg>
+      ),
+    },
+    {
+      name: "Statements",
+      href: `${baseUrl}/financial-statements`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      ),
+    },
+  ]
+
+  // Operations items
+  const operationsNavItems: NavItem[] = [
+    {
+      name: "Disputes",
+      href: `${baseUrl}/disputes`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+    },
+    {
+      name: "Refunds",
+      href: `${baseUrl}/refunds`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+        </svg>
+      ),
+    },
+  ]
+
+  // Add profit analysis if permitted
   if (permissions.canViewProfitMargins) {
-    navItems.push({
+    analyticsNavItems.push({
       name: "Profit Analysis",
       href: `${baseUrl}/profits`,
       icon: (
@@ -115,6 +245,9 @@ export function AccountantSidebar({
       ),
     })
   }
+
+  // Combine all nav items for mobile
+  const navItems = [...mainNavItems, ...financialNavItems.slice(0, 2)]
 
   const isActive = (href: string) => {
     if (href === baseUrl + "/dashboard") {
@@ -222,8 +355,9 @@ export function AccountantSidebar({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-4 space-y-2">
-          {navItems.map((item) => {
+        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+          {/* Main Section */}
+          {mainNavItems.map((item) => {
             const active = isActive(item.href)
             return (
               <Link
@@ -231,7 +365,7 @@ export function AccountantSidebar({
                 href={item.href}
                 onClick={() => setIsMobileOpen(false)}
                 className={`
-                  flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200
+                  flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200
                   ${active
                     ? "bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 text-white shadow-lg shadow-emerald-500/10"
                     : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"
@@ -239,19 +373,122 @@ export function AccountantSidebar({
                 `}
               >
                 <span className={active ? "text-emerald-400" : ""}>{item.icon}</span>
-                <span className="font-medium">{item.name}</span>
-                {item.badge && (
-                  <span className="ml-auto px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                    {item.badge}
-                  </span>
-                )}
+                <span className="font-medium text-sm">{item.name}</span>
               </Link>
             )
           })}
 
+          {/* Financial Section */}
+          <div className="pt-3 mt-3 border-t border-white/10">
+            <p className="px-4 text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+              Financial
+            </p>
+            {financialNavItems.map((item) => {
+              const active = isActive(item.href)
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  onClick={() => setIsMobileOpen(false)}
+                  className={`
+                    flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200
+                    ${active
+                      ? "bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 text-white shadow-lg shadow-emerald-500/10"
+                      : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"
+                    }
+                  `}
+                >
+                  <span className={active ? "text-emerald-400" : ""}>{item.icon}</span>
+                  <span className="font-medium text-sm">{item.name}</span>
+                </Link>
+              )
+            })}
+          </div>
+
+          {/* Analytics Section */}
+          <div className="pt-3 mt-3 border-t border-white/10">
+            <p className="px-4 text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+              Analytics
+            </p>
+            {analyticsNavItems.map((item) => {
+              const active = isActive(item.href)
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  onClick={() => setIsMobileOpen(false)}
+                  className={`
+                    flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200
+                    ${active
+                      ? "bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 text-white shadow-lg shadow-emerald-500/10"
+                      : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"
+                    }
+                  `}
+                >
+                  <span className={active ? "text-emerald-400" : ""}>{item.icon}</span>
+                  <span className="font-medium text-sm">{item.name}</span>
+                </Link>
+              )
+            })}
+          </div>
+
+          {/* Compliance Section */}
+          <div className="pt-3 mt-3 border-t border-white/10">
+            <p className="px-4 text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+              Compliance
+            </p>
+            {complianceNavItems.map((item) => {
+              const active = isActive(item.href)
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  onClick={() => setIsMobileOpen(false)}
+                  className={`
+                    flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200
+                    ${active
+                      ? "bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 text-white shadow-lg shadow-emerald-500/10"
+                      : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"
+                    }
+                  `}
+                >
+                  <span className={active ? "text-emerald-400" : ""}>{item.icon}</span>
+                  <span className="font-medium text-sm">{item.name}</span>
+                </Link>
+              )
+            })}
+          </div>
+
+          {/* Operations Section */}
+          <div className="pt-3 mt-3 border-t border-white/10">
+            <p className="px-4 text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+              Operations
+            </p>
+            {operationsNavItems.map((item) => {
+              const active = isActive(item.href)
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  onClick={() => setIsMobileOpen(false)}
+                  className={`
+                    flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200
+                    ${active
+                      ? "bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 text-white shadow-lg shadow-emerald-500/10"
+                      : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"
+                    }
+                  `}
+                >
+                  <span className={active ? "text-emerald-400" : ""}>{item.icon}</span>
+                  <span className="font-medium text-sm">{item.name}</span>
+                </Link>
+              )
+            })}
+          </div>
+
           {/* Export Section */}
           {permissions.canExportData && (
-            <div className="pt-4 mt-4 border-t border-white/10">
+            <div className="pt-3 mt-3 border-t border-white/10">
               <p className="px-4 text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
                 Exports
               </p>
@@ -259,7 +496,7 @@ export function AccountantSidebar({
                 href={`${baseUrl}/exports`}
                 onClick={() => setIsMobileOpen(false)}
                 className={`
-                  flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200
+                  flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200
                   ${pathname.startsWith(`${baseUrl}/exports`)
                     ? "bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 text-white shadow-lg shadow-emerald-500/10"
                     : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"
@@ -269,7 +506,7 @@ export function AccountantSidebar({
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span className="font-medium">Export Data</span>
+                <span className="font-medium text-sm">Export Data</span>
               </Link>
             </div>
           )}

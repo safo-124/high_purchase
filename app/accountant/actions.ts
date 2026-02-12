@@ -3,7 +3,15 @@
 import { revalidatePath } from "next/cache"
 import prisma from "../../lib/prisma"
 import { requireAccountant, getAccountantBusinessMemberships, createAuditLog } from "../../lib/auth"
-import { Prisma } from "../generated/prisma/client"
+import { 
+  Prisma, 
+  ExpenseCategory,
+  DisputeType,
+  RefundReason,
+  PaymentMethod,
+  BudgetPeriod,
+  NoteEntityType
+} from "../generated/prisma/client"
 
 export type ActionResult = {
   success: boolean
@@ -1160,4 +1168,2024 @@ export async function getProfitMarginReport(
  */
 export async function getAccountantBusinesses(userId: string) {
   return getAccountantBusinessMemberships(userId)
+}
+
+// ========================================
+// EXPENSE TRACKING
+// ========================================
+
+export interface ExpenseItem {
+  id: string
+  category: string
+  customCategory: string | null
+  description: string
+  amount: number
+  vendor: string | null
+  reference: string | null
+  receiptUrl: string | null
+  expenseDate: Date
+  paymentMethod: string | null
+  isRecurring: boolean
+  recurringPeriod: string | null
+  status: string
+  notes: string | null
+  shopId: string | null
+  shopName: string | null
+  createdAt: Date
+}
+
+export async function getAccountantExpenses(
+  businessSlug: string,
+  filters?: {
+    category?: string
+    status?: string
+    shopId?: string
+    startDate?: Date
+    endDate?: Date
+  }
+): Promise<{ expenses: ExpenseItem[]; summary: { total: number; pending: number; approved: number; byCategory: Record<string, number> } }> {
+  const { business } = await requireAccountant(businessSlug)
+
+  const whereClause: Record<string, unknown> = {
+    businessId: business.id,
+  }
+
+  if (filters?.category && filters.category !== "all") {
+    whereClause.category = filters.category
+  }
+  if (filters?.status && filters.status !== "all") {
+    whereClause.status = filters.status
+  }
+  if (filters?.shopId) {
+    whereClause.shopId = filters.shopId
+  }
+  if (filters?.startDate || filters?.endDate) {
+    whereClause.expenseDate = {}
+    if (filters.startDate) {
+      (whereClause.expenseDate as Record<string, Date>).gte = filters.startDate
+    }
+    if (filters.endDate) {
+      (whereClause.expenseDate as Record<string, Date>).lte = filters.endDate
+    }
+  }
+
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true, name: true },
+  })
+
+  const shopMap = new Map(shops.map(s => [s.id, s.name]))
+
+  const expenses = await prisma.expense.findMany({
+    where: whereClause,
+    orderBy: { expenseDate: "desc" },
+  })
+
+  const expenseItems: ExpenseItem[] = expenses.map(e => ({
+    id: e.id,
+    category: e.category,
+    customCategory: e.customCategory,
+    description: e.description,
+    amount: Number(e.amount),
+    vendor: e.vendor,
+    reference: e.reference,
+    receiptUrl: e.receiptUrl,
+    expenseDate: e.expenseDate,
+    paymentMethod: e.paymentMethod,
+    isRecurring: e.isRecurring,
+    recurringPeriod: e.recurringPeriod,
+    status: e.status,
+    notes: e.notes,
+    shopId: e.shopId,
+    shopName: e.shopId ? shopMap.get(e.shopId) || null : null,
+    createdAt: e.createdAt,
+  }))
+
+  // Calculate summary
+  const total = expenseItems.reduce((sum, e) => sum + e.amount, 0)
+  const pending = expenseItems.filter(e => e.status === "PENDING").reduce((sum, e) => sum + e.amount, 0)
+  const approved = expenseItems.filter(e => e.status === "APPROVED" || e.status === "PAID").reduce((sum, e) => sum + e.amount, 0)
+  const byCategory: Record<string, number> = {}
+  expenseItems.forEach(e => {
+    byCategory[e.category] = (byCategory[e.category] || 0) + e.amount
+  })
+
+  return { expenses: expenseItems, summary: { total, pending, approved, byCategory } }
+}
+
+export async function createExpense(
+  businessSlug: string,
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    const { user, business, membership } = await requireAccountant(businessSlug)
+
+    if (!membership.canRecordExpenses) {
+      return { success: false, error: "You don't have permission to record expenses" }
+    }
+
+    const category = formData.get("category") as string
+    const customCategory = formData.get("customCategory") as string
+    const description = formData.get("description") as string
+    const amount = parseFloat(formData.get("amount") as string)
+    const vendor = formData.get("vendor") as string
+    const reference = formData.get("reference") as string
+    const expenseDate = new Date(formData.get("expenseDate") as string)
+    const paymentMethod = formData.get("paymentMethod") as string
+    const shopId = formData.get("shopId") as string
+    const isRecurring = formData.get("isRecurring") === "true"
+    const recurringPeriod = formData.get("recurringPeriod") as string
+    const notes = formData.get("notes") as string
+
+    if (!category || !description || isNaN(amount) || amount <= 0) {
+      return { success: false, error: "Category, description, and valid amount are required" }
+    }
+
+    await prisma.expense.create({
+      data: {
+        businessId: business.id,
+        shopId: shopId || null,
+        category: category as ExpenseCategory,
+        customCategory: category === "OTHER" ? customCategory : null,
+        description,
+        amount,
+        vendor: vendor || null,
+        reference: reference || null,
+        expenseDate,
+        paymentMethod: (paymentMethod as PaymentMethod) || null,
+        isRecurring,
+        recurringPeriod: isRecurring ? recurringPeriod : null,
+        status: "PENDING",
+        notes: notes || null,
+        createdById: membership.id,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CREATE_EXPENSE",
+      entityType: "Expense",
+      metadata: { businessId: business.id, amount, category },
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/expenses`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error creating expense:", error)
+    return { success: false, error: "Failed to create expense" }
+  }
+}
+
+export async function approveExpense(
+  businessSlug: string,
+  expenseId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business, membership } = await requireAccountant(businessSlug)
+
+    const expense = await prisma.expense.findFirst({
+      where: { id: expenseId, businessId: business.id },
+    })
+
+    if (!expense) {
+      return { success: false, error: "Expense not found" }
+    }
+
+    await prisma.expense.update({
+      where: { id: expenseId },
+      data: {
+        status: "APPROVED",
+        approvedById: membership.id,
+        approvedAt: new Date(),
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "APPROVE_EXPENSE",
+      entityType: "Expense",
+      entityId: expenseId,
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/expenses`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error approving expense:", error)
+    return { success: false, error: "Failed to approve expense" }
+  }
+}
+
+export async function rejectExpense(
+  businessSlug: string,
+  expenseId: string,
+  reason: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireAccountant(businessSlug)
+
+    await prisma.expense.update({
+      where: { id: expenseId, businessId: business.id },
+      data: {
+        status: "REJECTED",
+        rejectedReason: reason,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "REJECT_EXPENSE",
+      entityType: "Expense", 
+      entityId: expenseId,
+      metadata: { reason },
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/expenses`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error rejecting expense:", error)
+    return { success: false, error: "Failed to reject expense" }
+  }
+}
+
+// ========================================
+// DAILY CASH SUMMARY
+// ========================================
+
+export interface DailyCashSummaryData {
+  id: string
+  summaryDate: Date
+  shopId: string
+  shopName: string
+  openingCash: number
+  openingMomo: number
+  openingBank: number
+  cashCollected: number
+  momoCollected: number
+  bankCollected: number
+  cashExpenses: number
+  momoExpenses: number
+  bankExpenses: number
+  closingCash: number
+  closingMomo: number
+  closingBank: number
+  cashVariance: number
+  varianceExplanation: string | null
+  status: string
+  notes: string | null
+}
+
+export async function getDailyCashSummaries(
+  businessSlug: string,
+  filters?: {
+    shopId?: string
+    startDate?: Date
+    endDate?: Date
+    status?: string
+  }
+): Promise<DailyCashSummaryData[]> {
+  const { business } = await requireAccountant(businessSlug)
+
+  const whereClause: Record<string, unknown> = {
+    businessId: business.id,
+  }
+
+  if (filters?.shopId) {
+    whereClause.shopId = filters.shopId
+  }
+  if (filters?.status && filters.status !== "all") {
+    whereClause.status = filters.status
+  }
+  if (filters?.startDate || filters?.endDate) {
+    whereClause.summaryDate = {}
+    if (filters.startDate) {
+      (whereClause.summaryDate as Record<string, Date>).gte = filters.startDate
+    }
+    if (filters.endDate) {
+      (whereClause.summaryDate as Record<string, Date>).lte = filters.endDate
+    }
+  }
+
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true, name: true },
+  })
+  const shopMap = new Map(shops.map(s => [s.id, s.name]))
+
+  const summaries = await prisma.dailyCashSummary.findMany({
+    where: whereClause,
+    orderBy: { summaryDate: "desc" },
+  })
+
+  return summaries.map(s => ({
+    id: s.id,
+    summaryDate: s.summaryDate,
+    shopId: s.shopId,
+    shopName: shopMap.get(s.shopId) || "Unknown",
+    openingCash: Number(s.openingCash),
+    openingMomo: Number(s.openingMomo),
+    openingBank: Number(s.openingBank),
+    cashCollected: Number(s.cashCollected),
+    momoCollected: Number(s.momoCollected),
+    bankCollected: Number(s.bankCollected),
+    cashExpenses: Number(s.cashExpenses),
+    momoExpenses: Number(s.momoExpenses),
+    bankExpenses: Number(s.bankExpenses),
+    closingCash: Number(s.closingCash),
+    closingMomo: Number(s.closingMomo),
+    closingBank: Number(s.closingBank),
+    cashVariance: Number(s.cashVariance),
+    varianceExplanation: s.varianceExplanation,
+    status: s.status,
+    notes: s.notes,
+  }))
+}
+
+export async function createDailyCashSummary(
+  businessSlug: string,
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    const { user, business, membership } = await requireAccountant(businessSlug)
+
+    const shopId = formData.get("shopId") as string
+    const summaryDate = new Date(formData.get("summaryDate") as string)
+    const openingCash = parseFloat(formData.get("openingCash") as string) || 0
+    const openingMomo = parseFloat(formData.get("openingMomo") as string) || 0
+    const openingBank = parseFloat(formData.get("openingBank") as string) || 0
+    const cashCollected = parseFloat(formData.get("cashCollected") as string) || 0
+    const momoCollected = parseFloat(formData.get("momoCollected") as string) || 0
+    const bankCollected = parseFloat(formData.get("bankCollected") as string) || 0
+    const cashExpenses = parseFloat(formData.get("cashExpenses") as string) || 0
+    const momoExpenses = parseFloat(formData.get("momoExpenses") as string) || 0
+    const bankExpenses = parseFloat(formData.get("bankExpenses") as string) || 0
+    const closingCash = parseFloat(formData.get("closingCash") as string) || 0
+    const closingMomo = parseFloat(formData.get("closingMomo") as string) || 0
+    const closingBank = parseFloat(formData.get("closingBank") as string) || 0
+    const notes = formData.get("notes") as string
+
+    // Calculate expected closing and variance
+    const expectedCash = openingCash + cashCollected - cashExpenses
+    const cashVariance = closingCash - expectedCash
+
+    await prisma.dailyCashSummary.create({
+      data: {
+        businessId: business.id,
+        shopId,
+        summaryDate,
+        openingCash,
+        openingMomo,
+        openingBank,
+        cashCollected,
+        momoCollected,
+        bankCollected,
+        cashExpenses,
+        momoExpenses,
+        bankExpenses,
+        closingCash,
+        closingMomo,
+        closingBank,
+        cashVariance,
+        status: "DRAFT",
+        notes: notes || null,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CREATE_CASH_SUMMARY",
+      entityType: "DailyCashSummary",
+      metadata: { shopId, date: summaryDate },
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/cash-summary`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error creating cash summary:", error)
+    return { success: false, error: "Failed to create cash summary" }
+  }
+}
+
+// ========================================
+// CASH FLOW PROJECTIONS
+// ========================================
+
+export interface CashFlowProjection {
+  date: string
+  expectedInflow: number
+  actualInflow: number
+  expectedOutflow: number
+  actualOutflow: number
+  netCashFlow: number
+  cumulativeBalance: number
+}
+
+export async function getCashFlowProjections(
+  businessSlug: string,
+  days: number = 30
+): Promise<{ projections: CashFlowProjection[]; summary: { totalExpectedInflow: number; totalExpectedOutflow: number; projectedBalance: number } }> {
+  const { business } = await requireAccountant(businessSlug)
+
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true },
+  })
+  const shopIds = shops.map(s => s.id)
+
+  const today = new Date()
+  const projections: CashFlowProjection[] = []
+  let cumulativeBalance = 0
+
+  // Get expected payments (from payment schedules/due dates)
+  const upcomingPayments = await prisma.payment.findMany({
+    where: {
+      purchase: {
+        customer: { shopId: { in: shopIds } },
+      },
+      dueDate: {
+        gte: today,
+        lte: new Date(today.getTime() + days * 24 * 60 * 60 * 1000),
+      },
+    },
+    select: { dueDate: true, amount: true, status: true },
+  })
+
+  // Get recurring expenses
+  const recurringExpenses = await prisma.expense.findMany({
+    where: {
+      businessId: business.id,
+      isRecurring: true,
+      status: { in: ["APPROVED", "PAID"] },
+    },
+    select: { amount: true, recurringPeriod: true, expenseDate: true },
+  })
+
+  // Calculate daily projections
+  for (let i = 0; i < days; i++) {
+    const date = new Date(today.getTime() + i * 24 * 60 * 60 * 1000)
+    const dateStr = date.toISOString().split("T")[0]
+
+    // Expected inflows (payments due on this date)
+    const expectedInflow = upcomingPayments
+      .filter(p => p.dueDate && p.dueDate.toISOString().split("T")[0] === dateStr)
+      .reduce((sum, p) => sum + Number(p.amount), 0)
+
+    // Expected outflows (recurring expenses)
+    const expectedOutflow = recurringExpenses
+      .filter(e => {
+        if (e.recurringPeriod === "monthly" && date.getDate() === e.expenseDate.getDate()) return true
+        if (e.recurringPeriod === "weekly" && date.getDay() === e.expenseDate.getDay()) return true
+        return false
+      })
+      .reduce((sum, e) => sum + Number(e.amount), 0)
+
+    const netCashFlow = expectedInflow - expectedOutflow
+    cumulativeBalance += netCashFlow
+
+    projections.push({
+      date: dateStr,
+      expectedInflow,
+      actualInflow: 0, // Will be filled with actual data
+      expectedOutflow,
+      actualOutflow: 0,
+      netCashFlow,
+      cumulativeBalance,
+    })
+  }
+
+  const totalExpectedInflow = projections.reduce((sum, p) => sum + p.expectedInflow, 0)
+  const totalExpectedOutflow = projections.reduce((sum, p) => sum + p.expectedOutflow, 0)
+
+  return {
+    projections,
+    summary: {
+      totalExpectedInflow,
+      totalExpectedOutflow,
+      projectedBalance: cumulativeBalance,
+    },
+  }
+}
+
+// ========================================
+// BAD DEBT ANALYSIS
+// ========================================
+
+export interface BadDebtItem {
+  customerId: string
+  customerName: string
+  customerPhone: string
+  purchaseId: string
+  purchaseNumber: string
+  shopName: string
+  totalAmount: number
+  amountPaid: number
+  outstanding: number
+  daysOverdue: number
+  dueDate: Date
+  riskScore: number // 1-100, higher is more risky
+  lastPaymentDate: Date | null
+  paymentCount: number
+}
+
+export async function getBadDebtAnalysis(
+  businessSlug: string,
+  filters?: {
+    shopId?: string
+    minDaysOverdue?: number
+    minAmount?: number
+  }
+): Promise<{ items: BadDebtItem[]; summary: { totalAtRisk: number; highRiskCount: number; mediumRiskCount: number; lowRiskCount: number; writeOffSuggested: number } }> {
+  const { business } = await requireAccountant(businessSlug)
+
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true, name: true },
+  })
+  const shopIds = filters?.shopId ? [filters.shopId] : shops.map(s => s.id)
+  const shopMap = new Map(shops.map(s => [s.id, s.name]))
+
+  const today = new Date()
+  const overduePurchases = await prisma.purchase.findMany({
+    where: {
+      customer: { shopId: { in: shopIds } },
+      status: { in: ["ACTIVE", "OVERDUE", "DEFAULTED"] },
+      dueDate: { lt: today },
+      outstandingBalance: { gt: 0 },
+    },
+    include: {
+      customer: true,
+      payments: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+      _count: { select: { payments: true } },
+    },
+  })
+
+  const items: BadDebtItem[] = overduePurchases
+    .map(p => {
+      const daysOverdue = Math.floor((today.getTime() - p.dueDate.getTime()) / (1000 * 60 * 60 * 24))
+      const outstanding = Number(p.outstandingBalance)
+      const totalAmount = Number(p.totalAmount)
+
+      // Calculate risk score (0-100)
+      let riskScore = 0
+      riskScore += Math.min(daysOverdue / 2, 40) // Up to 40 points for days overdue
+      riskScore += (outstanding / totalAmount) * 30 // Up to 30 points for % unpaid
+      riskScore += p._count.payments === 0 ? 20 : 0 // 20 points if no payments at all
+      riskScore += daysOverdue > 90 ? 10 : 0 // 10 extra points if over 90 days
+
+      return {
+        customerId: p.customerId,
+        customerName: `${p.customer.firstName} ${p.customer.lastName}`,
+        customerPhone: p.customer.phone,
+        purchaseId: p.id,
+        purchaseNumber: p.purchaseNumber,
+        shopName: shopMap.get(p.customer.shopId) || "Unknown",
+        totalAmount,
+        amountPaid: Number(p.amountPaid),
+        outstanding,
+        daysOverdue,
+        dueDate: p.dueDate,
+        riskScore: Math.min(Math.round(riskScore), 100),
+        lastPaymentDate: p.payments[0]?.paidAt || null,
+        paymentCount: p._count.payments,
+      }
+    })
+    .filter(item => {
+      if (filters?.minDaysOverdue && item.daysOverdue < filters.minDaysOverdue) return false
+      if (filters?.minAmount && item.outstanding < filters.minAmount) return false
+      return true
+    })
+    .sort((a, b) => b.riskScore - a.riskScore)
+
+  const totalAtRisk = items.reduce((sum, i) => sum + i.outstanding, 0)
+  const highRiskCount = items.filter(i => i.riskScore >= 70).length
+  const mediumRiskCount = items.filter(i => i.riskScore >= 40 && i.riskScore < 70).length
+  const lowRiskCount = items.filter(i => i.riskScore < 40).length
+  const writeOffSuggested = items
+    .filter(i => i.riskScore >= 80 && i.daysOverdue > 180)
+    .reduce((sum, i) => sum + i.outstanding, 0)
+
+  return {
+    items,
+    summary: { totalAtRisk, highRiskCount, mediumRiskCount, lowRiskCount, writeOffSuggested },
+  }
+}
+
+// ========================================
+// COLLECTION EFFICIENCY
+// ========================================
+
+export interface CollectorEfficiency {
+  collectorId: string
+  collectorName: string
+  shopName: string
+  assignedCustomers: number
+  totalAssigned: number
+  totalCollected: number
+  collectionRate: number
+  paymentsCount: number
+  avgPaymentAmount: number
+  overdueCustomers: number
+  onTimePayments: number
+  latePayments: number
+}
+
+export async function getCollectionEfficiency(
+  businessSlug: string,
+  filters?: {
+    shopId?: string
+    startDate?: Date
+    endDate?: Date
+  }
+): Promise<CollectorEfficiency[]> {
+  const { business } = await requireAccountant(businessSlug)
+
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true, name: true },
+  })
+  const shopIds = filters?.shopId ? [filters.shopId] : shops.map(s => s.id)
+  const shopMap = new Map(shops.map(s => [s.id, s.name]))
+
+  // Get all debt collectors
+  const collectors = await prisma.shopMember.findMany({
+    where: {
+      shopId: { in: shopIds },
+      role: "DEBT_COLLECTOR",
+      isActive: true,
+    },
+    include: {
+      user: { select: { name: true } },
+      assignedCustomers: {
+        include: {
+          purchases: {
+            where: { status: { in: ["ACTIVE", "OVERDUE"] } },
+          },
+        },
+      },
+      collectedPayments: {
+        where: filters?.startDate || filters?.endDate
+          ? {
+              createdAt: {
+                ...(filters.startDate && { gte: filters.startDate }),
+                ...(filters.endDate && { lte: filters.endDate }),
+              },
+            }
+          : undefined,
+      },
+    },
+  })
+
+  return collectors.map(c => {
+    const totalAssigned = c.assignedCustomers.reduce(
+      (sum, cust) => sum + cust.purchases.reduce((s, p) => s + Number(p.outstandingBalance), 0),
+      0
+    )
+    const totalCollected = c.collectedPayments.reduce((sum, p) => sum + Number(p.amount), 0)
+    const overdueCustomers = c.assignedCustomers.filter(cust =>
+      cust.purchases.some(p => p.status === "OVERDUE")
+    ).length
+
+    return {
+      collectorId: c.id,
+      collectorName: c.user.name || "Unknown",
+      shopName: shopMap.get(c.shopId) || "Unknown",
+      assignedCustomers: c.assignedCustomers.length,
+      totalAssigned,
+      totalCollected,
+      collectionRate: totalAssigned > 0 ? (totalCollected / totalAssigned) * 100 : 0,
+      paymentsCount: c.collectedPayments.length,
+      avgPaymentAmount: c.collectedPayments.length > 0 ? totalCollected / c.collectedPayments.length : 0,
+      overdueCustomers,
+      onTimePayments: c.collectedPayments.filter(p => p.status === "COMPLETED").length,
+      latePayments: c.collectedPayments.filter(p => p.dueDate && p.paidAt && p.paidAt > p.dueDate).length,
+    }
+  }).sort((a, b) => b.collectionRate - a.collectionRate)
+}
+
+// ========================================
+// REVENUE BY CATEGORY
+// ========================================
+
+export interface CategoryRevenue {
+  categoryId: string
+  categoryName: string
+  color: string
+  totalRevenue: number
+  totalCost: number
+  profit: number
+  margin: number
+  itemsSold: number
+  purchaseCount: number
+}
+
+export async function getRevenueByCategory(
+  businessSlug: string,
+  filters?: {
+    shopId?: string
+    startDate?: Date
+    endDate?: Date
+  }
+): Promise<CategoryRevenue[]> {
+  const { business, membership } = await requireAccountant(businessSlug)
+
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true },
+  })
+  const shopIds = filters?.shopId ? [filters.shopId] : shops.map(s => s.id)
+
+  const categories = await prisma.category.findMany({
+    where: { businessId: business.id },
+    select: { id: true, name: true, color: true },
+  })
+
+  const purchaseItems = await prisma.purchaseItem.findMany({
+    where: {
+      purchase: {
+        customer: { shopId: { in: shopIds } },
+        status: { in: ["ACTIVE", "COMPLETED"] },
+        ...(filters?.startDate || filters?.endDate
+          ? {
+              createdAt: {
+                ...(filters.startDate && { gte: filters.startDate }),
+                ...(filters.endDate && { lte: filters.endDate }),
+              },
+            }
+          : {}),
+      },
+      product: { categoryId: { not: null } },
+    },
+    include: {
+      product: {
+        select: { categoryId: true, costPrice: true },
+      },
+    },
+  })
+
+  const categoryMap = new Map<string, { revenue: number; cost: number; items: number; purchases: Set<string> }>()
+
+  for (const item of purchaseItems) {
+    const categoryId = item.product?.categoryId
+    if (!categoryId) continue
+
+    const existing = categoryMap.get(categoryId) || { revenue: 0, cost: 0, items: 0, purchases: new Set<string>() }
+    existing.revenue += Number(item.totalPrice)
+    existing.cost += Number(item.product?.costPrice || 0) * item.quantity
+    existing.items += item.quantity
+    existing.purchases.add(item.purchaseId)
+    categoryMap.set(categoryId, existing)
+  }
+
+  return categories
+    .map(cat => {
+      const data = categoryMap.get(cat.id) || { revenue: 0, cost: 0, items: 0, purchases: new Set() }
+      const profit = membership.canViewProfitMargins ? data.revenue - data.cost : 0
+      const margin = membership.canViewProfitMargins && data.revenue > 0 ? (profit / data.revenue) * 100 : 0
+
+      return {
+        categoryId: cat.id,
+        categoryName: cat.name,
+        color: cat.color || "#6366f1",
+        totalRevenue: data.revenue,
+        totalCost: membership.canViewProfitMargins ? data.cost : 0,
+        profit,
+        margin,
+        itemsSold: data.items,
+        purchaseCount: data.purchases.size,
+      }
+    })
+    .filter(c => c.totalRevenue > 0)
+    .sort((a, b) => b.totalRevenue - a.totalRevenue)
+}
+
+// ========================================
+// STAFF PERFORMANCE
+// ========================================
+
+export interface StaffPerformance {
+  staffId: string
+  staffName: string
+  role: string
+  shopName: string
+  // Sales metrics
+  salesCount: number
+  salesAmount: number
+  newCustomers: number
+  // Collection metrics
+  collectionsCount: number
+  collectionsAmount: number
+  // Commission
+  commissionEarned: number
+  commissionPending: number
+}
+
+export async function getStaffPerformance(
+  businessSlug: string,
+  filters?: {
+    shopId?: string
+    role?: string
+    startDate?: Date
+    endDate?: Date
+  }
+): Promise<StaffPerformance[]> {
+  const { business } = await requireAccountant(businessSlug)
+
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true, name: true },
+  })
+  const shopIds = filters?.shopId ? [filters.shopId] : shops.map(s => s.id)
+  const shopMap = new Map(shops.map(s => [s.id, s.name]))
+
+  const dateFilter = filters?.startDate || filters?.endDate
+    ? {
+        createdAt: {
+          ...(filters.startDate && { gte: filters.startDate }),
+          ...(filters.endDate && { lte: filters.endDate }),
+        },
+      }
+    : {}
+
+  const staffMembers = await prisma.shopMember.findMany({
+    where: {
+      shopId: { in: shopIds },
+      isActive: true,
+      ...(filters?.role ? { role: filters.role as Prisma.EnumRoleFilter["equals"] } : {}),
+    },
+    include: {
+      user: { select: { name: true } },
+      collectedPayments: { where: dateFilter },
+    },
+  })
+
+  // Get commissions
+  const commissions = await prisma.commission.findMany({
+    where: {
+      businessId: business.id,
+      shopId: { in: shopIds },
+      ...dateFilter,
+    },
+  })
+
+  const commissionMap = new Map<string, { earned: number; pending: number }>()
+  for (const c of commissions) {
+    const existing = commissionMap.get(c.staffMemberId) || { earned: 0, pending: 0 }
+    if (c.status === "PAID") {
+      existing.earned += Number(c.amount)
+    } else if (c.status === "PENDING" || c.status === "APPROVED") {
+      existing.pending += Number(c.amount)
+    }
+    commissionMap.set(c.staffMemberId, existing)
+  }
+
+  return staffMembers.map(s => {
+    const commission = commissionMap.get(s.id) || { earned: 0, pending: 0 }
+    return {
+      staffId: s.id,
+      staffName: s.user.name || "Unknown",
+      role: s.role,
+      shopName: shopMap.get(s.shopId) || "Unknown",
+      salesCount: 0, // Would need to track who created purchases
+      salesAmount: 0,
+      newCustomers: 0,
+      collectionsCount: s.collectedPayments.length,
+      collectionsAmount: s.collectedPayments.reduce((sum, p) => sum + Number(p.amount), 0),
+      commissionEarned: commission.earned,
+      commissionPending: commission.pending,
+    }
+  }).sort((a, b) => b.collectionsAmount - a.collectionsAmount)
+}
+
+// ========================================
+// AUDIT TRAIL VIEWER
+// ========================================
+
+export interface AuditLogEntry {
+  id: string
+  actorName: string | null
+  actorEmail: string | null
+  action: string
+  entityType: string | null
+  entityId: string | null
+  metadata: Record<string, unknown> | null
+  createdAt: Date
+}
+
+export async function getAuditTrail(
+  businessSlug: string,
+  filters?: {
+    action?: string
+    entityType?: string
+    startDate?: Date
+    endDate?: Date
+    limit?: number
+  }
+): Promise<AuditLogEntry[]> {
+  const { business } = await requireAccountant(businessSlug)
+
+  // Get all business member IDs
+  const members = await prisma.businessMember.findMany({
+    where: { businessId: business.id },
+    select: { userId: true },
+  })
+  const userIds = members.map(m => m.userId)
+
+  // Also get shop members
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true },
+  })
+  const shopMembers = await prisma.shopMember.findMany({
+    where: { shopId: { in: shops.map(s => s.id) } },
+    select: { userId: true },
+  })
+  const allUserIds = [...new Set([...userIds, ...shopMembers.map(m => m.userId)])]
+
+  const whereClause: Record<string, unknown> = {
+    actorUserId: { in: allUserIds },
+  }
+
+  if (filters?.action) {
+    whereClause.action = { contains: filters.action, mode: "insensitive" }
+  }
+  if (filters?.entityType) {
+    whereClause.entityType = filters.entityType
+  }
+  if (filters?.startDate || filters?.endDate) {
+    whereClause.createdAt = {}
+    if (filters.startDate) {
+      (whereClause.createdAt as Record<string, Date>).gte = filters.startDate
+    }
+    if (filters.endDate) {
+      (whereClause.createdAt as Record<string, Date>).lte = filters.endDate
+    }
+  }
+
+  const logs = await prisma.auditLog.findMany({
+    where: whereClause,
+    include: {
+      actor: { select: { name: true, email: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: filters?.limit || 100,
+  })
+
+  return logs.map(l => ({
+    id: l.id,
+    actorName: l.actor?.name || null,
+    actorEmail: l.actor?.email || null,
+    action: l.action,
+    entityType: l.entityType,
+    entityId: l.entityId,
+    metadata: l.metadata as Record<string, unknown> | null,
+    createdAt: l.createdAt,
+  }))
+}
+
+// ========================================
+// TAX REPORT GENERATOR
+// ========================================
+
+export interface TaxReportData {
+  period: { start: Date; end: Date }
+  totalRevenue: number
+  totalTaxCollected: number
+  taxBreakdown: {
+    taxName: string
+    rate: number
+    baseAmount: number
+    taxAmount: number
+  }[]
+  shopBreakdown: {
+    shopName: string
+    revenue: number
+    taxCollected: number
+  }[]
+}
+
+export async function getTaxReport(
+  businessSlug: string,
+  startDate: Date,
+  endDate: Date
+): Promise<TaxReportData> {
+  const { business } = await requireAccountant(businessSlug)
+
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true, name: true },
+  })
+  const shopIds = shops.map(s => s.id)
+  const shopMap = new Map(shops.map(s => [s.id, s.name]))
+
+  // Get taxes configured
+  const taxes = await prisma.tax.findMany({
+    where: { businessId: business.id, isActive: true },
+  })
+
+  // Get purchases in period
+  const purchases = await prisma.purchase.findMany({
+    where: {
+      customer: { shopId: { in: shopIds } },
+      status: { in: ["ACTIVE", "COMPLETED"] },
+      createdAt: { gte: startDate, lte: endDate },
+    },
+    include: {
+      customer: { select: { shopId: true } },
+    },
+  })
+
+  const totalRevenue = purchases.reduce((sum, p) => sum + Number(p.totalAmount), 0)
+
+  // Calculate tax breakdown (simplified - would need actual tax tracking in products)
+  const taxBreakdown = taxes.map(t => {
+    const baseAmount = totalRevenue
+    const taxAmount = (baseAmount * Number(t.rate)) / 100
+    return {
+      taxName: t.name,
+      rate: Number(t.rate),
+      baseAmount,
+      taxAmount,
+    }
+  })
+
+  const totalTaxCollected = taxBreakdown.reduce((sum, t) => sum + t.taxAmount, 0)
+
+  // Shop breakdown
+  const shopRevenue = new Map<string, number>()
+  for (const p of purchases) {
+    const shopId = p.customer.shopId
+    shopRevenue.set(shopId, (shopRevenue.get(shopId) || 0) + Number(p.totalAmount))
+  }
+
+  const shopBreakdown = Array.from(shopRevenue.entries()).map(([shopId, revenue]) => ({
+    shopName: shopMap.get(shopId) || "Unknown",
+    revenue,
+    taxCollected: taxes.reduce((sum, t) => sum + (revenue * Number(t.rate)) / 100, 0),
+  }))
+
+  return {
+    period: { start: startDate, end: endDate },
+    totalRevenue,
+    totalTaxCollected,
+    taxBreakdown,
+    shopBreakdown,
+  }
+}
+
+// ========================================
+// FINANCIAL STATEMENTS
+// ========================================
+
+export interface ProfitLossStatement {
+  period: { start: Date; end: Date }
+  revenue: {
+    sales: number
+    interest: number
+    other: number
+    total: number
+  }
+  costOfGoods: number
+  grossProfit: number
+  expenses: {
+    category: string
+    amount: number
+  }[]
+  totalExpenses: number
+  operatingProfit: number
+  taxes: number
+  netProfit: number
+}
+
+export async function getProfitLossStatement(
+  businessSlug: string,
+  startDate: Date,
+  endDate: Date
+): Promise<ProfitLossStatement> {
+  const { business, membership } = await requireAccountant(businessSlug)
+
+  if (!membership.canViewProfitMargins) {
+    throw new Error("You don't have permission to view profit margins")
+  }
+
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true },
+  })
+  const shopIds = shops.map(s => s.id)
+
+  // Get purchases
+  const purchases = await prisma.purchase.findMany({
+    where: {
+      customer: { shopId: { in: shopIds } },
+      status: { in: ["ACTIVE", "COMPLETED"] },
+      createdAt: { gte: startDate, lte: endDate },
+    },
+    include: {
+      items: {
+        include: { product: { select: { costPrice: true } } },
+      },
+    },
+  })
+
+  const salesRevenue = purchases.reduce((sum, p) => sum + Number(p.subtotal), 0)
+  const interestRevenue = purchases.reduce((sum, p) => sum + Number(p.interestAmount), 0)
+  const totalRevenue = salesRevenue + interestRevenue
+
+  const costOfGoods = purchases.reduce((sum, p) => {
+    return sum + p.items.reduce((s, i) => s + Number(i.product?.costPrice || 0) * i.quantity, 0)
+  }, 0)
+
+  const grossProfit = totalRevenue - costOfGoods
+
+  // Get expenses
+  const expenses = await prisma.expense.findMany({
+    where: {
+      businessId: business.id,
+      status: { in: ["APPROVED", "PAID"] },
+      expenseDate: { gte: startDate, lte: endDate },
+    },
+  })
+
+  const expensesByCategory = new Map<string, number>()
+  for (const e of expenses) {
+    const cat = e.customCategory || e.category
+    expensesByCategory.set(cat, (expensesByCategory.get(cat) || 0) + Number(e.amount))
+  }
+
+  const expenseBreakdown = Array.from(expensesByCategory.entries())
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount)
+
+  const totalExpenses = expenseBreakdown.reduce((sum, e) => sum + e.amount, 0)
+  const operatingProfit = grossProfit - totalExpenses
+
+  // Estimate taxes
+  const taxes = await prisma.tax.findMany({
+    where: { businessId: business.id, isActive: true },
+  })
+  const estimatedTax = taxes.reduce((sum, t) => sum + (totalRevenue * Number(t.rate)) / 100, 0)
+
+  const netProfit = operatingProfit - estimatedTax
+
+  return {
+    period: { start: startDate, end: endDate },
+    revenue: {
+      sales: salesRevenue,
+      interest: interestRevenue,
+      other: 0,
+      total: totalRevenue,
+    },
+    costOfGoods,
+    grossProfit,
+    expenses: expenseBreakdown,
+    totalExpenses,
+    operatingProfit,
+    taxes: estimatedTax,
+    netProfit,
+  }
+}
+
+// ========================================
+// PAYMENT DISPUTES
+// ========================================
+
+export interface DisputeItem {
+  id: string
+  paymentId: string
+  disputeType: string
+  description: string
+  disputedAmount: number
+  expectedAmount: number | null
+  status: string
+  resolution: string | null
+  resolvedAmount: number | null
+  raisedByName: string | null
+  assignedToName: string | null
+  resolvedAt: Date | null
+  createdAt: Date
+}
+
+export async function getPaymentDisputes(
+  businessSlug: string,
+  filters?: {
+    status?: string
+    type?: string
+  }
+): Promise<DisputeItem[]> {
+  const { business } = await requireAccountant(businessSlug)
+
+  const whereClause: Record<string, unknown> = {
+    businessId: business.id,
+  }
+
+  if (filters?.status && filters.status !== "all") {
+    whereClause.status = filters.status
+  }
+  if (filters?.type && filters.type !== "all") {
+    whereClause.disputeType = filters.type
+  }
+
+  const disputes = await prisma.paymentDispute.findMany({
+    where: whereClause,
+    orderBy: { createdAt: "desc" },
+  })
+
+  // Get names for raised by and assigned to
+  const memberIds = [...new Set(disputes.flatMap(d => [d.raisedById, d.assignedToId].filter(Boolean)))]
+  const members = await prisma.businessMember.findMany({
+    where: { id: { in: memberIds as string[] } },
+    include: { user: { select: { name: true } } },
+  })
+  const memberMap = new Map(members.map(m => [m.id, m.user.name]))
+
+  return disputes.map(d => ({
+    id: d.id,
+    paymentId: d.paymentId,
+    disputeType: d.disputeType,
+    description: d.description,
+    disputedAmount: Number(d.disputedAmount),
+    expectedAmount: d.expectedAmount ? Number(d.expectedAmount) : null,
+    status: d.status,
+    resolution: d.resolution,
+    resolvedAmount: d.resolvedAmount ? Number(d.resolvedAmount) : null,
+    raisedByName: memberMap.get(d.raisedById) || null,
+    assignedToName: d.assignedToId ? memberMap.get(d.assignedToId) || null : null,
+    resolvedAt: d.resolvedAt,
+    createdAt: d.createdAt,
+  }))
+}
+
+export async function createDispute(
+  businessSlug: string,
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    const { user, business, membership } = await requireAccountant(businessSlug)
+
+    const paymentId = formData.get("paymentId") as string
+    const disputeType = formData.get("disputeType") as string
+    const description = formData.get("description") as string
+    const disputedAmount = parseFloat(formData.get("disputedAmount") as string)
+    const expectedAmount = formData.get("expectedAmount") as string
+
+    await prisma.paymentDispute.create({
+      data: {
+        businessId: business.id,
+        paymentId,
+        disputeType: disputeType as DisputeType,
+        description,
+        disputedAmount,
+        expectedAmount: expectedAmount ? parseFloat(expectedAmount) : null,
+        status: "OPEN",
+        raisedById: membership.id,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CREATE_DISPUTE",
+      entityType: "PaymentDispute",
+      metadata: { paymentId, disputeType },
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/disputes`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error creating dispute:", error)
+    return { success: false, error: "Failed to create dispute" }
+  }
+}
+
+export async function resolveDispute(
+  businessSlug: string,
+  disputeId: string,
+  resolution: string,
+  resolvedAmount?: number
+): Promise<ActionResult> {
+  try {
+    const { user, business, membership } = await requireAccountant(businessSlug)
+
+    await prisma.paymentDispute.update({
+      where: { id: disputeId, businessId: business.id },
+      data: {
+        status: "RESOLVED",
+        resolution,
+        resolvedAmount: resolvedAmount ?? null,
+        resolvedById: membership.id,
+        resolvedAt: new Date(),
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "RESOLVE_DISPUTE",
+      entityType: "PaymentDispute",
+      entityId: disputeId,
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/disputes`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error resolving dispute:", error)
+    return { success: false, error: "Failed to resolve dispute" }
+  }
+}
+
+// ========================================
+// REFUND MANAGEMENT
+// ========================================
+
+export interface RefundItem {
+  id: string
+  purchaseId: string
+  purchaseNumber: string
+  customerId: string
+  customerName: string
+  reason: string
+  customReason: string | null
+  amount: number
+  refundMethod: string
+  status: string
+  reference: string | null
+  processedAt: Date | null
+  notes: string | null
+  createdAt: Date
+}
+
+export async function getRefunds(
+  businessSlug: string,
+  filters?: {
+    status?: string
+    reason?: string
+  }
+): Promise<RefundItem[]> {
+  const { business } = await requireAccountant(businessSlug)
+
+  const whereClause: Record<string, unknown> = {
+    businessId: business.id,
+  }
+
+  if (filters?.status && filters.status !== "all") {
+    whereClause.status = filters.status
+  }
+  if (filters?.reason && filters.reason !== "all") {
+    whereClause.reason = filters.reason
+  }
+
+  const refunds = await prisma.refund.findMany({
+    where: whereClause,
+    orderBy: { createdAt: "desc" },
+  })
+
+  // Get purchase and customer info
+  const purchaseIds = [...new Set(refunds.map(r => r.purchaseId))]
+  const purchases = await prisma.purchase.findMany({
+    where: { id: { in: purchaseIds } },
+    select: { id: true, purchaseNumber: true },
+  })
+  const purchaseMap = new Map(purchases.map(p => [p.id, p.purchaseNumber]))
+
+  const customerIds = [...new Set(refunds.map(r => r.customerId))]
+  const customers = await prisma.customer.findMany({
+    where: { id: { in: customerIds } },
+    select: { id: true, firstName: true, lastName: true },
+  })
+  const customerMap = new Map(customers.map(c => [c.id, `${c.firstName} ${c.lastName}`]))
+
+  return refunds.map(r => ({
+    id: r.id,
+    purchaseId: r.purchaseId,
+    purchaseNumber: purchaseMap.get(r.purchaseId) || "Unknown",
+    customerId: r.customerId,
+    customerName: customerMap.get(r.customerId) || "Unknown",
+    reason: r.reason,
+    customReason: r.customReason,
+    amount: Number(r.amount),
+    refundMethod: r.refundMethod,
+    status: r.status,
+    reference: r.reference,
+    processedAt: r.processedAt,
+    notes: r.notes,
+    createdAt: r.createdAt,
+  }))
+}
+
+export async function createRefund(
+  businessSlug: string,
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    const { user, business, membership } = await requireAccountant(businessSlug)
+
+    const purchaseId = formData.get("purchaseId") as string
+    const customerId = formData.get("customerId") as string
+    const reason = formData.get("reason") as string
+    const customReason = formData.get("customReason") as string
+    const amount = parseFloat(formData.get("amount") as string)
+    const refundMethod = formData.get("refundMethod") as string
+    const notes = formData.get("notes") as string
+
+    await prisma.refund.create({
+      data: {
+        businessId: business.id,
+        purchaseId,
+        customerId,
+        reason: reason as RefundReason,
+        customReason: reason === "OTHER" ? customReason : null,
+        amount,
+        refundMethod: refundMethod as PaymentMethod,
+        status: "PENDING",
+        notes: notes || null,
+        requestedById: membership.id,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CREATE_REFUND",
+      entityType: "Refund",
+      metadata: { purchaseId, amount },
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/refunds`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error creating refund:", error)
+    return { success: false, error: "Failed to create refund" }
+  }
+}
+
+export async function approveRefund(
+  businessSlug: string,
+  refundId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business, membership } = await requireAccountant(businessSlug)
+
+    await prisma.refund.update({
+      where: { id: refundId, businessId: business.id },
+      data: {
+        status: "APPROVED",
+        approvedById: membership.id,
+        approvedAt: new Date(),
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "APPROVE_REFUND",
+      entityType: "Refund",
+      entityId: refundId,
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/refunds`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error approving refund:", error)
+    return { success: false, error: "Failed to approve refund" }
+  }
+}
+
+export async function processRefund(
+  businessSlug: string,
+  refundId: string,
+  reference: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireAccountant(businessSlug)
+
+    await prisma.refund.update({
+      where: { id: refundId, businessId: business.id },
+      data: {
+        status: "COMPLETED",
+        reference,
+        processedAt: new Date(),
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PROCESS_REFUND",
+      entityType: "Refund",
+      entityId: refundId,
+      metadata: { reference },
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/refunds`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error processing refund:", error)
+    return { success: false, error: "Failed to process refund" }
+  }
+}
+
+// ========================================
+// COMMISSION CALCULATOR
+// ========================================
+
+export interface CommissionItem {
+  id: string
+  staffMemberId: string
+  staffName: string
+  staffRole: string
+  shopName: string
+  sourceType: string
+  sourceId: string
+  baseAmount: number
+  rate: number
+  amount: number
+  status: string
+  paidAt: Date | null
+  paymentRef: string | null
+  periodStart: Date
+  periodEnd: Date
+}
+
+export async function getCommissions(
+  businessSlug: string,
+  filters?: {
+    shopId?: string
+    status?: string
+    startDate?: Date
+    endDate?: Date
+  }
+): Promise<{ commissions: CommissionItem[]; summary: { total: number; pending: number; approved: number; paid: number } }> {
+  const { business } = await requireAccountant(businessSlug)
+
+  const shops = await prisma.shop.findMany({
+    where: { businessId: business.id },
+    select: { id: true, name: true },
+  })
+  const shopIds = filters?.shopId ? [filters.shopId] : shops.map(s => s.id)
+  const shopMap = new Map(shops.map(s => [s.id, s.name]))
+
+  const whereClause: Record<string, unknown> = {
+    businessId: business.id,
+    shopId: { in: shopIds },
+  }
+
+  if (filters?.status && filters.status !== "all") {
+    whereClause.status = filters.status
+  }
+  if (filters?.startDate) {
+    whereClause.periodStart = { gte: filters.startDate }
+  }
+  if (filters?.endDate) {
+    whereClause.periodEnd = { lte: filters.endDate }
+  }
+
+  const commissions = await prisma.commission.findMany({
+    where: whereClause,
+    orderBy: { createdAt: "desc" },
+  })
+
+  // Get staff member info
+  const staffIds = [...new Set(commissions.map(c => c.staffMemberId))]
+  const staff = await prisma.shopMember.findMany({
+    where: { id: { in: staffIds } },
+    include: { user: { select: { name: true } } },
+  })
+  const staffMap = new Map(staff.map(s => [s.id, { name: s.user.name, role: s.role }]))
+
+  const items: CommissionItem[] = commissions.map(c => {
+    const staffInfo = staffMap.get(c.staffMemberId)
+    return {
+      id: c.id,
+      staffMemberId: c.staffMemberId,
+      staffName: staffInfo?.name || "Unknown",
+      staffRole: staffInfo?.role || c.staffRole,
+      shopName: shopMap.get(c.shopId) || "Unknown",
+      sourceType: c.sourceType,
+      sourceId: c.sourceId,
+      baseAmount: Number(c.baseAmount),
+      rate: Number(c.rate),
+      amount: Number(c.amount),
+      status: c.status,
+      paidAt: c.paidAt,
+      paymentRef: c.paymentRef,
+      periodStart: c.periodStart,
+      periodEnd: c.periodEnd,
+    }
+  })
+
+  const total = items.reduce((sum, c) => sum + c.amount, 0)
+  const pending = items.filter(c => c.status === "PENDING").reduce((sum, c) => sum + c.amount, 0)
+  const approved = items.filter(c => c.status === "APPROVED").reduce((sum, c) => sum + c.amount, 0)
+  const paid = items.filter(c => c.status === "PAID").reduce((sum, c) => sum + c.amount, 0)
+
+  return { commissions: items, summary: { total, pending, approved, paid } }
+}
+
+export async function calculateCommissions(
+  businessSlug: string,
+  periodStart: Date,
+  periodEnd: Date,
+  rates: { salesRate: number; collectionRate: number }
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireAccountant(businessSlug)
+
+    const shops = await prisma.shop.findMany({
+      where: { businessId: business.id },
+      select: { id: true },
+    })
+    const shopIds = shops.map(s => s.id)
+
+    // Get collections by debt collectors in period
+    const payments = await prisma.payment.findMany({
+      where: {
+        purchase: { customer: { shopId: { in: shopIds } } },
+        collectorId: { not: null },
+        isConfirmed: true,
+        createdAt: { gte: periodStart, lte: periodEnd },
+      },
+      include: {
+        collector: true,
+        purchase: { include: { customer: true } },
+      },
+    })
+
+    // Group by collector
+    const collectorPayments = new Map<string, { total: number; shopId: string }>()
+    for (const p of payments) {
+      if (!p.collectorId) continue
+      const existing = collectorPayments.get(p.collectorId) || { total: 0, shopId: p.collector?.shopId || "" }
+      existing.total += Number(p.amount)
+      collectorPayments.set(p.collectorId, existing)
+    }
+
+    // Create commission records
+    const commissionsToCreate = []
+    for (const [staffId, data] of collectorPayments.entries()) {
+      const amount = data.total * rates.collectionRate
+      commissionsToCreate.push({
+        businessId: business.id,
+        shopId: data.shopId,
+        staffMemberId: staffId,
+        staffRole: "DEBT_COLLECTOR" as const,
+        sourceType: "COLLECTION" as const,
+        sourceId: `period-${periodStart.toISOString()}-${periodEnd.toISOString()}`,
+        baseAmount: data.total,
+        rate: rates.collectionRate,
+        amount,
+        status: "PENDING" as const,
+        periodStart,
+        periodEnd,
+      })
+    }
+
+    if (commissionsToCreate.length > 0) {
+      await prisma.commission.createMany({ data: commissionsToCreate })
+    }
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CALCULATE_COMMISSIONS",
+      entityType: "Commission",
+      metadata: { periodStart, periodEnd, count: commissionsToCreate.length },
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/commissions`)
+    return { success: true, data: { count: commissionsToCreate.length } }
+  } catch (error) {
+    console.error("Error calculating commissions:", error)
+    return { success: false, error: "Failed to calculate commissions" }
+  }
+}
+
+export async function approveCommission(
+  businessSlug: string,
+  commissionId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireAccountant(businessSlug)
+
+    await prisma.commission.update({
+      where: { id: commissionId, businessId: business.id },
+      data: { status: "APPROVED" },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "APPROVE_COMMISSION",
+      entityType: "Commission",
+      entityId: commissionId,
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/commissions`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error approving commission:", error)
+    return { success: false, error: "Failed to approve commission" }
+  }
+}
+
+export async function markCommissionPaid(
+  businessSlug: string,
+  commissionId: string,
+  paymentRef: string
+): Promise<ActionResult> {
+  try {
+    const { user, business, membership } = await requireAccountant(businessSlug)
+
+    await prisma.commission.update({
+      where: { id: commissionId, businessId: business.id },
+      data: {
+        status: "PAID",
+        paidAt: new Date(),
+        paidById: membership.id,
+        paymentRef,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "PAY_COMMISSION",
+      entityType: "Commission",
+      entityId: commissionId,
+      metadata: { paymentRef },
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/commissions`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error marking commission paid:", error)
+    return { success: false, error: "Failed to mark commission as paid" }
+  }
+}
+
+// ========================================
+// BUDGET VS ACTUAL
+// ========================================
+
+export interface BudgetItem {
+  id: string
+  name: string
+  category: string | null
+  customCategory: string | null
+  amount: number
+  spent: number
+  variance: number
+  variancePercent: number
+  period: string
+  startDate: Date
+  endDate: Date
+  isActive: boolean
+}
+
+export async function getBudgets(
+  businessSlug: string,
+  filters?: {
+    period?: string
+    category?: string
+    isActive?: boolean
+  }
+): Promise<BudgetItem[]> {
+  const { business } = await requireAccountant(businessSlug)
+
+  const whereClause: Record<string, unknown> = {
+    businessId: business.id,
+  }
+
+  if (filters?.period) {
+    whereClause.period = filters.period
+  }
+  if (filters?.category) {
+    whereClause.category = filters.category
+  }
+  if (filters?.isActive !== undefined) {
+    whereClause.isActive = filters.isActive
+  }
+
+  const budgets = await prisma.budget.findMany({
+    where: whereClause,
+    orderBy: { startDate: "desc" },
+  })
+
+  // Calculate spent amounts from expenses
+  const items: BudgetItem[] = await Promise.all(
+    budgets.map(async b => {
+      const expenseWhere: Record<string, unknown> = {
+        businessId: business.id,
+        expenseDate: { gte: b.startDate, lte: b.endDate },
+        status: { in: ["APPROVED", "PAID"] },
+      }
+      if (b.category) {
+        expenseWhere.category = b.category
+      }
+
+      const expenses = await prisma.expense.aggregate({
+        where: expenseWhere,
+        _sum: { amount: true },
+      })
+
+      const spent = Number(expenses._sum.amount || 0)
+      const budgetAmount = Number(b.amount)
+      const variance = budgetAmount - spent
+      const variancePercent = budgetAmount > 0 ? (variance / budgetAmount) * 100 : 0
+
+      return {
+        id: b.id,
+        name: b.name,
+        category: b.category,
+        customCategory: b.customCategory,
+        amount: budgetAmount,
+        spent,
+        variance,
+        variancePercent,
+        period: b.period,
+        startDate: b.startDate,
+        endDate: b.endDate,
+        isActive: b.isActive,
+      }
+    })
+  )
+
+  return items
+}
+
+export async function createBudget(
+  businessSlug: string,
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    const { user, business, membership } = await requireAccountant(businessSlug)
+
+    const name = formData.get("name") as string
+    const category = formData.get("category") as string
+    const customCategory = formData.get("customCategory") as string
+    const amount = parseFloat(formData.get("amount") as string)
+    const period = formData.get("period") as string
+    const startDate = new Date(formData.get("startDate") as string)
+    const endDate = new Date(formData.get("endDate") as string)
+    const notes = formData.get("notes") as string
+
+    await prisma.budget.create({
+      data: {
+        businessId: business.id,
+        name,
+        category: category ? (category as ExpenseCategory) : null,
+        customCategory: customCategory || null,
+        amount,
+        period: period as BudgetPeriod,
+        startDate,
+        endDate,
+        notes: notes || null,
+        createdById: membership.id,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CREATE_BUDGET",
+      entityType: "Budget",
+      metadata: { name, amount, period },
+    })
+
+    revalidatePath(`/accountant/${businessSlug}/budgets`)
+    return { success: true }
+  } catch (error) {
+    console.error("Error creating budget:", error)
+    return { success: false, error: "Failed to create budget" }
+  }
+}
+
+// ========================================
+// ACCOUNTANT NOTES
+// ========================================
+
+export interface NoteItem {
+  id: string
+  entityType: string
+  entityId: string
+  content: string
+  isInternal: boolean
+  isPinned: boolean
+  createdByName: string | null
+  createdAt: Date
+}
+
+export async function getAccountantNotes(
+  businessSlug: string,
+  entityType: string,
+  entityId: string
+): Promise<NoteItem[]> {
+  const { business } = await requireAccountant(businessSlug)
+
+  const notes = await prisma.accountantNote.findMany({
+    where: {
+      businessId: business.id,
+      entityType: entityType as NoteEntityType,
+      entityId,
+    },
+    orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+  })
+
+  // Get creator names
+  const creatorIds = [...new Set(notes.map(n => n.createdById))]
+  const creators = await prisma.businessMember.findMany({
+    where: { id: { in: creatorIds } },
+    include: { user: { select: { name: true } } },
+  })
+  const creatorMap = new Map(creators.map(c => [c.id, c.user.name]))
+
+  return notes.map(n => ({
+    id: n.id,
+    entityType: n.entityType,
+    entityId: n.entityId,
+    content: n.content,
+    isInternal: n.isInternal,
+    isPinned: n.isPinned,
+    createdByName: creatorMap.get(n.createdById) || null,
+    createdAt: n.createdAt,
+  }))
+}
+
+export async function createAccountantNote(
+  businessSlug: string,
+  entityType: string,
+  entityId: string,
+  content: string,
+  isInternal: boolean = true
+): Promise<ActionResult> {
+  try {
+    const { user, business, membership } = await requireAccountant(businessSlug)
+
+    await prisma.accountantNote.create({
+      data: {
+        businessId: business.id,
+        entityType: entityType as NoteEntityType,
+        entityId,
+        content,
+        isInternal,
+        createdById: membership.id,
+      },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "CREATE_NOTE",
+      entityType: "AccountantNote",
+      metadata: { entityType, entityId },
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error creating note:", error)
+    return { success: false, error: "Failed to create note" }
+  }
+}
+
+export async function toggleNotePin(
+  businessSlug: string,
+  noteId: string
+): Promise<ActionResult> {
+  try {
+    const { business } = await requireAccountant(businessSlug)
+
+    const note = await prisma.accountantNote.findFirst({
+      where: { id: noteId, businessId: business.id },
+    })
+
+    if (!note) {
+      return { success: false, error: "Note not found" }
+    }
+
+    await prisma.accountantNote.update({
+      where: { id: noteId },
+      data: { isPinned: !note.isPinned },
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error toggling note pin:", error)
+    return { success: false, error: "Failed to toggle note pin" }
+  }
+}
+
+export async function deleteAccountantNote(
+  businessSlug: string,
+  noteId: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireAccountant(businessSlug)
+
+    await prisma.accountantNote.delete({
+      where: { id: noteId, businessId: business.id },
+    })
+
+    await createAuditLog({
+      actorUserId: user.id,
+      action: "DELETE_NOTE",
+      entityType: "AccountantNote",
+      entityId: noteId,
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting note:", error)
+    return { success: false, error: "Failed to delete note" }
+  }
 }
