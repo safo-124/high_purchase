@@ -30,6 +30,7 @@ export interface BusinessData {
     id: string
     name: string | null
     email: string
+    plainPassword: string | null
   }>
   // For backwards compatibility
   adminName: string | null
@@ -69,6 +70,7 @@ export async function getBusinesses(): Promise<BusinessData[]> {
       id: m.user.id,
       name: m.user.name,
       email: m.user.email,
+      plainPassword: m.user.plainPassword,
     })),
     adminName: b.members[0]?.user.name || null,
     adminEmail: b.members[0]?.user.email || null,
@@ -156,6 +158,7 @@ export async function createBusiness(formData: FormData): Promise<ActionResult> 
         email: adminEmail.toLowerCase().trim(),
         name: adminName.trim(),
         passwordHash,
+        plainPassword: adminPassword,
         role: "BUSINESS_ADMIN",
         mustChangePassword: true, // Force password change on first login
         businessMemberships: {
@@ -262,6 +265,7 @@ export async function addBusinessAdmin(formData: FormData): Promise<ActionResult
         email: adminEmail.toLowerCase().trim(),
         name: adminName.trim(),
         passwordHash,
+        plainPassword: adminPassword,
         role: "BUSINESS_ADMIN",
         businessMemberships: {
           create: {

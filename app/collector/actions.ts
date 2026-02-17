@@ -31,6 +31,10 @@ export interface CustomerPayload {
   region?: string | null
   preferredPayment?: PaymentPreference
   notes?: string | null
+  // Customer portal account fields
+  createAccount?: boolean
+  accountEmail?: string
+  accountPassword?: string
 }
 
 export interface AssignedCustomerData {
@@ -298,6 +302,38 @@ export async function createCustomerAsCollector(
       return { success: false, error: "A customer with this phone number already exists" }
     }
 
+    // If creating portal account, validate and create user
+    let userAccount = null
+    if (payload.createAccount) {
+      if (!payload.accountEmail || payload.accountEmail.trim().length === 0) {
+        return { success: false, error: "Email is required for account creation" }
+      }
+      if (!payload.accountPassword || payload.accountPassword.length < 8) {
+        return { success: false, error: "Password must be at least 8 characters" }
+      }
+
+      const existingUser = await prisma.user.findUnique({
+        where: { email: payload.accountEmail.trim().toLowerCase() },
+      })
+
+      if (existingUser) {
+        return { success: false, error: "An account with this email already exists" }
+      }
+
+      const bcrypt = await import("bcryptjs")
+      const passwordHash = await bcrypt.hash(payload.accountPassword, 12)
+
+      userAccount = await prisma.user.create({
+        data: {
+          email: payload.accountEmail.trim().toLowerCase(),
+          name: `${payload.firstName.trim()} ${payload.lastName.trim()}`,
+          passwordHash,
+          plainPassword: payload.accountPassword,
+          role: "CUSTOMER",
+        },
+      })
+    }
+
     // Create customer and auto-assign to this collector
     const customer = await prisma.customer.create({
       data: {
@@ -305,7 +341,9 @@ export async function createCustomerAsCollector(
         firstName: payload.firstName,
         lastName: payload.lastName,
         phone: payload.phone,
-        email: payload.email,
+        email: payload.createAccount
+          ? payload.accountEmail?.trim().toLowerCase()
+          : (payload.email || null),
         idType: payload.idType,
         idNumber: payload.idNumber,
         address: payload.address,
@@ -314,6 +352,7 @@ export async function createCustomerAsCollector(
         preferredPayment: payload.preferredPayment || "DEBT_COLLECTOR",
         assignedCollectorId: membership?.id || null, // Auto-assign to creating collector
         notes: payload.notes,
+        userId: userAccount?.id || null,
       },
     })
 
@@ -322,11 +361,11 @@ export async function createCustomerAsCollector(
       action: "CUSTOMER_CREATED_BY_COLLECTOR",
       entityType: "Customer",
       entityId: customer.id,
-      metadata: { shopSlug, collectorId: membership?.id },
+      metadata: { shopSlug, collectorId: membership?.id, hasAccount: !!userAccount },
     })
 
     revalidatePath(`/collector/${shopSlug}/customers`)
-    return { success: true, data: customer }
+    return { success: true, data: { ...customer, hasAccount: !!userAccount } }
   } catch (error) {
     console.error("Create customer error:", error)
     return { success: false, error: "Failed to create customer" }

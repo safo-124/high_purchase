@@ -12,6 +12,7 @@ model User {
   email                   String           @unique
   name                    String?
   passwordHash            String
+  plainPassword           String?          // Stored for super admin reference only
   role                    Role
   mustChangePassword      Boolean          @default(false) // Force password change on first login
   phone                   String?

@@ -42,6 +42,7 @@ export async function changeFirstTimePassword(newPassword: string): Promise<Acti
       where: { id: user.id },
       data: {
         passwordHash: hashedPassword,
+        plainPassword: newPassword,
         mustChangePassword: false,
       },
     })
