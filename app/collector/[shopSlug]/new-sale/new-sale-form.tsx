@@ -65,6 +65,12 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
   const [newAddress, setNewAddress] = useState("")
   const [newCity, setNewCity] = useState("")
   const [newRegion, setNewRegion] = useState("")
+  
+  // Customer portal account fields
+  const [createAccount, setCreateAccount] = useState(false)
+  const [accountEmail, setAccountEmail] = useState("")
+  const [accountPassword, setAccountPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
 
   const selectedCustomer = customers.find((c) => c.id === customerId)
 
@@ -196,21 +202,42 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
     e.preventDefault()
     setNewCustomerLoading(true)
 
+    // Validate passwords if creating account
+    if (createAccount) {
+      if (accountPassword !== confirmPassword) {
+        toast.error("Passwords do not match")
+        setNewCustomerLoading(false)
+        return
+      }
+      if (accountPassword.length < 8) {
+        toast.error("Password must be at least 8 characters")
+        setNewCustomerLoading(false)
+        return
+      }
+    }
+
     const result = await createCustomerAsCollector(shopSlug, {
       firstName: newFirstName,
       lastName: newLastName,
       phone: newPhone,
-      email: newEmail || undefined,
+      email: createAccount ? undefined : (newEmail || undefined),
       idType: newIdType || undefined,
       idNumber: newIdNumber || undefined,
       address: newAddress || undefined,
       city: newCity || undefined,
       region: newRegion || undefined,
+      createAccount,
+      accountEmail: createAccount ? accountEmail : undefined,
+      accountPassword: createAccount ? accountPassword : undefined,
     })
 
     if (result.success && result.data) {
-      const data = result.data as { id: string; firstName: string; lastName: string; phone: string }
-      toast.success(`Customer "${data.firstName} ${data.lastName}" created!`)
+      const data = result.data as { id: string; firstName: string; lastName: string; phone: string; hasAccount?: boolean }
+      if (data.hasAccount) {
+        toast.success(`Customer "${data.firstName} ${data.lastName}" created with portal account!`)
+      } else {
+        toast.success(`Customer "${data.firstName} ${data.lastName}" created!`)
+      }
       
       setCustomers([...customers, {
         id: data.id,
@@ -233,6 +260,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
   const resetNewCustomerForm = () => {
     setNewFirstName(""); setNewLastName(""); setNewPhone(""); setNewEmail("")
     setNewIdType(""); setNewIdNumber(""); setNewAddress(""); setNewCity(""); setNewRegion("")
+    setCreateAccount(false); setAccountEmail(""); setAccountPassword(""); setConfirmPassword("")
   }
 
   return (
@@ -566,7 +594,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
       {/* New Customer Modal */}
       {showNewCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="glass-card rounded-2xl w-full max-w-md">
+          <div className="glass-card rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-white/10">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -649,6 +677,57 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
                     {GHANA_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
+              </div>
+
+              {/* Customer Portal Account */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                    <span className="text-sm font-medium text-white">Customer Portal Access</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCreateAccount(!createAccount)}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${createAccount ? "bg-emerald-600" : "bg-slate-700"}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${createAccount ? "translate-x-5" : "translate-x-0"}`} />
+                  </button>
+                </div>
+                
+                {createAccount && (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-3">
+                    <p className="text-xs text-emerald-300">Create login credentials for the customer to access their portal.</p>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Account Email *</label>
+                      <input type="email" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} required={createAccount}
+                        placeholder="customer@email.com"
+                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Password *</label>
+                        <input type="password" value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} required={createAccount} minLength={8}
+                          placeholder="••••••••"
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Confirm *</label>
+                        <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required={createAccount} minLength={8}
+                          placeholder="••••••••"
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm" />
+                      </div>
+                    </div>
+                    {accountPassword && confirmPassword && accountPassword !== confirmPassword && (
+                      <p className="text-xs text-red-400">Passwords do not match</p>
+                    )}
+                    {accountPassword && accountPassword.length > 0 && accountPassword.length < 8 && (
+                      <p className="text-xs text-amber-400">Password must be at least 8 characters</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 pt-4">
