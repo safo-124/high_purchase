@@ -163,12 +163,12 @@ export default function LoginPage() {
       </div>
 
       {/* Right Panel - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 relative">
+      <div className="w-full lg:w-1/2 flex flex-col min-h-screen relative">
         {/* Subtle Background */}
         <div className="absolute inset-0 bg-gradient-to-b from-violet-950/20 to-transparent" />
         
         {/* Mobile Logo */}
-        <div className="absolute top-8 left-8 lg:hidden flex items-center gap-2">
+        <div className="lg:hidden flex items-center gap-2 px-6 pt-6 pb-2 relative z-10">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
             <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -177,20 +177,21 @@ export default function LoginPage() {
           <span className="text-xl font-bold text-white">High Purchase</span>
         </div>
 
-        <div className="w-full max-w-md relative z-10">
+        <div className="flex-1 flex items-center justify-center px-4 py-6 sm:px-6 lg:px-12 relative z-10">
+        <div className="w-full max-w-md">
           {/* Card Glow */}
-          <div className="absolute -inset-1 bg-gradient-to-r from-violet-600/20 via-purple-600/20 to-fuchsia-600/20 rounded-3xl blur-xl" />
+          <div className="absolute -inset-1 bg-gradient-to-r from-violet-600/20 via-purple-600/20 to-fuchsia-600/20 rounded-3xl blur-xl hidden sm:block" />
           
-          <div className="relative bg-slate-900/80 backdrop-blur-2xl rounded-3xl border border-white/10 p-8 lg:p-10 shadow-2xl">
+          <div className="relative bg-slate-900/80 backdrop-blur-2xl rounded-2xl sm:rounded-3xl border border-white/10 p-6 sm:p-8 lg:p-10 shadow-2xl">
             {/* Header */}
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/30 mb-6">
+            <div className="text-center mb-6 sm:mb-8">
+              <div className="hidden sm:inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/30 mb-6">
                 <svg className="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Welcome Back</h2>
-              <p className="text-slate-400">Sign in to your admin dashboard</p>
+              <h2 className="text-xl sm:text-2xl font-bold text-white mb-1 sm:mb-2">Welcome Back</h2>
+              <p className="text-sm sm:text-base text-slate-400">Sign in to your admin dashboard</p>
             </div>
 
             {/* Form */}
@@ -297,7 +298,7 @@ export default function LoginPage() {
             </form>
 
             {/* Divider */}
-            <div className="relative my-8">
+            <div className="relative my-6 sm:my-8">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-slate-700/50" />
               </div>
@@ -321,7 +322,7 @@ export default function LoginPage() {
             </Link>
 
             {/* Security Badge */}
-            <div className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-500">
+            <div className="mt-6 sm:mt-8 flex items-center justify-center gap-2 text-xs text-slate-500">
               <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
@@ -329,9 +330,10 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
+        </div>
 
         {/* Footer */}
-        <div className="absolute bottom-6 left-0 right-0 text-center">
+        <div className="py-4 text-center relative z-10">
           <p className="text-xs text-slate-600">
             © 2026 High Purchase • Buy Now, Pay Later Platform
           </p>
