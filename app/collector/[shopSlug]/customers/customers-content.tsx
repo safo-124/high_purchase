@@ -366,8 +366,9 @@ export function CustomersContent({ customers: initialCustomers, shopSlug, canCre
 
       {/* New Customer Modal */}
       {showNewCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm">
+          <div className="flex min-h-full items-start sm:items-center justify-center p-4 pt-16 sm:pt-4">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg mb-8">
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-white">Create New Customer</h3>
               <button
@@ -616,6 +617,7 @@ export function CustomersContent({ customers: initialCustomers, shopSlug, canCre
                 </button>
               </div>
             </form>
+          </div>
           </div>
         </div>
       )}

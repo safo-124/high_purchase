@@ -593,8 +593,9 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
 
       {/* New Customer Modal */}
       {showNewCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="glass-card rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm">
+          <div className="flex min-h-full items-start sm:items-center justify-center p-4 pt-16 sm:pt-4">
+          <div className="glass-card rounded-2xl w-full max-w-md mb-8">
             <div className="p-6 border-b border-white/10">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -745,6 +746,7 @@ export function NewSaleForm({ shopSlug, products, customers: initialCustomers, c
                 </button>
               </div>
             </form>
+          </div>
           </div>
         </div>
       )}
