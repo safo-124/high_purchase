@@ -21,8 +21,8 @@ export default async function CollectorChatPage({ params }: Props) {
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
+    <div className="p-0 sm:p-6">
+      <div className="mb-6 hidden sm:block">
         <h1 className="text-2xl font-bold tracking-tight">Messages</h1>
         <p className="text-muted-foreground">
           Communicate with your assigned customers and team
