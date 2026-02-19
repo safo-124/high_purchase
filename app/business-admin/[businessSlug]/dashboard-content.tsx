@@ -999,7 +999,7 @@ export function DashboardContent({ stats, businessName, currency, walletStats, b
                   <Tooltip
                     contentStyle={{ background: '#1e293b', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '12px', fontSize: '12px' }}
                     labelStyle={{ color: '#94a3b8' }}
-                    formatter={(value: number) => [value, 'Customers']}
+                    formatter={(value: number | undefined) => [value ?? 0, 'Customers']}
                   />
                   <Area type="monotone" dataKey="count" stroke="#10b981" strokeWidth={2} fill="url(#customerGrowthGrad)" dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }} />
                 </AreaChart>
