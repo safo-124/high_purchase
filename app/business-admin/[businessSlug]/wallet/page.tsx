@@ -33,18 +33,11 @@ export default async function WalletPage({ params }: Props) {
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <div className="glass-card p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Net Balance</p>
-          {(() => {
-            const netBalance = -summary.totalOutstanding
-            return (
-              <>
-                <p className={`text-2xl font-bold ${netBalance >= 0 ? "text-green-400" : "text-red-400"}`}>
-                  GHS {netBalance.toLocaleString()}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">{netBalance >= 0 ? "Credit" : "Owed to business"}</p>
-              </>
-            )
-          })()}
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Wallet Balance</p>
+          <p className={`text-2xl font-bold ${summary.totalWalletBalance >= 0 ? "text-green-400" : "text-red-400"}`}>
+            GHS {summary.totalWalletBalance.toLocaleString()}
+          </p>
+          <p className="text-xs text-slate-500 mt-1">{summary.customersWithBalance} customer{summary.customersWithBalance !== 1 ? "s" : ""} with balance</p>
         </div>
         <div className="glass-card p-4">
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Outstanding</p>
