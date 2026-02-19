@@ -741,6 +741,50 @@ export async function getWalletSummary(businessSlug: string) {
     },
   })
 
+  // Get daily wallet activity for the last 7 days (for trend chart)
+  const sevenDaysAgo = new Date()
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
+  sevenDaysAgo.setHours(0, 0, 0, 0)
+
+  const recentTransactions = await prisma.walletTransaction.findMany({
+    where: {
+      shopId: { in: shopIds },
+      status: WalletTransactionStatus.CONFIRMED,
+      confirmedAt: { gte: sevenDaysAgo },
+    },
+    select: {
+      amount: true,
+      type: true,
+      confirmedAt: true,
+    },
+    orderBy: { confirmedAt: "asc" },
+  })
+
+  // Build 7-day trend data
+  const walletTrend: { day: string; deposits: number; spent: number }[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    d.setHours(0, 0, 0, 0)
+    const nextD = new Date(d)
+    nextD.setDate(nextD.getDate() + 1)
+
+    const dayLabel = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+    const dayTxns = recentTransactions.filter((t) => {
+      const txDate = t.confirmedAt!
+      return txDate >= d && txDate < nextD
+    })
+
+    const deposits = dayTxns
+      .filter((t) => t.type === WalletTransactionType.DEPOSIT || t.type === WalletTransactionType.REFUND)
+      .reduce((sum, t) => sum + Number(t.amount), 0)
+    const spent = dayTxns
+      .filter((t) => t.type === WalletTransactionType.PURCHASE)
+      .reduce((sum, t) => sum + Number(t.amount), 0)
+
+    walletTrend.push({ day: dayLabel, deposits, spent })
+  }
+
   return {
     totalWalletBalance,
     customersWithBalance,
@@ -748,5 +792,6 @@ export async function getWalletSummary(businessSlug: string) {
     todayDeposits,
     totalDeposits,
     totalTransactions,
+    walletTrend,
   }
 }

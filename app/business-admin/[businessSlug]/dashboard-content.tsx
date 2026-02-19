@@ -24,6 +24,7 @@ interface WalletStats {
   todayDeposits: number
   totalDeposits: number
   totalTransactions: number
+  walletTrend: { day: string; deposits: number; spent: number }[]
 }
 
 interface DashboardContentProps {
@@ -429,89 +430,168 @@ export function DashboardContent({ stats, businessName, currency, walletStats, b
         </div>
       </div>
 
-      {/* Wallet Statistics */}
+      {/* Wallet Statistics — Chart + Cards */}
       <div className="glass-card p-6 relative overflow-hidden">
         <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-24 -right-24 w-64 h-64 bg-gradient-to-br from-indigo-500/10 to-violet-500/5 rounded-full blur-3xl" />
+          <div className="absolute -top-24 -right-24 w-64 h-64 bg-linear-to-br from-indigo-500/10 to-violet-500/5 rounded-full blur-3xl" />
+          <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-linear-to-br from-emerald-500/8 to-cyan-500/5 rounded-full blur-3xl" />
         </div>
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/30 flex items-center justify-center">
-              <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" />
-              </svg>
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-linear-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/30 flex items-center justify-center">
+                <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Wallet Overview</h3>
+                <p className="text-sm text-slate-400">Customer wallet balances &amp; activity</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white">Wallet Overview</h3>
-              <p className="text-sm text-slate-400">Customer wallet balances &amp; activity</p>
+            {/* Big balance pill */}
+            <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/30">
+              <span className="text-xs text-slate-400 uppercase tracking-wider">Balance</span>
+              <span className="text-lg font-bold text-indigo-400">{formatCurrency(walletStats.totalWalletBalance, currency)}</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {/* Total Wallet Balance */}
-            <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 hover:border-indigo-500/40 transition-all">
-              <div className="flex items-center gap-2 mb-2">
-                <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" />
-                </svg>
-                <span className="text-xs text-slate-400">Total Balance</span>
+          {/* Two-column: Chart + Cards */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            {/* Area Chart — 3 cols */}
+            <div className="lg:col-span-3">
+              {/* Mobile balance (shown only on small screens) */}
+              <div className="sm:hidden mb-4 text-center">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Total Wallet Balance</p>
+                <p className="text-2xl font-bold text-indigo-400">{formatCurrency(walletStats.totalWalletBalance, currency)}</p>
               </div>
-              <p className="text-xl font-bold text-indigo-400">{formatCurrency(walletStats.totalWalletBalance, currency)}</p>
+              <div className="h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={walletStats.walletTrend} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="walletDepositGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#818cf8" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#818cf8" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="walletSpentGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#f472b6" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#f472b6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                    <XAxis
+                      dataKey="day"
+                      tick={{ fill: '#64748b', fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v: string) => v.split(', ').pop() || v}
+                    />
+                    <YAxis
+                      tick={{ fill: '#64748b', fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v}`}
+                    />
+                    <Tooltip content={<CustomTooltip currency={currency} />} />
+                    <Area
+                      type="monotone"
+                      dataKey="deposits"
+                      name="Deposits"
+                      stroke="#818cf8"
+                      strokeWidth={2.5}
+                      fill="url(#walletDepositGrad)"
+                      dot={{ r: 4, fill: '#818cf8', strokeWidth: 2, stroke: '#1e1b4b' }}
+                      activeDot={{ r: 6, fill: '#818cf8', stroke: '#c7d2fe', strokeWidth: 2 }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="spent"
+                      name="Spent"
+                      stroke="#f472b6"
+                      strokeWidth={2}
+                      fill="url(#walletSpentGrad)"
+                      dot={{ r: 3, fill: '#f472b6', strokeWidth: 2, stroke: '#4a1942' }}
+                      activeDot={{ r: 5, fill: '#f472b6', stroke: '#fbcfe8', strokeWidth: 2 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center justify-center gap-6 mt-3">
+                <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" /> Deposits
+                </span>
+                <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-pink-400" /> Spent
+                </span>
+              </div>
             </div>
 
-            {/* Customers with Balance */}
-            <div className="p-4 rounded-2xl bg-violet-500/10 border border-violet-500/20 hover:border-violet-500/40 transition-all">
-              <div className="flex items-center gap-2 mb-2">
-                <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-                </svg>
-                <span className="text-xs text-slate-400">With Balance</span>
+            {/* Stat Cards — 2 cols */}
+            <div className="lg:col-span-2 grid grid-cols-2 gap-3 content-start">
+              {/* Customers with Balance */}
+              <div className="p-3.5 rounded-2xl bg-violet-500/10 border border-violet-500/20 hover:border-violet-500/40 transition-all">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                  </svg>
+                  <span className="text-[11px] text-slate-400">With Balance</span>
+                </div>
+                <p className="text-lg font-bold text-violet-400">{walletStats.customersWithBalance}</p>
               </div>
-              <p className="text-xl font-bold text-violet-400">{walletStats.customersWithBalance}</p>
-            </div>
 
-            {/* Pending Transactions */}
-            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/40 transition-all">
-              <div className="flex items-center gap-2 mb-2">
-                <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-xs text-slate-400">Pending</span>
+              {/* Pending */}
+              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/40 transition-all">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <svg className="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-[11px] text-slate-400">Pending</span>
+                </div>
+                <p className="text-lg font-bold text-amber-400">{walletStats.pendingTransactions}</p>
               </div>
-              <p className="text-xl font-bold text-amber-400">{walletStats.pendingTransactions}</p>
-            </div>
 
-            {/* Today's Deposits */}
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 hover:border-emerald-500/40 transition-all">
-              <div className="flex items-center gap-2 mb-2">
-                <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-xs text-slate-400">Today&apos;s Deposits</span>
+              {/* Today's Deposits */}
+              <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 hover:border-emerald-500/40 transition-all">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-[11px] text-slate-400">Today&apos;s Deposits</span>
+                </div>
+                <p className="text-lg font-bold text-emerald-400">{formatCurrency(walletStats.todayDeposits, currency)}</p>
               </div>
-              <p className="text-xl font-bold text-emerald-400">{formatCurrency(walletStats.todayDeposits, currency)}</p>
-            </div>
 
-            {/* Total Deposits */}
-            <div className="p-4 rounded-2xl bg-teal-500/10 border border-teal-500/20 hover:border-teal-500/40 transition-all">
-              <div className="flex items-center gap-2 mb-2">
-                <svg className="w-4 h-4 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                </svg>
-                <span className="text-xs text-slate-400">Total Deposits</span>
+              {/* Total Deposits */}
+              <div className="p-3.5 rounded-2xl bg-teal-500/10 border border-teal-500/20 hover:border-teal-500/40 transition-all">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <svg className="w-3.5 h-3.5 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                  <span className="text-[11px] text-slate-400">Total Deposits</span>
+                </div>
+                <p className="text-lg font-bold text-teal-400">{formatCurrency(walletStats.totalDeposits, currency)}</p>
               </div>
-              <p className="text-xl font-bold text-teal-400">{formatCurrency(walletStats.totalDeposits, currency)}</p>
-            </div>
 
-            {/* Total Transactions */}
-            <div className="p-4 rounded-2xl bg-sky-500/10 border border-sky-500/20 hover:border-sky-500/40 transition-all">
-              <div className="flex items-center gap-2 mb-2">
-                <svg className="w-4 h-4 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                </svg>
-                <span className="text-xs text-slate-400">Transactions</span>
+              {/* Transactions */}
+              <div className="col-span-2 p-3.5 rounded-2xl bg-sky-500/10 border border-sky-500/20 hover:border-sky-500/40 transition-all">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <svg className="w-3.5 h-3.5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                      </svg>
+                      <span className="text-[11px] text-slate-400">Total Transactions</span>
+                    </div>
+                    <p className="text-lg font-bold text-sky-400">{walletStats.totalTransactions}</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-sky-500/15 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5-6L16.5 21m0 0L12 16.5m4.5 4.5V7.5" />
+                    </svg>
+                  </div>
+                </div>
               </div>
-              <p className="text-xl font-bold text-sky-400">{walletStats.totalTransactions}</p>
             </div>
           </div>
         </div>
