@@ -40,11 +40,11 @@ export default async function WalletPage({ params }: Props) {
           <p className="text-xs text-slate-500 mt-1">{summary.customersWithBalance} customer{summary.customersWithBalance !== 1 ? "s" : ""} with balance</p>
         </div>
         <div className="glass-card p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Outstanding</p>
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Deposits</p>
           <p className="text-2xl font-bold text-amber-400">
-            GHS {summary.totalOutstanding.toLocaleString()}
+            GHS {summary.totalDeposits.toLocaleString()}
           </p>
-          <p className="text-xs text-slate-500 mt-1">{summary.customersWithOutstanding} customers owe</p>
+          <p className="text-xs text-slate-500 mt-1">{summary.totalTransactions} transactions</p>
         </div>
         <div className="glass-card p-4">
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Pending Confirmations</p>

@@ -722,26 +722,22 @@ export async function getWalletSummary(businessSlug: string) {
     .filter((t) => t.type === WalletTransactionType.DEPOSIT)
     .reduce((sum, t) => sum + Number(t.amount), 0)
 
-  // Get total outstanding from all active purchases
-  const outstandingPurchases = await prisma.purchase.findMany({
-    where: {
-      customer: { shopId: { in: shopIds } },
-      status: { in: ["ACTIVE", "OVERDUE"] },
-      outstandingBalance: { gt: 0 },
-    },
-    select: { outstandingBalance: true },
-  })
-  
-  const totalOutstanding = outstandingPurchases.reduce((sum, p) => sum + Number(p.outstandingBalance), 0)
-  const customersWithOutstanding = await prisma.customer.count({
+  // Get all-time confirmed deposits total
+  const allConfirmedDeposits = await prisma.walletTransaction.findMany({
     where: {
       shopId: { in: shopIds },
-      purchases: {
-        some: {
-          status: { in: ["ACTIVE", "OVERDUE"] },
-          outstandingBalance: { gt: 0 },
-        },
-      },
+      status: WalletTransactionStatus.CONFIRMED,
+      type: WalletTransactionType.DEPOSIT,
+    },
+    select: { amount: true },
+  })
+  const totalDeposits = allConfirmedDeposits.reduce((sum, t) => sum + Number(t.amount), 0)
+
+  // Get total wallet transactions count
+  const totalTransactions = await prisma.walletTransaction.count({
+    where: {
+      shopId: { in: shopIds },
+      status: WalletTransactionStatus.CONFIRMED,
     },
   })
 
@@ -750,7 +746,7 @@ export async function getWalletSummary(businessSlug: string) {
     customersWithBalance,
     pendingTransactions: pendingCount,
     todayDeposits,
-    totalOutstanding,
-    customersWithOutstanding,
+    totalDeposits,
+    totalTransactions,
   }
 }
