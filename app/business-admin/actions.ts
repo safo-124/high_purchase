@@ -1007,6 +1007,21 @@ export async function getBusinessStats(businessSlug: string) {
     })
   }
 
+  // Customer growth trend (last 5 weeks)
+  const customerGrowth: { week: string; count: number }[] = []
+  for (let i = 4; i >= 0; i--) {
+    const weekStart = new Date(now.getTime() - (i + 1) * 7 * 24 * 60 * 60 * 1000)
+    const weekEnd = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000)
+    const weekLabel = `W${5 - i}`
+    const count = await prisma.customer.count({
+      where: {
+        shop: { businessId: business.id },
+        createdAt: { gte: weekStart, lt: weekEnd }
+      }
+    })
+    customerGrowth.push({ week: weekLabel, count })
+  }
+
   // Calculate growth percentages
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59)
@@ -1064,6 +1079,8 @@ export async function getBusinessStats(businessSlug: string) {
     },
     // Monthly data for line chart
     monthlyData,
+    // Customer growth trend
+    customerGrowth,
   }
 }
 

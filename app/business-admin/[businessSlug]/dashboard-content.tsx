@@ -63,6 +63,7 @@ interface DashboardContentProps {
       wallet: number
     }
     monthlyData: { month: string; revenue: number; payments: number }[]
+    customerGrowth: { week: string; count: number }[]
   }
   businessName: string
   currency: string
@@ -966,26 +967,43 @@ export function DashboardContent({ stats, businessName, currency, walletStats, b
 
         <div className="glass-card p-6 relative overflow-hidden group hover:border-green-500/30 transition-all">
           <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="relative z-10 flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <svg className="w-7 h-7 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-slate-400">New Customers (30 days)</p>
-              <p className="text-2xl font-bold text-white">{stats.recentCustomers}</p>
-              {stats.totalCustomers > 0 && (
-                <div className="mt-2">
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-slate-500">growth rate</span>
-                    <span className="text-green-400">{Math.round((stats.recentCustomers / stats.totalCustomers) * 100)}%</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
-                    <div className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-700" style={{ width: `${Math.min((stats.recentCustomers / stats.totalCustomers) * 100, 100)}%` }} />
-                  </div>
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
                 </div>
+                <div>
+                  <p className="text-xs text-slate-400">New Customers (30d)</p>
+                  <p className="text-xl font-bold text-white">{stats.recentCustomers}</p>
+                </div>
+              </div>
+              {stats.totalCustomers > 0 && (
+                <span className="text-xs font-medium text-green-400 bg-green-500/10 px-2 py-1 rounded-full">
+                  {Math.round((stats.recentCustomers / stats.totalCustomers) * 100)}% of total
+                </span>
               )}
+            </div>
+            <div className="h-[80px] -mx-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={stats.customerGrowth} margin={{ top: 5, right: 5, left: 5, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="customerGrowthGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: '#1e293b', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '12px', fontSize: '12px' }}
+                    labelStyle={{ color: '#94a3b8' }}
+                    formatter={(value: number) => [value, 'Customers']}
+                  />
+                  <Area type="monotone" dataKey="count" stroke="#10b981" strokeWidth={2} fill="url(#customerGrowthGrad)" dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }} />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </div>
