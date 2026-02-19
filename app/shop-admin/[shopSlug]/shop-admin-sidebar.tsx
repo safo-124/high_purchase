@@ -18,6 +18,7 @@ interface ShopAdminSidebarProps {
 export function ShopAdminSidebar({ shopSlug, shopName, userName, userEmail, businessName, businessLogoUrl, unreadMessageCount = 0 }: ShopAdminSidebarProps) {
   const pathname = usePathname()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -320,27 +321,65 @@ export function ShopAdminSidebar({ shopSlug, shopName, userName, userEmail, busi
       </nav>
 
       {/* User Info */}
-      <div className="p-4 border-t border-white/5">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500/30 to-purple-500/20 flex items-center justify-center text-violet-400 font-semibold">
+      <div className="p-4 border-t border-white/5 relative">
+        <button
+          onClick={() => setIsProfileOpen(!isProfileOpen)}
+          className="flex items-center gap-3 w-full group cursor-pointer"
+        >
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500/30 to-purple-500/20 flex items-center justify-center text-violet-400 font-semibold ring-2 ring-transparent group-hover:ring-violet-500/40 transition-all">
             {userName?.charAt(0).toUpperCase() || 'A'}
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 text-left">
             <p className="text-sm font-medium text-white truncate">{userName}</p>
             <p className="text-xs text-slate-400 truncate">{userEmail}</p>
           </div>
-        </div>
-        <form action="/api/auth/logout" method="POST">
-          <button
-            type="submit"
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-all text-sm font-medium"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Sign Out
-          </button>
-        </form>
+          <svg className={`w-4 h-4 text-slate-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+          </svg>
+        </button>
+
+        {/* Profile Dropdown */}
+        {isProfileOpen && (
+          <div className="absolute bottom-full left-4 right-4 mb-2 glass-card rounded-xl border border-white/10 shadow-xl overflow-hidden z-50">
+            <div className="p-4 border-b border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500/30 to-purple-500/20 flex items-center justify-center text-violet-400 font-bold text-lg">
+                  {userName?.charAt(0).toUpperCase() || 'A'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{userName}</p>
+                  <p className="text-xs text-slate-400 truncate">{userEmail}</p>
+                  <p className="text-[10px] text-violet-400 mt-0.5">Shop Admin</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-2 space-y-1">
+              <Link
+                href="/change-password"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors group"
+                onClick={() => setIsProfileOpen(false)}
+              >
+                <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+                <span className="text-sm text-slate-300 group-hover:text-purple-300 transition-colors">Change Password</span>
+              </Link>
+            </div>
+            <div className="p-2 border-t border-white/5">
+              <form action="/api/auth/logout" method="POST">
+                <button
+                  type="submit"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-red-500/10 transition-colors group"
+                >
+                  <svg className="w-4 h-4 text-slate-400 group-hover:text-red-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  <span className="text-sm text-slate-400 group-hover:text-red-400 transition-colors">Sign Out</span>
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
       </aside>
 
