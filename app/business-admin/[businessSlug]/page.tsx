@@ -1,6 +1,7 @@
 import Image from "next/image"
 import { requireBusinessAdmin } from "../../../lib/auth"
 import { getBusinessStats, getBusinessShops } from "../actions"
+import { getWalletSummary } from "../wallet-actions"
 import { CreateShopDialog } from "./create-shop-dialog"
 import { ShopActions } from "./shop-actions"
 import { DashboardContent } from "./dashboard-content"
@@ -12,8 +13,11 @@ interface Props {
 export default async function BusinessDashboard({ params }: Props) {
   const { businessSlug } = await params
   const { user, business } = await requireBusinessAdmin(businessSlug)
-  const stats = await getBusinessStats(businessSlug)
-  const shops = await getBusinessShops(businessSlug)
+  const [stats, shops, walletStats] = await Promise.all([
+    getBusinessStats(businessSlug),
+    getBusinessShops(businessSlug),
+    getWalletSummary(businessSlug),
+  ])
 
   return (
     <div className="p-8">
@@ -112,6 +116,7 @@ export default async function BusinessDashboard({ params }: Props) {
           stats={stats} 
           businessName={business.name}
           currency={'GHS'}
+          walletStats={walletStats}
         />
 
         {/* Shops Section */}

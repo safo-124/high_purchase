@@ -67,7 +67,8 @@ export async function POST(request: NextRequest) {
     })
 
     // Check if user must change password on first login
-    if (user.mustChangePassword && user.role === "BUSINESS_ADMIN") {
+    const rolesRequiringChange: string[] = ["BUSINESS_ADMIN", "SHOP_ADMIN", "SALES_STAFF", "DEBT_COLLECTOR"]
+    if (user.mustChangePassword && rolesRequiringChange.includes(user.role)) {
       return NextResponse.json({
         success: true,
         user: {

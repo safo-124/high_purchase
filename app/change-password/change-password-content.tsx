@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { changeFirstTimePassword } from "./actions"
 import { Lock, Eye, EyeOff, Shield, AlertTriangle } from "lucide-react"
 
-export function ChangePasswordContent() {
+export function ChangePasswordContent({ redirectPath = "/login" }: { redirectPath?: string }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -38,7 +38,7 @@ export function ChangePasswordContent() {
 
       if (result.success) {
         toast.success("Password changed successfully!")
-        router.push("/business-admin/select-business")
+        router.push(redirectPath)
       } else {
         toast.error(result.error || "Failed to change password")
       }

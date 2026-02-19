@@ -16,7 +16,17 @@ import {
   Legend
 } from 'recharts'
 
+interface WalletStats {
+  totalWalletBalance: number
+  customersWithBalance: number
+  pendingTransactions: number
+  todayDeposits: number
+  totalOutstanding: number
+  customersWithOutstanding: number
+}
+
 interface DashboardContentProps {
+  walletStats: WalletStats
   stats: {
     totalShops: number
     activeShops: number
@@ -91,7 +101,7 @@ const CustomTooltip = ({ active, payload, label, currency }: any) => {
   return null
 }
 
-export function DashboardContent({ stats, businessName, currency }: DashboardContentProps) {
+export function DashboardContent({ stats, businessName, currency, walletStats }: DashboardContentProps) {
   // Prepare sale type data for pie chart
   const saleTypeData = [
     { name: 'Cash Sales', value: stats.saleTypeDistribution.cash, color: '#10b981' },
@@ -202,6 +212,94 @@ export function DashboardContent({ stats, businessName, currency }: DashboardCon
             </div>
             <p className="text-3xl font-bold text-purple-400 mb-1">{formatCurrency(stats.monthRevenue, currency)}</p>
             <p className="text-sm text-slate-400">Monthly Collections</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Wallet Statistics */}
+      <div className="glass-card p-6 relative overflow-hidden">
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-24 -right-24 w-64 h-64 bg-gradient-to-br from-indigo-500/10 to-violet-500/5 rounded-full blur-3xl" />
+        </div>
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/30 flex items-center justify-center">
+              <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Wallet Overview</h3>
+              <p className="text-sm text-slate-400">Customer wallet balances &amp; activity</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {/* Total Wallet Balance */}
+            <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 hover:border-indigo-500/40 transition-all">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" />
+                </svg>
+                <span className="text-xs text-slate-400">Total Balance</span>
+              </div>
+              <p className="text-xl font-bold text-indigo-400">{formatCurrency(walletStats.totalWalletBalance, currency)}</p>
+            </div>
+
+            {/* Customers with Balance */}
+            <div className="p-4 rounded-2xl bg-violet-500/10 border border-violet-500/20 hover:border-violet-500/40 transition-all">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                </svg>
+                <span className="text-xs text-slate-400">With Balance</span>
+              </div>
+              <p className="text-xl font-bold text-violet-400">{walletStats.customersWithBalance}</p>
+            </div>
+
+            {/* Pending Transactions */}
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/40 transition-all">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-xs text-slate-400">Pending</span>
+              </div>
+              <p className="text-xl font-bold text-amber-400">{walletStats.pendingTransactions}</p>
+            </div>
+
+            {/* Today's Deposits */}
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 hover:border-emerald-500/40 transition-all">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-xs text-slate-400">Today&apos;s Deposits</span>
+              </div>
+              <p className="text-xl font-bold text-emerald-400">{formatCurrency(walletStats.todayDeposits, currency)}</p>
+            </div>
+
+            {/* Total Outstanding */}
+            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/40 transition-all">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-4 h-4 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+                </svg>
+                <span className="text-xs text-slate-400">Outstanding</span>
+              </div>
+              <p className="text-xl font-bold text-rose-400">{formatCurrency(walletStats.totalOutstanding, currency)}</p>
+            </div>
+
+            {/* Customers with Outstanding */}
+            <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-500/20 hover:border-orange-500/40 transition-all">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-4 h-4 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                </svg>
+                <span className="text-xs text-slate-400">Owing</span>
+              </div>
+              <p className="text-xl font-bold text-orange-400">{walletStats.customersWithOutstanding}</p>
+            </div>
           </div>
         </div>
       </div>

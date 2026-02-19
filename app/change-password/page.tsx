@@ -14,11 +14,35 @@ export default async function ChangePasswordPage() {
   
   if (!mustChange) {
     // Already changed password, redirect to appropriate page
-    if (user.role === "BUSINESS_ADMIN") {
-      redirect("/business-admin/select-business")
-    } else {
-      redirect("/login")
+    switch (user.role) {
+      case "BUSINESS_ADMIN":
+        redirect("/business-admin/select-business")
+      case "SHOP_ADMIN":
+        redirect("/shop-admin/select-shop")
+      case "SALES_STAFF":
+        redirect("/sales-staff/select-shop")
+      case "DEBT_COLLECTOR":
+        redirect("/collector/select-shop")
+      default:
+        redirect("/login")
     }
+  }
+
+  // Determine where to send the user after password change
+  let redirectAfterChange = "/login"
+  switch (user.role) {
+    case "BUSINESS_ADMIN":
+      redirectAfterChange = "/business-admin/select-business"
+      break
+    case "SHOP_ADMIN":
+      redirectAfterChange = "/shop-admin/select-shop"
+      break
+    case "SALES_STAFF":
+      redirectAfterChange = "/sales-staff/select-shop"
+      break
+    case "DEBT_COLLECTOR":
+      redirectAfterChange = "/collector/select-shop"
+      break
   }
 
   return (
@@ -30,7 +54,7 @@ export default async function ChangePasswordPage() {
         <div className="absolute bottom-20 right-1/4 w-72 h-72 bg-cyan-500/10 rounded-full blur-[90px]" />
       </div>
 
-      <ChangePasswordContent />
+      <ChangePasswordContent redirectPath={redirectAfterChange} />
     </div>
   )
 }
