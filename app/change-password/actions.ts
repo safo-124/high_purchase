@@ -54,6 +54,50 @@ export async function changeFirstTimePassword(newPassword: string): Promise<Acti
   }
 }
 
+export async function changeVoluntaryPassword(currentPassword: string, newPassword: string): Promise<ActionResult> {
+  try {
+    const user = await getSessionUser()
+
+    if (!user) {
+      return { success: false, error: "Not authenticated" }
+    }
+
+    if (newPassword.length < 8) {
+      return { success: false, error: "Password must be at least 8 characters" }
+    }
+
+    const fullUser = await prisma.user.findUnique({
+      where: { id: user.id },
+    })
+
+    if (!fullUser || !fullUser.passwordHash) {
+      return { success: false, error: "User not found" }
+    }
+
+    // Verify current password
+    const isValid = await bcrypt.compare(currentPassword, fullUser.passwordHash)
+    if (!isValid) {
+      return { success: false, error: "Current password is incorrect" }
+    }
+
+    // Hash and update
+    const hashedPassword = await bcrypt.hash(newPassword, 12)
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: hashedPassword,
+        plainPassword: newPassword,
+      },
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error changing password:", error)
+    return { success: false, error: "Failed to change password" }
+  }
+}
+
 export async function checkMustChangePassword(): Promise<boolean> {
   try {
     const user = await getSessionUser()

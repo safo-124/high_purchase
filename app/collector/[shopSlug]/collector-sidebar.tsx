@@ -264,11 +264,21 @@ export function CollectorSidebar({
               <p className="text-[11px] text-slate-500">Debt Collector</p>
             </div>
           </div>
-          <button
-            onClick={handleSignOut}
-            disabled={isSigningOut}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white/5 hover:bg-red-500/15 text-slate-400 hover:text-red-400 transition-all text-sm font-medium disabled:opacity-50"
-          >
+          <div className="space-y-1">
+            <Link
+              href="/change-password"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white/5 hover:bg-purple-500/15 text-slate-400 hover:text-purple-400 transition-all text-sm font-medium"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+              Change Password
+            </Link>
+            <button
+              onClick={handleSignOut}
+              disabled={isSigningOut}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white/5 hover:bg-red-500/15 text-slate-400 hover:text-red-400 transition-all text-sm font-medium disabled:opacity-50"
+            >
             {isSigningOut ? (
               <>
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -285,7 +295,8 @@ export function CollectorSidebar({
                 Sign Out
               </>
             )}
-          </button>
+            </button>
+          </div>
         </div>
       </aside>
 
