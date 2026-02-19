@@ -117,6 +117,7 @@ export default async function BusinessDashboard({ params }: Props) {
           businessName={business.name}
           currency={'GHS'}
           walletStats={walletStats}
+          businessSlug={businessSlug}
         />
 
         {/* Shops Section */}
