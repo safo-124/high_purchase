@@ -124,6 +124,7 @@ export function BusinessStaffReportsContent({
     return {
       sales: dayReports.filter(r => r.reportType === "SALES").reduce((sum, r) => sum + (r.totalSalesAmount || 0), 0),
       collections: dayReports.filter(r => r.reportType === "COLLECTION").reduce((sum, r) => sum + (r.totalCollected || 0), 0),
+      walletDeposits: dayReports.filter(r => r.reportType === "WALLET").reduce((sum, r) => sum + (r.totalWalletDeposits || 0), 0),
       count: dayReports.length,
       hasPending: dayReports.some(r => r.status === "SUBMITTED")
     }
@@ -134,8 +135,9 @@ export function BusinessStaffReportsContent({
     const pendingCount = reports.filter(r => r.status === "SUBMITTED").length
     const totalSales = reports.filter(r => r.reportType === "SALES").reduce((sum, r) => sum + (r.totalSalesAmount || 0), 0)
     const totalCollected = reports.filter(r => r.reportType === "COLLECTION").reduce((sum, r) => sum + (r.totalCollected || 0), 0)
+    const totalWalletDeposits = reports.filter(r => r.reportType === "WALLET").reduce((sum, r) => sum + (r.totalWalletDeposits || 0), 0)
     const uniqueStaff = new Set(reports.map(r => r.staffName)).size
-    return { pendingCount, totalSales, totalCollected, uniqueStaff }
+    return { pendingCount, totalSales, totalCollected, totalWalletDeposits, uniqueStaff }
   }, [reports])
 
   const handleReview = async () => {
@@ -192,6 +194,12 @@ export function BusinessStaffReportsContent({
             Collector
           </span>
         )
+      case "WALLET":
+        return (
+          <span className="px-2 py-1 text-xs font-medium rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+            Wallet
+          </span>
+        )
       default:
         return (
           <span className="px-2 py-1 text-xs font-medium rounded-full bg-slate-500/10 text-slate-400 border border-slate-500/20">
@@ -223,7 +231,7 @@ export function BusinessStaffReportsContent({
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="glass-card p-5 rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center">
@@ -276,6 +284,20 @@ export function BusinessStaffReportsContent({
             <div>
               <p className="text-xs text-slate-500 uppercase tracking-wider">Total Collected</p>
               <p className="text-2xl font-bold text-purple-400">₵{stats.totalCollected.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-5 rounded-2xl bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider">Wallet Deposits</p>
+              <p className="text-2xl font-bold text-cyan-400">₵{stats.totalWalletDeposits.toLocaleString()}</p>
             </div>
           </div>
         </div>
@@ -412,6 +434,11 @@ export function BusinessStaffReportsContent({
                             ₵{activity.collections.toLocaleString()}
                           </div>
                         )}
+                        {activity.walletDeposits > 0 && (
+                          <div className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 truncate">
+                            ₵{activity.walletDeposits.toLocaleString()}
+                          </div>
+                        )}
                         {activity.hasPending && (
                           <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                         )}
@@ -431,6 +458,10 @@ export function BusinessStaffReportsContent({
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded bg-purple-500/20 border border-purple-500/30" />
                 <span className="text-xs text-slate-400">Collections</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded bg-cyan-500/20 border border-cyan-500/30" />
+                <span className="text-xs text-slate-400">Wallet</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-amber-500" />
@@ -484,6 +515,8 @@ export function BusinessStaffReportsContent({
                       className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.02] ${
                         report.reportType === "SALES"
                           ? "bg-green-500/5 border-green-500/20 hover:border-green-500/40"
+                          : report.reportType === "WALLET"
+                          ? "bg-cyan-500/5 border-cyan-500/20 hover:border-cyan-500/40"
                           : "bg-purple-500/5 border-purple-500/20 hover:border-purple-500/40"
                       }`}
                     >
@@ -498,10 +531,14 @@ export function BusinessStaffReportsContent({
                       <div className="flex items-center justify-between">
                         {getRoleBadge(report.staffRole)}
                         <span className={`text-lg font-bold ${
-                          report.reportType === "SALES" ? "text-green-400" : "text-purple-400"
+                          report.reportType === "SALES" ? "text-green-400" 
+                            : report.reportType === "WALLET" ? "text-cyan-400" 
+                            : "text-purple-400"
                         }`}>
                           ₵{(report.reportType === "SALES" 
                             ? report.totalSalesAmount 
+                            : report.reportType === "WALLET"
+                            ? report.totalWalletDeposits
                             : report.totalCollected
                           )?.toLocaleString() || 0}
                         </span>
@@ -520,6 +557,17 @@ export function BusinessStaffReportsContent({
                           <div>
                             <p className="text-xs text-slate-500">Items</p>
                             <p className="text-sm font-medium text-white">{report.itemsSoldCount || 0}</p>
+                          </div>
+                        </div>
+                      ) : report.reportType === "WALLET" ? (
+                        <div className="mt-3 pt-3 border-t border-white/10 grid grid-cols-2 gap-2 text-center">
+                          <div>
+                            <p className="text-xs text-slate-500">Deposits</p>
+                            <p className="text-sm font-medium text-white">{report.walletDepositsCount || 0}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500">Total</p>
+                            <p className="text-sm font-medium text-cyan-400">₵{(report.totalWalletDeposits || 0).toLocaleString()}</p>
                           </div>
                         </div>
                       ) : (
@@ -586,6 +634,8 @@ export function BusinessStaffReportsContent({
                       <td className="py-4 px-6 text-right">
                         {report.reportType === "SALES" ? (
                           <span className="text-green-400 font-medium">₵{report.totalSalesAmount?.toLocaleString() || 0}</span>
+                        ) : report.reportType === "WALLET" ? (
+                          <span className="text-cyan-400 font-medium">₵{report.totalWalletDeposits?.toLocaleString() || 0}</span>
                         ) : (
                           <span className="text-purple-400 font-medium">₵{report.totalCollected?.toLocaleString() || 0}</span>
                         )}
@@ -665,6 +715,17 @@ export function BusinessStaffReportsContent({
                   <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                     <p className="text-xs text-slate-500 mb-1">Items Sold</p>
                     <p className="text-2xl font-bold text-white">{selectedReport.itemsSoldCount || 0}</p>
+                  </div>
+                </div>
+              ) : selectedReport.reportType === "WALLET" ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20">
+                    <p className="text-xs text-cyan-400/70 mb-1">Total Wallet Deposits</p>
+                    <p className="text-2xl font-bold text-cyan-400">₵{selectedReport.totalWalletDeposits?.toLocaleString() || 0}</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                    <p className="text-xs text-slate-500 mb-1">Deposit Count</p>
+                    <p className="text-2xl font-bold text-white">{selectedReport.walletDepositsCount || 0}</p>
                   </div>
                 </div>
               ) : (

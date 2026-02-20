@@ -7459,7 +7459,7 @@ import { DailyReportType, DailyReportStatus } from "../generated/prisma/client"
 export interface BusinessStaffDailyReportData {
   id: string
   reportDate: Date
-  reportType: DailyReportType
+  reportType: DailyReportType | "WALLET"
   status: DailyReportStatus
   staffName: string
   staffRole: string
@@ -7474,6 +7474,9 @@ export interface BusinessStaffDailyReportData {
   customersVisited: number | null
   paymentsCollected: number | null
   totalCollected: number | null
+  // Wallet fields
+  walletDepositsCount: number | null
+  totalWalletDeposits: number | null
   // Common fields
   notes: string | null
   reviewedAt: Date | null
@@ -7568,6 +7571,25 @@ export async function getBusinessDailyReports(
     },
   })
 
+  // Get wallet transactions (confirmed deposits) for the date range
+  const walletTransactions = await prisma.walletTransaction.findMany({
+    where: {
+      shopId: filters?.shopId ? filters.shopId : { in: shopIds },
+      type: "DEPOSIT",
+      status: "CONFIRMED",
+      createdAt: { gte: startDate, lte: endDate },
+    },
+    include: {
+      shop: { select: { id: true, name: true, shopSlug: true } },
+      createdBy: {
+        include: {
+          user: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
   // Helper to format date as YYYY-MM-DD
   const formatDateKey = (date: Date) => {
     const year = date.getFullYear()
@@ -7590,6 +7612,9 @@ export async function getBusinessDailyReports(
     paymentsCount: number
     newCustomersCount: number
     collectorNames: Set<string>
+    walletDepositsAmount: number
+    walletDepositsCount: number
+    walletStaffNames: Set<string>
   }>()
 
   // Process purchases (sales)
@@ -7612,6 +7637,9 @@ export async function getBusinessDailyReports(
         paymentsCount: 0,
         newCustomersCount: 0,
         collectorNames: new Set(),
+        walletDepositsAmount: 0,
+        walletDepositsCount: 0,
+        walletStaffNames: new Set(),
       })
     }
     
@@ -7641,6 +7669,9 @@ export async function getBusinessDailyReports(
         paymentsCount: 0,
         newCustomersCount: 0,
         collectorNames: new Set(),
+        walletDepositsAmount: 0,
+        walletDepositsCount: 0,
+        walletStaffNames: new Set(),
       })
     }
     
@@ -7649,6 +7680,40 @@ export async function getBusinessDailyReports(
     activity.paymentsCount += 1
     if (payment.collector?.user.name) {
       activity.collectorNames.add(payment.collector.user.name)
+    }
+  }
+
+  // Process wallet transactions (deposits)
+  for (const walletTx of walletTransactions) {
+    const dateKey = formatDateKey(new Date(walletTx.createdAt))
+    const shop = walletTx.shop
+    const key = `${dateKey}-${shop.id}-WALLET`
+    
+    if (!activityMap.has(key)) {
+      activityMap.set(key, {
+        dateKey,
+        date: new Date(walletTx.createdAt),
+        shopId: shop.id,
+        shopName: shop.name,
+        shopSlug: shop.shopSlug,
+        salesAmount: 0,
+        purchasesCount: 0,
+        itemsSold: 0,
+        collectionsAmount: 0,
+        paymentsCount: 0,
+        newCustomersCount: 0,
+        collectorNames: new Set(),
+        walletDepositsAmount: 0,
+        walletDepositsCount: 0,
+        walletStaffNames: new Set(),
+      })
+    }
+    
+    const activity = activityMap.get(key)!
+    activity.walletDepositsAmount += Number(walletTx.amount)
+    activity.walletDepositsCount += 1
+    if (walletTx.createdBy?.user.name) {
+      activity.walletStaffNames.add(walletTx.createdBy.user.name)
     }
   }
 
@@ -7668,6 +7733,7 @@ export async function getBusinessDailyReports(
   for (const [key, activity] of activityMap) {
     const isSales = key.endsWith('-SALES')
     const isCollection = key.endsWith('-COLLECTION')
+    const isWallet = key.endsWith('-WALLET')
     
     // Skip if filtering by type
     if (filters?.reportType === "SALES" && !isSales) continue
@@ -7691,6 +7757,8 @@ export async function getBusinessDailyReports(
         customersVisited: null,
         paymentsCollected: null,
         totalCollected: null,
+        walletDepositsCount: null,
+        totalWalletDeposits: null,
         notes: `Auto-generated from ${activity.purchasesCount} purchase(s)`,
         reviewedAt: null,
         reviewNotes: null,
@@ -7722,7 +7790,42 @@ export async function getBusinessDailyReports(
         customersVisited: activity.paymentsCount,
         paymentsCollected: activity.paymentsCount,
         totalCollected: activity.collectionsAmount,
+        walletDepositsCount: null,
+        totalWalletDeposits: null,
         notes: `Auto-generated from ${activity.paymentsCount} payment(s)`,
+        reviewedAt: null,
+        reviewNotes: null,
+        reviewedByName: null,
+        createdAt: activity.date,
+        updatedAt: activity.date,
+      })
+    }
+
+    // Create wallet deposit report
+    if (isWallet && activity.walletDepositsAmount > 0) {
+      const staffName = activity.walletStaffNames.size > 0
+        ? Array.from(activity.walletStaffNames).join(", ")
+        : "Wallet Deposits"
+      
+      reports.push({
+        id: `auto-wallet-${activity.dateKey}-${activity.shopId}`,
+        reportDate: activity.date,
+        reportType: "WALLET",
+        status: "REVIEWED",
+        staffName: staffName,
+        staffRole: "WALLET",
+        shopName: activity.shopName,
+        shopSlug: activity.shopSlug,
+        totalSalesAmount: null,
+        newCustomersCount: null,
+        newPurchasesCount: null,
+        itemsSoldCount: null,
+        customersVisited: null,
+        paymentsCollected: null,
+        totalCollected: null,
+        walletDepositsCount: activity.walletDepositsCount,
+        totalWalletDeposits: activity.walletDepositsAmount,
+        notes: `Auto-generated from ${activity.walletDepositsCount} wallet deposit(s)`,
         reviewedAt: null,
         reviewNotes: null,
         reviewedByName: null,
