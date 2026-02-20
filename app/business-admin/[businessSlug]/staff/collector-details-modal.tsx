@@ -201,17 +201,6 @@ export function CollectorDetailsModal({ collectorId, businessSlug, onClose }: Co
                   <p className="text-2xl font-bold text-orange-400">{formatCurrency(data.stats.pendingWalletAmount)}</p>
                 </div>
               </div>
-                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div className="flex items-center gap-2 mb-2">
-                    <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span className="text-sm font-medium text-white">Pending Confirmation</span>
-                  </div>
-                  <p className="text-xl font-bold text-amber-400">{formatCurrency(data.stats.pendingAmount)}</p>
-                  <p className="text-xs text-slate-500">{data.stats.pendingPayments} payments awaiting</p>
-                </div>
-              </div>
 
               {/* Tabs */}
               <div className="flex gap-2 border-b border-white/10 pb-2">
