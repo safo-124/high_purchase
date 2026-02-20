@@ -5925,6 +5925,7 @@ export async function getBusinessCustomerDetails(
     outstanding: totalPurchased - totalPaid,
     activePurchases,
     totalPurchases: customer.purchases.length,
+    walletBalance: Number(customer.walletBalance),
     purchases: customer.purchases.map((purchase) => {
       const purchasePaid = purchase.payments
         .filter(p => p.isConfirmed)

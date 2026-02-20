@@ -82,7 +82,7 @@ export default async function CustomerDetailPage({ params }: Props) {
       </div>
 
       {/* Customer Info & Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-8">
         {/* Customer Details Card */}
         <div className="glass-card p-6 rounded-2xl">
           <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Customer Info</h3>
@@ -148,6 +148,23 @@ export default async function CustomerDetailPage({ params }: Props) {
           <p className="text-sm text-slate-500 mt-1">
             {customer.activePurchases} active purchase(s)
           </p>
+        </div>
+        <div className="glass-card p-6 rounded-2xl relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-violet-500/5" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 mb-2">
+              <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" />
+              </svg>
+              <p className="text-xs text-slate-500 uppercase tracking-wider">Wallet Balance</p>
+            </div>
+            <p className={`text-3xl font-bold ${customer.walletBalance > 0 ? "text-indigo-400" : "text-slate-400"}`}>
+              {formatCurrency(customer.walletBalance)}
+            </p>
+            <p className="text-sm text-slate-500 mt-1">
+              {customer.walletBalance > 0 ? "Available funds" : "No funds"}
+            </p>
+          </div>
         </div>
       </div>
 
