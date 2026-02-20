@@ -194,6 +194,66 @@ export function DashboardContent({ stats, businessName, currency, walletStats, b
 
   return (
     <div className="space-y-8">
+      {/* Wallet Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Total Wallet Balance */}
+        <a href={`${baseUrl}/wallet`} className="glass-card p-6 relative overflow-hidden group hover:border-indigo-500/30 transition-all duration-300 block">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-violet-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/30 flex items-center justify-center">
+                <svg className="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" />
+                </svg>
+              </div>
+              <span className="text-xs text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-full border border-indigo-500/20">
+                Wallet
+              </span>
+            </div>
+            <p className="text-3xl font-bold text-indigo-400 mb-1">{formatCurrency(walletStats.totalWalletBalance, currency)}</p>
+            <p className="text-sm text-slate-400">Total Wallet Balance</p>
+          </div>
+        </a>
+
+        {/* Today's Deposits */}
+        <a href={`${baseUrl}/wallet`} className="glass-card p-6 relative overflow-hidden group hover:border-emerald-500/30 transition-all duration-300 block">
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-green-500/20 border border-emerald-500/30 flex items-center justify-center">
+                <svg className="w-6 h-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <span className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full border border-emerald-500/20">
+                Today
+              </span>
+            </div>
+            <p className="text-3xl font-bold text-emerald-400 mb-1">{formatCurrency(walletStats.todayDeposits, currency)}</p>
+            <p className="text-sm text-slate-400">Today&apos;s Deposits</p>
+          </div>
+        </a>
+
+        {/* Total Deposits */}
+        <a href={`${baseUrl}/wallet`} className="glass-card p-6 relative overflow-hidden group hover:border-teal-500/30 transition-all duration-300 block">
+          <div className="absolute inset-0 bg-gradient-to-br from-teal-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500/20 to-cyan-500/20 border border-teal-500/30 flex items-center justify-center">
+                <svg className="w-6 h-6 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+                </svg>
+              </div>
+              <span className="text-xs text-teal-400 bg-teal-500/10 px-2 py-1 rounded-full border border-teal-500/20">
+                All Time
+              </span>
+            </div>
+            <p className="text-3xl font-bold text-teal-400 mb-1">{formatCurrency(walletStats.totalDeposits, currency)}</p>
+            <p className="text-sm text-slate-400">Total Deposits</p>
+          </div>
+        </a>
+      </div>
+
       {/* Revenue Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Total Revenue */}
