@@ -13,7 +13,7 @@ export function CollectorDetailsModal({ collectorId, businessSlug, onClose }: Co
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<CollectorDetailsData | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<"overview" | "customers" | "payments">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "customers" | "payments" | "wallet">("overview")
 
   useEffect(() => {
     async function fetchData() {
@@ -160,9 +160,62 @@ export function CollectorDetailsModal({ collectorId, businessSlug, onClose }: Co
                 </div>
               </div>
 
+              {/* Wallet Collection Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="p-4 bg-gradient-to-br from-indigo-500/10 to-violet-500/10 rounded-xl border border-indigo-500/20">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" />
+                    </svg>
+                    <p className="text-xs text-slate-400">Total Wallet Collections</p>
+                  </div>
+                  <p className="text-2xl font-bold text-indigo-400">{formatCurrency(data.stats.totalWalletAmount)}</p>
+                  <p className="text-xs text-slate-500 mt-1">{data.stats.totalWalletCollections} deposits</p>
+                </div>
+                <div className="p-4 bg-gradient-to-br from-emerald-500/10 to-green-500/10 rounded-xl border border-emerald-500/20">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-xs text-slate-400">Today&apos;s Wallet</p>
+                  </div>
+                  <p className="text-2xl font-bold text-emerald-400">{formatCurrency(data.stats.todayWalletAmount)}</p>
+                  <p className="text-xs text-slate-500 mt-1">{data.stats.todayWalletCollections} deposits today</p>
+                </div>
+                <div className="p-4 bg-gradient-to-br from-teal-500/10 to-cyan-500/10 rounded-xl border border-teal-500/20">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <svg className="w-4 h-4 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-xs text-slate-400">Confirmed Wallet</p>
+                  </div>
+                  <p className="text-2xl font-bold text-teal-400">{formatCurrency(data.stats.confirmedWalletAmount)}</p>
+                </div>
+                <div className="p-4 bg-gradient-to-br from-orange-500/10 to-amber-500/10 rounded-xl border border-orange-500/20">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <svg className="w-4 h-4 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-xs text-slate-400">Pending Wallet</p>
+                  </div>
+                  <p className="text-2xl font-bold text-orange-400">{formatCurrency(data.stats.pendingWalletAmount)}</p>
+                </div>
+              </div>
+                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-sm font-medium text-white">Pending Confirmation</span>
+                  </div>
+                  <p className="text-xl font-bold text-amber-400">{formatCurrency(data.stats.pendingAmount)}</p>
+                  <p className="text-xs text-slate-500">{data.stats.pendingPayments} payments awaiting</p>
+                </div>
+              </div>
+
               {/* Tabs */}
               <div className="flex gap-2 border-b border-white/10 pb-2">
-                {(["overview", "customers", "payments"] as const).map((tab) => (
+                {(["overview", "customers", "payments", "wallet"] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -172,7 +225,7 @@ export function CollectorDetailsModal({ collectorId, businessSlug, onClose }: Co
                         : "text-slate-400 hover:text-white hover:bg-white/5"
                     }`}
                   >
-                    {tab === "overview" ? "Overview" : tab === "customers" ? "Assigned Customers" : "Payment History"}
+                    {tab === "overview" ? "Overview" : tab === "customers" ? "Assigned Customers" : tab === "payments" ? "Payment History" : "Wallet Collections"}
                   </button>
                 ))}
               </div>
@@ -202,9 +255,30 @@ export function CollectorDetailsModal({ collectorId, businessSlug, onClose }: Co
                         />
                       </div>
                     </div>
+                    <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-slate-400">Wallet Collection Rate</span>
+                        <span className="text-sm font-medium text-white">
+                          {data.stats.totalWalletCollections > 0 
+                            ? Math.round((data.stats.confirmedWalletAmount / data.stats.totalWalletAmount) * 100)
+                            : 0}%
+                        </span>
+                      </div>
+                      <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
+                          style={{ 
+                            width: `${data.stats.totalWalletCollections > 0 
+                              ? (data.stats.confirmedWalletAmount / data.stats.totalWalletAmount) * 100 
+                              : 0}%` 
+                          }}
+                        />
+                      </div>
+                    </div>
                     <div className="text-center py-4 text-slate-400 text-sm">
-                      <p>This collector has collected a total of <span className="text-white font-semibold">{formatCurrency(data.stats.totalAmountCollected)}</span></p>
-                      <p>from <span className="text-white font-semibold">{data.stats.totalPaymentsCollected}</span> payments across <span className="text-white font-semibold">{data.stats.assignedCustomers}</span> assigned customers.</p>
+                      <p>This collector has collected a total of <span className="text-white font-semibold">{formatCurrency(data.stats.totalAmountCollected)}</span> in payments</p>
+                      <p>and <span className="text-indigo-400 font-semibold">{formatCurrency(data.stats.totalWalletAmount)}</span> in wallet deposits</p>
+                      <p>from <span className="text-white font-semibold">{data.stats.assignedCustomers}</span> assigned customers.</p>
                     </div>
                   </div>
                 </div>
@@ -309,6 +383,83 @@ export function CollectorDetailsModal({ collectorId, businessSlug, onClose }: Co
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                     </svg>
                                     Confirmed
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded text-xs">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Pending
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "wallet" && (
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium text-slate-300">
+                    Wallet Collection History (Last 50)
+                  </h4>
+                  {data.walletHistory.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400">
+                      <svg className="w-12 h-12 mx-auto mb-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" />
+                      </svg>
+                      No wallet collections yet
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-white/[0.02]">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Date</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Customer</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Method</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase">Amount</th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-slate-400 uppercase">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {data.walletHistory.map((txn) => (
+                            <tr key={txn.id} className="hover:bg-white/[0.02]">
+                              <td className="px-4 py-3">
+                                <p className="text-sm text-white">{formatDateTime(txn.createdAt)}</p>
+                              </td>
+                              <td className="px-4 py-3">
+                                <p className="font-medium text-white text-sm">{txn.customerName}</p>
+                                {txn.reference && (
+                                  <p className="text-xs text-slate-500">Ref: {txn.reference}</p>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className="px-2 py-1 bg-white/5 border border-white/10 rounded text-xs text-slate-300">
+                                  {txn.paymentMethod ? txn.paymentMethod.replace("_", " ") : "N/A"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right font-medium text-indigo-400">
+                                {formatCurrency(txn.amount)}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {txn.status === "CONFIRMED" ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-400 border border-green-500/20 rounded text-xs">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Confirmed
+                                  </span>
+                                ) : txn.status === "REJECTED" ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded text-xs">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Rejected
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded text-xs">

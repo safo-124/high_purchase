@@ -2283,6 +2283,12 @@ export interface CollectorDetailsData {
     pendingAmount: number
     confirmedPayments: number
     confirmedAmount: number
+    totalWalletCollections: number
+    totalWalletAmount: number
+    todayWalletCollections: number
+    todayWalletAmount: number
+    confirmedWalletAmount: number
+    pendingWalletAmount: number
   }
   assignedCustomers: {
     id: string
@@ -2299,6 +2305,18 @@ export interface CollectorDetailsData {
     isConfirmed: boolean
     customerName: string
     purchaseNumber: string
+    createdAt: Date
+    confirmedAt: Date | null
+  }[]
+  walletHistory: {
+    id: string
+    amount: number
+    type: string
+    status: string
+    paymentMethod: string | null
+    description: string | null
+    reference: string | null
+    customerName: string
     createdAt: Date
     confirmedAt: Date | null
   }[]
@@ -2357,6 +2375,26 @@ export async function getCollectorDetails(
       },
     })
 
+    // Get wallet transactions created by this collector
+    const walletTransactions = await prisma.walletTransaction.findMany({
+      where: {
+        createdById: collector.id,
+        type: "DEPOSIT",
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: {
+        customer: true,
+      },
+    })
+
+    // Today's wallet collections
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const todayWalletTxns = walletTransactions.filter(t => new Date(t.createdAt) >= todayStart)
+    const confirmedWalletTxns = walletTransactions.filter(t => t.status === "CONFIRMED")
+    const pendingWalletTxns = walletTransactions.filter(t => t.status === "PENDING")
+
     // Calculate stats
     const pendingPayments = collector.collectedPayments.filter(p => !p.isConfirmed && !p.rejectedAt)
     const confirmedPayments = collector.collectedPayments.filter(p => p.isConfirmed)
@@ -2370,6 +2408,12 @@ export async function getCollectorDetails(
       pendingAmount: pendingPayments.reduce((sum, p) => sum + Number(p.amount), 0),
       confirmedPayments: confirmedPayments.length,
       confirmedAmount: confirmedPayments.reduce((sum, p) => sum + Number(p.amount), 0),
+      totalWalletCollections: walletTransactions.length,
+      totalWalletAmount: walletTransactions.reduce((sum, t) => sum + Number(t.amount), 0),
+      todayWalletCollections: todayWalletTxns.length,
+      todayWalletAmount: todayWalletTxns.reduce((sum, t) => sum + Number(t.amount), 0),
+      confirmedWalletAmount: confirmedWalletTxns.reduce((sum, t) => sum + Number(t.amount), 0),
+      pendingWalletAmount: pendingWalletTxns.reduce((sum, t) => sum + Number(t.amount), 0),
     }
 
     // Format assigned customers
@@ -2394,6 +2438,20 @@ export async function getCollectorDetails(
       confirmedAt: p.confirmedAt,
     }))
 
+    // Format wallet history
+    const walletHistory = walletTransactions.map(t => ({
+      id: t.id,
+      amount: Number(t.amount),
+      type: t.type,
+      status: t.status,
+      paymentMethod: t.paymentMethod,
+      description: t.description,
+      reference: t.reference,
+      customerName: `${t.customer.firstName} ${t.customer.lastName}`,
+      createdAt: t.createdAt,
+      confirmedAt: t.confirmedAt,
+    }))
+
     const data: CollectorDetailsData = {
       id: collector.id,
       name: collector.user.name || "No Name",
@@ -2405,6 +2463,7 @@ export async function getCollectorDetails(
       stats,
       assignedCustomers,
       paymentHistory,
+      walletHistory,
     }
 
     return { success: true, data }
