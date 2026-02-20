@@ -7,6 +7,7 @@ import {
   rejectWalletTransaction,
   toggleStaffWalletPermission,
   adjustCustomerWallet,
+  confirmAllCollectorWalletTransactions,
   type WalletTransactionData,
   type CustomerWalletData,
   type StaffWalletPermission,
@@ -33,6 +34,8 @@ export function WalletContent({
   const [isPending, startTransition] = useTransition()
   const [activeTab, setActiveTab] = useState<Tab>("pending")
   const [searchQuery, setSearchQuery] = useState("")
+  const [pendingSearch, setPendingSearch] = useState("")
+  const [confirmAllLoading, setConfirmAllLoading] = useState(false)
   
   // Modal states
   const [rejectModal, setRejectModal] = useState<WalletTransactionData | null>(null)
@@ -138,6 +141,49 @@ export function WalletContent({
     `${t.customerName} ${t.customerPhone} ${t.reference || ""}`.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  // Filter pending transactions by search
+  const filteredPending = pendingSearch.trim()
+    ? pendingTransactions.filter((t) =>
+        `${t.customerName} ${t.customerPhone} ${t.createdByName || ""}`.toLowerCase().includes(pendingSearch.toLowerCase())
+      )
+    : pendingTransactions
+
+  // Detect if search matches a specific collector's full name
+  const matchedCollectorName = (() => {
+    if (!pendingSearch.trim()) return null
+    const query = pendingSearch.trim().toLowerCase()
+    // Get unique collector names from pending transactions
+    const collectorNames = [...new Set(pendingTransactions.map(t => t.createdByName).filter(Boolean))]
+    // Check if the search exactly matches a collector name (case-insensitive)
+    const match = collectorNames.find(name => name.toLowerCase() === query)
+    return match || null
+  })()
+
+  // Calculate total pending for matched collector
+  const collectorPendingTotal = matchedCollectorName
+    ? pendingTransactions
+        .filter(t => t.createdByName.toLowerCase() === matchedCollectorName.toLowerCase())
+        .reduce((sum, t) => sum + t.amount, 0)
+    : 0
+
+  const collectorPendingCount = matchedCollectorName
+    ? pendingTransactions.filter(t => t.createdByName.toLowerCase() === matchedCollectorName.toLowerCase()).length
+    : 0
+
+  const handleConfirmAll = async () => {
+    if (!matchedCollectorName) return
+    setConfirmAllLoading(true)
+    startTransition(async () => {
+      const result = await confirmAllCollectorWalletTransactions(businessSlug, matchedCollectorName)
+      if (!result.success) {
+        setError(result.error || "Failed to confirm all")
+      }
+      setConfirmAllLoading(false)
+      setPendingSearch("")
+      router.refresh()
+    })
+  }
+
   const tabs = [
     { id: "pending" as Tab, label: "Pending Confirmations", count: pendingTransactions.length },
     { id: "customers" as Tab, label: "Customer Wallets", count: customers.filter(c => c.walletBalance > 0).length },
@@ -199,20 +245,77 @@ export function WalletContent({
 
       {/* Pending Confirmations Tab */}
       {activeTab === "pending" && (
-        <div className="glass-card rounded-2xl overflow-hidden">
-          {pendingTransactions.length === 0 ? (
+        <div className="space-y-4">
+          {/* Pending Search */}
+          <div className="relative">
+            <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search pending by customer name, phone, or collector name..."
+              value={pendingSearch}
+              onChange={(e) => setPendingSearch(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+            />
+          </div>
+
+          {/* Collector match banner */}
+          {matchedCollectorName && collectorPendingCount > 0 && (
+            <div className="glass-card p-4 rounded-xl border border-indigo-500/30 bg-indigo-500/5">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-white font-semibold">{matchedCollectorName}</p>
+                    <p className="text-sm text-slate-400">
+                      {collectorPendingCount} pending deposit{collectorPendingCount !== 1 ? "s" : ""} totalling{" "}
+                      <span className="text-green-400 font-bold">{formatCurrency(collectorPendingTotal)}</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleConfirmAll}
+                  disabled={isPending || confirmAllLoading}
+                  className="px-5 py-2.5 rounded-xl bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30 font-semibold text-sm transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {confirmAllLoading ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-400" />
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
+                  Confirm All for {matchedCollectorName}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="glass-card rounded-2xl overflow-hidden">
+          {filteredPending.length === 0 ? (
             <div className="p-12 text-center">
               <div className="w-16 h-16 rounded-2xl bg-green-500/10 flex items-center justify-center mx-auto mb-4">
                 <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">All caught up!</h3>
-              <p className="text-slate-400">No pending transactions to confirm</p>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                {pendingSearch.trim() ? "No matching transactions" : "All caught up!"}
+              </h3>
+              <p className="text-slate-400">
+                {pendingSearch.trim() 
+                  ? `No pending transactions match "${pendingSearch}"`
+                  : "No pending transactions to confirm"}
+              </p>
             </div>
           ) : (
             <div className="divide-y divide-white/5">
-              {pendingTransactions.map((t) => (
+              {filteredPending.map((t) => (
                 <div key={t.id} className="p-4 hover:bg-white/[0.02]">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-start gap-4">
@@ -265,6 +368,7 @@ export function WalletContent({
               ))}
             </div>
           )}
+          </div>
         </div>
       )}
 

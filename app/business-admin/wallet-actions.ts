@@ -383,6 +383,110 @@ export async function confirmWalletTransaction(
 }
 
 /**
+ * Confirm all pending wallet transactions for a specific collector - Business Admin
+ */
+export async function confirmAllCollectorWalletTransactions(
+  businessSlug: string,
+  collectorName: string
+): Promise<ActionResult> {
+  try {
+    const { user, business } = await requireBusinessAdmin(businessSlug)
+
+    // Find all pending transactions created by staff matching this collector name
+    const pendingTransactions = await prisma.walletTransaction.findMany({
+      where: {
+        shop: { businessId: business.id },
+        status: WalletTransactionStatus.PENDING,
+        createdBy: {
+          user: {
+            name: {
+              equals: collectorName,
+              mode: "insensitive",
+            },
+          },
+        },
+      },
+      include: {
+        customer: true,
+        shop: true,
+      },
+    })
+
+    if (pendingTransactions.length === 0) {
+      return { success: false, error: "No pending transactions found for this collector" }
+    }
+
+    let confirmedCount = 0
+
+    for (const transaction of pendingTransactions) {
+      // Find or create a shop member record for the business admin in this shop
+      let confirmerMember = await prisma.shopMember.findFirst({
+        where: { userId: user.id, shopId: transaction.shopId },
+      })
+
+      if (!confirmerMember) {
+        confirmerMember = await prisma.shopMember.create({
+          data: {
+            userId: user.id,
+            shopId: transaction.shopId,
+            role: "BUSINESS_ADMIN",
+            isActive: true,
+            canLoadWallet: true,
+          },
+        })
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.walletTransaction.update({
+          where: { id: transaction.id },
+          data: {
+            status: WalletTransactionStatus.CONFIRMED,
+            confirmedById: confirmerMember!.id,
+            confirmedAt: new Date(),
+          },
+        })
+
+        const balanceChange =
+          transaction.type === WalletTransactionType.DEPOSIT ||
+          transaction.type === WalletTransactionType.REFUND ||
+          transaction.type === WalletTransactionType.ADJUSTMENT
+            ? Number(transaction.amount)
+            : -Number(transaction.amount)
+
+        await tx.customer.update({
+          where: { id: transaction.customerId },
+          data: {
+            walletBalance: { increment: balanceChange },
+          },
+        })
+      })
+
+      confirmedCount++
+
+      await createAuditLog({
+        actorUserId: user.id,
+        action: "CONFIRM_WALLET_TRANSACTION",
+        entityType: "WALLET_TRANSACTION",
+        entityId: transaction.id,
+        metadata: {
+          customer: `${transaction.customer.firstName} ${transaction.customer.lastName}`,
+          amount: Number(transaction.amount),
+          type: transaction.type,
+          bulkConfirm: true,
+          collectorName,
+        },
+      })
+    }
+
+    revalidatePath(`/business-admin/${businessSlug}/wallet`)
+    return { success: true, data: { confirmedCount } }
+  } catch (error) {
+    console.error("Error bulk confirming wallet transactions:", error)
+    return { success: false, error: "Failed to confirm transactions" }
+  }
+}
+
+/**
  * Reject a pending wallet deposit - Business Admin
  */
 export async function rejectWalletTransaction(
