@@ -440,6 +440,23 @@ export function BusinessStaffReportsContent({
 
     let yPos = 18
 
+    // Calculate date range info
+    let rangeStartDate: Date
+    let rangeEndDate: Date
+    if (dateRange === "custom" && customStartDate && customEndDate) {
+      rangeStartDate = new Date(customStartDate)
+      rangeEndDate = new Date(customEndDate)
+    } else {
+      const days = parseInt(dateRange) || 30
+      rangeEndDate = new Date()
+      rangeStartDate = new Date()
+      rangeStartDate.setDate(rangeStartDate.getDate() - days)
+    }
+    const durationMs = rangeEndDate.getTime() - rangeStartDate.getTime()
+    const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24)) + 1
+    const fmtStart = rangeStartDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+    const fmtEnd = rangeEndDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+
     // Title
     doc.setFontSize(20)
     doc.setTextColor(...primaryColor)
@@ -447,7 +464,7 @@ export function BusinessStaffReportsContent({
 
     doc.setFontSize(10)
     doc.setTextColor(...lightGray)
-    doc.text(`${MONTHS[currentMonth]} ${currentYear}`, 14, yPos + 7)
+    doc.text(`${fmtStart}  —  ${fmtEnd}  (${durationDays} day${durationDays !== 1 ? "s" : ""})`, 14, yPos + 7)
 
     // Filters info
     const filterText = [
@@ -470,6 +487,7 @@ export function BusinessStaffReportsContent({
     doc.setTextColor(...textColor)
     const summaryItems = [
       `Reports: ${filteredReports.length}`,
+      `Days Worked: ${stats.daysWorked}`,
       `Sales: GHS ${stats.totalSales.toLocaleString()}`,
       `Collections: GHS ${stats.totalCollected.toLocaleString()}`,
       `Wallet: GHS ${stats.totalWalletDeposits.toLocaleString()}`,
@@ -581,7 +599,9 @@ export function BusinessStaffReportsContent({
       doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: "center" })
     }
 
-    doc.save(`staff-reports-${MONTHS[currentMonth]}-${currentYear}.pdf`)
+    const fileStart = rangeStartDate.toISOString().slice(0, 10)
+    const fileEnd = rangeEndDate.toISOString().slice(0, 10)
+    doc.save(`staff-reports-${fileStart}-to-${fileEnd}.pdf`)
   }
 
   // Individual Report PDF
