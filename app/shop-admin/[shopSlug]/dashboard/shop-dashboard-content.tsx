@@ -126,6 +126,43 @@ export default function ShopDashboardContent({
         </p>
       </div>
 
+      {/* Wallet Balance Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Link href={`${baseUrl}/wallet`} className="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-cyan-500/30 transition-all cursor-pointer">
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-gradient-to-br from-cyan-500/10 to-blue-500/5 rounded-full blur-3xl" />
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 flex items-center justify-center">
+                <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" />
+                </svg>
+              </div>
+              <span className="text-xs text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full">{walletStats.customersWithBalance} customers</span>
+            </div>
+            <p className="text-2xl font-bold text-cyan-400">{formatCurrency(walletStats.totalBalance, currency)}</p>
+            <p className="text-xs text-slate-400 mt-0.5">Total Wallet Balance</p>
+          </div>
+        </Link>
+
+        <Link href={`${baseUrl}/wallet`} className="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-emerald-500/30 transition-all cursor-pointer">
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-gradient-to-br from-emerald-500/10 to-green-500/5 rounded-full blur-3xl" />
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-green-500/20 border border-emerald-500/30 flex items-center justify-center">
+                <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <span className="text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">{walletStats.pendingDeposits} pending</span>
+            </div>
+            <p className="text-2xl font-bold text-emerald-400">{formatCurrency(walletStats.todayDeposits, currency)}</p>
+            <p className="text-xs text-slate-400 mt-0.5">Today&apos;s Wallet Deposits</p>
+          </div>
+        </Link>
+      </div>
+
       {/* Top Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Customers */}
