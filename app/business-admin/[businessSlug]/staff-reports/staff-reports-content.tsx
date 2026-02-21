@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useRef, useEffect } from "react"
+import { jsPDF } from "jspdf"
+import autoTable from "jspdf-autotable"
 import { 
   reviewDailyReportAsBusinessAdmin, 
   getBusinessDailyReportDetails,
@@ -63,6 +65,9 @@ export function BusinessStaffReportsContent({
   const [viewMode, setViewMode] = useState<"calendar" | "list" | "leaderboard" | "compare">("calendar")
   const [reportDetails, setReportDetails] = useState<ReportCustomerDetail[] | null>(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+  const [staffSearch, setStaffSearch] = useState("")
+  const [staffDropdownOpen, setStaffDropdownOpen] = useState(false)
+  const staffDropdownRef = useRef<HTMLDivElement>(null)
 
   // Helper function to format date as YYYY-MM-DD in local timezone
   const formatDateKey = (date: Date) => {
@@ -86,6 +91,25 @@ export function BusinessStaffReportsContent({
     const names = new Set(reports.map(r => r.staffName))
     return Array.from(names).sort()
   }, [reports])
+
+  // Filtered staff names for searchable dropdown
+  const filteredStaffNames = useMemo(() => {
+    if (!staffSearch) return uniqueStaffNames
+    return uniqueStaffNames.filter(name =>
+      name.toLowerCase().includes(staffSearch.toLowerCase())
+    )
+  }, [uniqueStaffNames, staffSearch])
+
+  // Close staff dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (staffDropdownRef.current && !staffDropdownRef.current.contains(event.target as Node)) {
+        setStaffDropdownOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
 
   // Get calendar days for current month
   const calendarDays = useMemo(() => {
@@ -356,6 +380,327 @@ export function BusinessStaffReportsContent({
     URL.revokeObjectURL(url)
   }
 
+  // PDF Export
+  const handleExportPDF = () => {
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const primaryColor: [number, number, number] = [99, 102, 241] // indigo
+    const textColor: [number, number, number] = [30, 41, 59]
+    const lightGray: [number, number, number] = [148, 163, 184]
+
+    let yPos = 18
+
+    // Title
+    doc.setFontSize(20)
+    doc.setTextColor(...primaryColor)
+    doc.text("Staff Daily Reports", 14, yPos)
+
+    doc.setFontSize(10)
+    doc.setTextColor(...lightGray)
+    doc.text(`${MONTHS[currentMonth]} ${currentYear}`, 14, yPos + 7)
+
+    // Filters info
+    const filterText = [
+      staffFilter !== "all" ? `Staff: ${staffFilter}` : null,
+      shopFilter !== "all" ? `Shop: ${shops.find(s => s.shopSlug === shopFilter)?.name || shopFilter}` : null,
+    ].filter(Boolean).join("  |  ")
+    if (filterText) {
+      doc.text(filterText, 14, yPos + 13)
+    }
+
+    doc.setFontSize(8)
+    doc.text(`Generated: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`, pageWidth - 14, yPos, { align: "right" })
+
+    yPos += 22
+
+    // Summary Box
+    doc.setFillColor(245, 247, 250)
+    doc.roundedRect(14, yPos, pageWidth - 28, 18, 3, 3, "F")
+    doc.setFontSize(9)
+    doc.setTextColor(...textColor)
+    const summaryItems = [
+      `Reports: ${filteredReports.length}`,
+      `Sales: GHS ${stats.totalSales.toLocaleString()}`,
+      `Collections: GHS ${stats.totalCollected.toLocaleString()}`,
+      `Wallet: GHS ${stats.totalWalletDeposits.toLocaleString()}`,
+      `Staff: ${stats.uniqueStaff}`,
+    ]
+    const colWidth = (pageWidth - 28) / summaryItems.length
+    summaryItems.forEach((item, idx) => {
+      doc.text(item, 14 + colWidth * idx + colWidth / 2, yPos + 11, { align: "center" })
+    })
+
+    yPos += 25
+
+    // Reports Table
+    const tableData = filteredReports.map(r => {
+      const date = new Date(r.reportDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
+      const type = r.reportType === "SALES" ? "Sales" : r.reportType === "WALLET" ? "Wallet" : "Collection"
+      const amount = r.reportType === "SALES"
+        ? (r.totalSalesAmount || 0)
+        : r.reportType === "WALLET"
+        ? (r.totalWalletDeposits || 0)
+        : (r.totalCollected || 0)
+      const role = r.staffRole === "SALES_STAFF" ? "Sales" : r.staffRole === "DEBT_COLLECTOR" ? "Collector" : r.staffRole
+      return [date, r.shopName, r.staffName, role, type, `GHS ${amount.toLocaleString()}`, r.status === "REVIEWED" ? "Reviewed" : "Pending"]
+    })
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [["Date", "Shop", "Staff", "Role", "Type", "Amount", "Status"]],
+      body: tableData,
+      theme: "striped",
+      headStyles: {
+        fillColor: primaryColor,
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: "bold",
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: textColor,
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252],
+      },
+      columnStyles: {
+        0: { cellWidth: 20 },
+        5: { halign: "right", fontStyle: "bold" },
+        6: { halign: "center" },
+      },
+      margin: { left: 14, right: 14 },
+    })
+
+    // Staff summary page if multiple staff
+    if (leaderboard.length > 1) {
+      doc.addPage()
+      yPos = 18
+
+      doc.setFontSize(16)
+      doc.setTextColor(...primaryColor)
+      doc.text("Staff Performance Summary", 14, yPos)
+      yPos += 12
+
+      const staffData = leaderboard.map((s, idx) => [
+        String(idx + 1),
+        s.name,
+        s.shopName,
+        String(s.daysWorked),
+        `GHS ${s.totalSales.toLocaleString()}`,
+        `GHS ${s.totalCollected.toLocaleString()}`,
+        `GHS ${s.totalWalletDeposits.toLocaleString()}`,
+        `GHS ${s.totalRevenue.toLocaleString()}`,
+      ])
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [["#", "Staff", "Shop", "Days", "Sales", "Collections", "Wallet", "Total"]],
+        body: staffData,
+        theme: "striped",
+        headStyles: {
+          fillColor: primaryColor,
+          textColor: [255, 255, 255],
+          fontSize: 9,
+          fontStyle: "bold",
+        },
+        bodyStyles: {
+          fontSize: 8,
+          textColor: textColor,
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252],
+        },
+        columnStyles: {
+          0: { cellWidth: 10, halign: "center" },
+          4: { halign: "right" },
+          5: { halign: "right" },
+          6: { halign: "right" },
+          7: { halign: "right", fontStyle: "bold" },
+        },
+        margin: { left: 14, right: 14 },
+      })
+    }
+
+    // Footer on each page
+    const totalPages = doc.getNumberOfPages()
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i)
+      const pageHeight = doc.internal.pageSize.getHeight()
+      doc.setFontSize(7)
+      doc.setTextColor(...lightGray)
+      doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: "center" })
+    }
+
+    doc.save(`staff-reports-${MONTHS[currentMonth]}-${currentYear}.pdf`)
+  }
+
+  // Individual Report PDF
+  const handleDownloadReportPDF = () => {
+    if (!selectedReport) return
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const primaryColor: [number, number, number] = [99, 102, 241]
+    const textColor: [number, number, number] = [30, 41, 59]
+    const lightGray: [number, number, number] = [148, 163, 184]
+
+    let yPos = 18
+
+    // Title
+    doc.setFontSize(20)
+    doc.setTextColor(...primaryColor)
+    doc.text("Daily Staff Report", 14, yPos)
+
+    const reportDate = new Date(selectedReport.reportDate).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    doc.setFontSize(10)
+    doc.setTextColor(...lightGray)
+    doc.text(reportDate, 14, yPos + 7)
+
+    const typeLabel = selectedReport.reportType === "SALES" ? "Sales Report" : selectedReport.reportType === "WALLET" ? "Wallet Report" : "Collection Report"
+    doc.setFontSize(8)
+    doc.text(`Generated: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`, pageWidth - 14, yPos, { align: "right" })
+
+    yPos += 16
+
+    // Staff Info Box
+    doc.setFillColor(245, 247, 250)
+    doc.roundedRect(14, yPos, pageWidth - 28, 22, 3, 3, "F")
+    doc.setFontSize(10)
+    doc.setTextColor(...textColor)
+    doc.text(`Staff: ${selectedReport.staffName}`, 20, yPos + 8)
+    doc.text(`Shop: ${selectedReport.shopName}`, 20, yPos + 15)
+    const role = selectedReport.staffRole === "SALES_STAFF" ? "Sales Staff" : selectedReport.staffRole === "DEBT_COLLECTOR" ? "Debt Collector" : selectedReport.staffRole
+    doc.text(`Role: ${role}`, pageWidth / 2, yPos + 8)
+    doc.text(`Type: ${typeLabel}`, pageWidth / 2, yPos + 15)
+    const statusText = selectedReport.status === "REVIEWED" ? "Reviewed" : "Pending Review"
+    doc.text(`Status: ${statusText}`, pageWidth - 50, yPos + 8)
+
+    yPos += 30
+
+    // Summary numbers
+    doc.setFontSize(12)
+    doc.setTextColor(...primaryColor)
+    doc.text("Report Summary", 14, yPos)
+    yPos += 8
+
+    if (selectedReport.reportType === "SALES") {
+      const summaryData = [
+        ["Total Sales Amount", `GHS ${(selectedReport.totalSalesAmount || 0).toLocaleString()}`],
+        ["New Customers", String(selectedReport.newCustomersCount || 0)],
+        ["Purchases Made", String(selectedReport.newPurchasesCount || 0)],
+        ["Items Sold", String(selectedReport.itemsSoldCount || 0)],
+      ]
+      autoTable(doc, {
+        startY: yPos, body: summaryData, theme: "plain",
+        bodyStyles: { fontSize: 10, textColor: textColor },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 60 }, 1: { halign: "left" } },
+        margin: { left: 14, right: 14 },
+      })
+    } else if (selectedReport.reportType === "WALLET") {
+      const summaryData = [
+        ["Total Wallet Deposits", `GHS ${(selectedReport.totalWalletDeposits || 0).toLocaleString()}`],
+        ["Deposit Count", String(selectedReport.walletDepositsCount || 0)],
+      ]
+      autoTable(doc, {
+        startY: yPos, body: summaryData, theme: "plain",
+        bodyStyles: { fontSize: 10, textColor: textColor },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 60 }, 1: { halign: "left" } },
+        margin: { left: 14, right: 14 },
+      })
+    } else {
+      const summaryData = [
+        ["Total Collected", `GHS ${(selectedReport.totalCollected || 0).toLocaleString()}`],
+        ["Customers Visited", String(selectedReport.customersVisited || 0)],
+        ["Payments Collected", String(selectedReport.paymentsCollected || 0)],
+      ]
+      autoTable(doc, {
+        startY: yPos, body: summaryData, theme: "plain",
+        bodyStyles: { fontSize: 10, textColor: textColor },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 60 }, 1: { halign: "left" } },
+        margin: { left: 14, right: 14 },
+      })
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    yPos = (doc as any).lastAutoTable?.finalY + 8 || yPos + 40
+
+    // Staff notes if any
+    if (selectedReport.notes) {
+      doc.setFontSize(10)
+      doc.setTextColor(...textColor)
+      doc.setFont("helvetica", "bold")
+      doc.text("Staff Notes:", 14, yPos)
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(9)
+      const splitNotes = doc.splitTextToSize(selectedReport.notes, pageWidth - 28)
+      doc.text(splitNotes, 14, yPos + 6)
+      yPos += 6 + splitNotes.length * 5
+    }
+
+    // Customer Breakdown
+    if (reportDetails && reportDetails.length > 0) {
+      yPos += 4
+      doc.setFontSize(12)
+      doc.setTextColor(...primaryColor)
+      doc.text(`Customer Breakdown (${reportDetails.length} customer${reportDetails.length !== 1 ? "s" : ""})`, 14, yPos)
+      yPos += 6
+
+      const customerRows: string[][] = []
+      for (const cust of reportDetails) {
+        // Customer header row
+        customerRows.push([cust.customerName, cust.phone, "", `GHS ${cust.total.toLocaleString()}`])
+        // Individual items
+        for (const item of cust.items) {
+          customerRows.push(["", `   ${item.time} — ${item.description}`, item.reference || "", `GHS ${item.amount.toLocaleString()}`])
+        }
+      }
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [["Customer", "Details", "Ref", "Amount"]],
+        body: customerRows,
+        theme: "striped",
+        headStyles: {
+          fillColor: primaryColor,
+          textColor: [255, 255, 255],
+          fontSize: 9,
+          fontStyle: "bold",
+        },
+        bodyStyles: {
+          fontSize: 8,
+          textColor: textColor,
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252],
+        },
+        columnStyles: {
+          0: { cellWidth: 40, fontStyle: "bold" },
+          1: { cellWidth: 75 },
+          3: { halign: "right" },
+        },
+        margin: { left: 14, right: 14 },
+        didParseCell: (data) => {
+          // Bold customer name rows (first column non-empty)
+          if (data.section === "body" && data.column.index === 0 && data.cell.raw) {
+            data.cell.styles.fontStyle = "bold"
+          }
+          // Make total amount bold for customer header rows
+          if (data.section === "body" && data.column.index === 3 && data.row.cells[0]?.raw) {
+            data.cell.styles.fontStyle = "bold"
+          }
+        },
+      })
+    }
+
+    // Footer
+    const pageHeight = doc.internal.pageSize.getHeight()
+    doc.setFontSize(7)
+    doc.setTextColor(...lightGray)
+    doc.text(`Page 1`, pageWidth / 2, pageHeight - 8, { align: "center" })
+
+    const dateForFile = new Date(selectedReport.reportDate).toISOString().split("T")[0]
+    doc.save(`report-${selectedReport.staffName.replace(/\s+/g, "-")}-${dateForFile}.pdf`)
+  }
+
   const getRoleBadge = (role: string) => {
     switch (role) {
       case "SALES_STAFF":
@@ -506,19 +851,70 @@ export function BusinessStaffReportsContent({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Staff Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-400">Staff:</span>
-            <select
-              value={staffFilter}
-              onChange={(e) => setStaffFilter(e.target.value)}
-              className="px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 max-w-[160px]"
-            >
-              <option value="all">All Staff</option>
-              {uniqueStaffNames.map(name => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
+          {/* Staff Filter - Searchable */}
+          <div className="relative" ref={staffDropdownRef}>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-400">Staff:</span>
+              <div className="relative">
+                <div className="flex items-center">
+                  <input
+                    type="text"
+                    value={staffDropdownOpen ? staffSearch : (staffFilter === "all" ? "" : staffFilter)}
+                    onChange={(e) => {
+                      setStaffSearch(e.target.value)
+                      setStaffDropdownOpen(true)
+                    }}
+                    onFocus={() => {
+                      setStaffDropdownOpen(true)
+                      setStaffSearch("")
+                    }}
+                    placeholder="All Staff"
+                    className="w-[170px] px-3 py-2 pr-8 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 placeholder:text-slate-400"
+                  />
+                  {staffFilter !== "all" ? (
+                    <button
+                      onClick={() => { setStaffFilter("all"); setStaffSearch(""); setStaffDropdownOpen(false) }}
+                      className="absolute right-2 text-slate-400 hover:text-white"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <svg className="w-4 h-4 absolute right-2 text-slate-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  )}
+                </div>
+                {staffDropdownOpen && (
+                  <div className="absolute z-50 mt-1 w-[220px] max-h-[240px] overflow-y-auto rounded-xl bg-slate-800 border border-white/10 shadow-xl shadow-black/30">
+                    <button
+                      onClick={() => { setStaffFilter("all"); setStaffSearch(""); setStaffDropdownOpen(false) }}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-white/10 transition-colors ${
+                        staffFilter === "all" ? "text-indigo-400 bg-indigo-500/10" : "text-slate-300"
+                      }`}
+                    >
+                      All Staff
+                    </button>
+                    {filteredStaffNames.length === 0 ? (
+                      <div className="px-3 py-3 text-xs text-slate-500 text-center">No staff found</div>
+                    ) : (
+                      filteredStaffNames.map(name => (
+                        <button
+                          key={name}
+                          onClick={() => { setStaffFilter(name); setStaffSearch(""); setStaffDropdownOpen(false) }}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-white/10 transition-colors ${
+                            staffFilter === name ? "text-indigo-400 bg-indigo-500/10" : "text-slate-300"
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Shop Filter */}
@@ -536,17 +932,29 @@ export function BusinessStaffReportsContent({
             </select>
           </div>
 
-          {/* Export Button */}
-          <button
-            onClick={handleExportCSV}
-            className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 text-sm font-medium transition-all flex items-center gap-1.5"
-            title="Export to CSV"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <span className="hidden sm:inline">Export CSV</span>
-          </button>
+          {/* Export Buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportCSV}
+              className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 text-sm font-medium transition-all flex items-center gap-1.5"
+              title="Export to CSV"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span className="hidden sm:inline">CSV</span>
+            </button>
+            <button
+              onClick={handleExportPDF}
+              className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:text-red-300 hover:bg-red-500/20 text-sm font-medium transition-all flex items-center gap-1.5"
+              title="Download PDF Report"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+              </svg>
+              <span className="hidden sm:inline">PDF</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1128,14 +1536,25 @@ export function BusinessStaffReportsContent({
                     {new Date(selectedReport.reportDate).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
                   </p>
                 </div>
-                <button
-                  onClick={handleCloseReport}
-                  className="p-2 rounded-lg hover:bg-white/10 text-slate-400 transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDownloadReportPDF}
+                    className="p-2 rounded-lg hover:bg-red-500/10 text-red-400 hover:text-red-300 transition-colors"
+                    title="Download PDF"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={handleCloseReport}
+                    className="p-2 rounded-lg hover:bg-white/10 text-slate-400 transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
 
