@@ -1717,3 +1717,457 @@ export async function getCollectorDailyStats(shopSlug: string, date: string) {
     totalCollected,
   }
 }
+
+// ============================================
+// ENHANCED DAILY REPORT DASHBOARD
+// ============================================
+
+export interface CollectorCustomerChecklistItem {
+  customerId: string
+  customerName: string
+  phone: string
+  totalOwed: number
+  lastPaymentDate: string | null
+  visitedToday: boolean
+  collectedToday: number
+  walletDepositToday: number
+}
+
+export interface CollectorPaymentLogEntry {
+  id: string
+  customerName: string
+  amount: number
+  type: "collection" | "wallet"
+  status: string
+  time: string
+  reference: string | null
+}
+
+export interface CollectorStreakStats {
+  currentStreak: number
+  longestStreak: number
+  totalReportsThisMonth: number
+  totalCollectedThisMonth: number
+  totalCollectedThisWeek: number
+  avgDailyCollection: number
+  weeklyTrend: { date: string; amount: number }[]
+}
+
+export interface CollectorReportDashboardData {
+  collectorName: string
+  shopName: string
+  businessName: string
+  todaysStats: {
+    customersAssigned: number
+    customersVisited: number
+    paymentsCollected: number
+    totalCollected: number
+    walletDeposits: number
+    walletDepositCount: number
+    pendingWallets: number
+  }
+  customerChecklist: CollectorCustomerChecklistItem[]
+  paymentLog: CollectorPaymentLogEntry[]
+  streakStats: CollectorStreakStats
+  todaysReport: CollectorDailyReportData | null
+  reportHistory: CollectorDailyReportData[]
+}
+
+export async function getCollectorReportDashboard(shopSlug: string): Promise<CollectorReportDashboardData> {
+  const { user, shop, membership } = await requireCollectorForShop(shopSlug)
+  const memberId = membership?.id || null
+
+  const business = await prisma.business.findUnique({
+    where: { id: shop.businessId },
+    select: { name: true },
+  })
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const endOfDay = new Date(today)
+  endOfDay.setHours(23, 59, 59, 999)
+
+  // --- Assigned customers with outstanding balances ---
+  const assignedCustomers = memberId
+    ? await prisma.customer.findMany({
+        where: { shopId: shop.id, assignedCollectorId: memberId, isActive: true },
+        include: {
+          purchases: {
+            where: { status: { in: ["ACTIVE", "PENDING", "OVERDUE"] } },
+            select: { id: true, outstandingBalance: true },
+          },
+        },
+        orderBy: { firstName: "asc" },
+      })
+    : []
+
+  // --- Today's payments by this collector ---
+  const todaysPayments = memberId
+    ? await prisma.payment.findMany({
+        where: {
+          collectorId: memberId,
+          createdAt: { gte: today, lte: endOfDay },
+        },
+        include: {
+          purchase: { include: { customer: { select: { id: true, firstName: true, lastName: true, phone: true } } } },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    : []
+
+  // --- Today's wallet deposits by this collector ---
+  const todaysWalletDeposits = memberId
+    ? await prisma.walletTransaction.findMany({
+        where: {
+          createdById: memberId,
+          shopId: shop.id,
+          type: "DEPOSIT",
+          createdAt: { gte: today, lte: endOfDay },
+        },
+        include: {
+          customer: { select: { id: true, firstName: true, lastName: true, phone: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    : []
+
+  // --- Build customer checklist ---
+  const visitedCustomerIds = new Set(todaysPayments.map(p => p.purchase.customer.id))
+  const walletCustomerIds = new Set(todaysWalletDeposits.map(w => w.customerId))
+
+  // Payments aggregated by customer
+  const paymentsByCustomer = new Map<string, number>()
+  for (const p of todaysPayments) {
+    const cid = p.purchase.customer.id
+    paymentsByCustomer.set(cid, (paymentsByCustomer.get(cid) || 0) + Number(p.amount))
+  }
+
+  // Wallet deposits by customer
+  const walletByCustomer = new Map<string, number>()
+  for (const w of todaysWalletDeposits) {
+    if (w.status !== "REJECTED") {
+      walletByCustomer.set(w.customerId, (walletByCustomer.get(w.customerId) || 0) + Number(w.amount))
+    }
+  }
+
+  // Get last payment date for each customer
+  const customerIds = assignedCustomers.map(c => c.id)
+  const lastPayments = memberId && customerIds.length > 0
+    ? await prisma.payment.findMany({
+        where: {
+          collectorId: memberId,
+          purchase: { customerId: { in: customerIds } },
+          isConfirmed: true,
+        },
+        select: { purchase: { select: { customerId: true } }, paidAt: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      })
+    : []
+
+  const lastPaymentByCustomer = new Map<string, Date>()
+  for (const lp of lastPayments) {
+    const cid = lp.purchase.customerId
+    if (!lastPaymentByCustomer.has(cid)) {
+      lastPaymentByCustomer.set(cid, lp.paidAt || lp.createdAt)
+    }
+  }
+
+  const customerChecklist: CollectorCustomerChecklistItem[] = assignedCustomers.map(c => ({
+    customerId: c.id,
+    customerName: `${c.firstName} ${c.lastName}`,
+    phone: c.phone,
+    totalOwed: c.purchases.reduce((s, p) => s + Number(p.outstandingBalance), 0),
+    lastPaymentDate: lastPaymentByCustomer.has(c.id)
+      ? lastPaymentByCustomer.get(c.id)!.toISOString()
+      : null,
+    visitedToday: visitedCustomerIds.has(c.id) || walletCustomerIds.has(c.id),
+    collectedToday: paymentsByCustomer.get(c.id) || 0,
+    walletDepositToday: walletByCustomer.get(c.id) || 0,
+  }))
+
+  // --- Payment log ---
+  const paymentLog: CollectorPaymentLogEntry[] = [
+    ...todaysPayments.map(p => ({
+      id: p.id,
+      customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
+      amount: Number(p.amount),
+      type: "collection" as const,
+      status: p.isConfirmed ? "Confirmed" : "Pending",
+      time: (p.paidAt || p.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+      reference: p.reference,
+    })),
+    ...todaysWalletDeposits.map(w => ({
+      id: w.id,
+      customerName: `${w.customer.firstName} ${w.customer.lastName}`,
+      amount: Number(w.amount),
+      type: "wallet" as const,
+      status: w.status === "CONFIRMED" ? "Confirmed" : w.status === "REJECTED" ? "Rejected" : "Pending",
+      time: w.createdAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+      reference: w.reference,
+    })),
+  ].sort((a, b) => b.time.localeCompare(a.time))
+
+  // --- Streak & performance ---
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+  const startOfWeek = new Date(today)
+  startOfWeek.setDate(today.getDate() - today.getDay()) // Sunday
+
+  const allReports = memberId
+    ? await prisma.dailyReport.findMany({
+        where: { shopMemberId: memberId, reportType: "COLLECTION" },
+        orderBy: { reportDate: "desc" },
+        take: 90,
+      })
+    : []
+
+  // Current streak
+  let currentStreak = 0
+  const sortedDates = allReports.map(r => {
+    const d = new Date(r.reportDate)
+    d.setHours(0, 0, 0, 0)
+    return d.getTime()
+  })
+  const uniqueDates = [...new Set(sortedDates)].sort((a, b) => b - a)
+  for (let i = 0; i < uniqueDates.length; i++) {
+    const expected = new Date(today)
+    expected.setDate(expected.getDate() - i)
+    expected.setHours(0, 0, 0, 0)
+    if (uniqueDates[i] === expected.getTime()) {
+      currentStreak++
+    } else if (i === 0 && uniqueDates[0] < expected.getTime()) {
+      // Today not yet reported, check from yesterday
+      const yesterday = new Date(today)
+      yesterday.setDate(yesterday.getDate() - 1)
+      yesterday.setHours(0, 0, 0, 0)
+      if (uniqueDates[0] === yesterday.getTime()) {
+        currentStreak++
+      } else break
+    } else break
+  }
+
+  // Longest streak (from last 90 reports)
+  let longestStreak = 0
+  let tempStreak = 1
+  for (let i = 1; i < uniqueDates.length; i++) {
+    const diff = uniqueDates[i - 1] - uniqueDates[i]
+    if (diff === 86400000) { // 1 day
+      tempStreak++
+      longestStreak = Math.max(longestStreak, tempStreak)
+    } else {
+      tempStreak = 1
+    }
+  }
+  longestStreak = Math.max(longestStreak, tempStreak, currentStreak)
+
+  const monthReports = allReports.filter(r => new Date(r.reportDate) >= startOfMonth)
+  const weekReports = allReports.filter(r => new Date(r.reportDate) >= startOfWeek)
+
+  const totalCollectedThisMonth = monthReports.reduce((s, r) => s + Number(r.totalCollected || 0), 0)
+  const totalCollectedThisWeek = weekReports.reduce((s, r) => s + Number(r.totalCollected || 0), 0)
+  const avgDailyCollection = monthReports.length > 0 ? totalCollectedThisMonth / monthReports.length : 0
+
+  // Weekly trend (last 7 days)
+  const weeklyTrend: { date: string; amount: number }[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    const dateKey = d.toISOString().split("T")[0]
+    const dayReport = allReports.find(r => {
+      const rd = new Date(r.reportDate)
+      return rd.toISOString().split("T")[0] === dateKey
+    })
+    weeklyTrend.push({ date: dateKey, amount: Number(dayReport?.totalCollected || 0) })
+  }
+
+  // --- Today's report ---
+  const todaysReportRecord = memberId
+    ? await prisma.dailyReport.findFirst({
+        where: { shopMemberId: memberId, reportType: "COLLECTION", reportDate: today },
+      })
+    : null
+
+  const todaysReport: CollectorDailyReportData | null = todaysReportRecord
+    ? {
+        id: todaysReportRecord.id,
+        reportDate: todaysReportRecord.reportDate,
+        reportType: todaysReportRecord.reportType,
+        status: todaysReportRecord.status,
+        customersVisited: todaysReportRecord.customersVisited,
+        paymentsCollected: todaysReportRecord.paymentsCollected,
+        totalCollected: todaysReportRecord.totalCollected ? Number(todaysReportRecord.totalCollected) : null,
+        notes: todaysReportRecord.notes,
+        reviewedAt: todaysReportRecord.reviewedAt,
+        reviewNotes: todaysReportRecord.reviewNotes,
+        createdAt: todaysReportRecord.createdAt,
+        updatedAt: todaysReportRecord.updatedAt,
+      }
+    : null
+
+  // --- Report history ---
+  const reportHistory = allReports.slice(0, 30).map(r => ({
+    id: r.id,
+    reportDate: r.reportDate,
+    reportType: r.reportType,
+    status: r.status,
+    customersVisited: r.customersVisited,
+    paymentsCollected: r.paymentsCollected,
+    totalCollected: r.totalCollected ? Number(r.totalCollected) : null,
+    notes: r.notes,
+    reviewedAt: r.reviewedAt,
+    reviewNotes: r.reviewNotes,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }))
+
+  // Stats
+  const totalCollectedPayments = todaysPayments.reduce((s, p) => s + Number(p.amount), 0)
+  const confirmedWallets = todaysWalletDeposits.filter(w => w.status === "CONFIRMED")
+  const pendingWallets = todaysWalletDeposits.filter(w => w.status === "PENDING")
+  const totalWalletAmount = todaysWalletDeposits.filter(w => w.status !== "REJECTED").reduce((s, w) => s + Number(w.amount), 0)
+
+  return {
+    collectorName: user.name || "Collector",
+    shopName: shop.name,
+    businessName: business?.name || "Business",
+    todaysStats: {
+      customersAssigned: assignedCustomers.length,
+      customersVisited: visitedCustomerIds.size + [...walletCustomerIds].filter(id => !visitedCustomerIds.has(id)).length,
+      paymentsCollected: todaysPayments.length,
+      totalCollected: totalCollectedPayments,
+      walletDeposits: totalWalletAmount,
+      walletDepositCount: todaysWalletDeposits.filter(w => w.status !== "REJECTED").length,
+      pendingWallets: pendingWallets.length,
+    },
+    customerChecklist,
+    paymentLog,
+    streakStats: {
+      currentStreak,
+      longestStreak,
+      totalReportsThisMonth: monthReports.length,
+      totalCollectedThisMonth,
+      totalCollectedThisWeek,
+      avgDailyCollection,
+      weeklyTrend,
+    },
+    todaysReport,
+    reportHistory,
+  }
+}
+
+// ============================================
+// PDF DATA FOR COLLECTOR REPORTS
+// ============================================
+
+export interface CollectorPDFReportData {
+  collectorName: string
+  shopName: string
+  businessName: string
+  dateRange: { start: string; end: string }
+  totalDaysWorked: number
+  totalCollected: number
+  totalWalletDeposits: number
+  totalCustomersVisited: number
+  reports: {
+    date: string
+    customersVisited: number
+    paymentsCollected: number
+    totalCollected: number
+    walletDeposits: number
+    status: string
+  }[]
+  walletSummary: {
+    totalPending: number
+    totalConfirmed: number
+    totalRejected: number
+    pendingCount: number
+    confirmedCount: number
+  }
+}
+
+export async function getCollectorPDFReportData(
+  shopSlug: string,
+  startDate: string,
+  endDate: string
+): Promise<CollectorPDFReportData> {
+  const { user, shop, membership } = await requireCollectorForShop(shopSlug)
+  const memberId = membership?.id || null
+
+  const business = await prisma.business.findUnique({
+    where: { id: shop.businessId },
+    select: { name: true },
+  })
+
+  const start = new Date(startDate)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(endDate)
+  end.setHours(23, 59, 59, 999)
+
+  // Daily reports in range
+  const reports = memberId
+    ? await prisma.dailyReport.findMany({
+        where: {
+          shopMemberId: memberId,
+          reportType: "COLLECTION",
+          reportDate: { gte: start, lte: end },
+        },
+        orderBy: { reportDate: "desc" },
+      })
+    : []
+
+  // Wallet transactions in range
+  const walletTxns = memberId
+    ? await prisma.walletTransaction.findMany({
+        where: {
+          createdById: memberId,
+          shopId: shop.id,
+          type: "DEPOSIT",
+          createdAt: { gte: start, lte: end },
+        },
+        select: { amount: true, status: true, createdAt: true },
+      })
+    : []
+
+  // Group wallet deposits by date
+  const walletByDate = new Map<string, number>()
+  for (const w of walletTxns) {
+    if (w.status !== "REJECTED") {
+      const dk = new Date(w.createdAt).toISOString().split("T")[0]
+      walletByDate.set(dk, (walletByDate.get(dk) || 0) + Number(w.amount))
+    }
+  }
+
+  const pendingWallets = walletTxns.filter(w => w.status === "PENDING")
+  const confirmedWallets = walletTxns.filter(w => w.status === "CONFIRMED")
+  const rejectedWallets = walletTxns.filter(w => w.status === "REJECTED")
+
+  const reportRows = reports.map(r => {
+    const dk = new Date(r.reportDate).toISOString().split("T")[0]
+    return {
+      date: new Date(r.reportDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+      customersVisited: r.customersVisited || 0,
+      paymentsCollected: r.paymentsCollected || 0,
+      totalCollected: Number(r.totalCollected || 0),
+      walletDeposits: walletByDate.get(dk) || 0,
+      status: r.status === "REVIEWED" ? "Reviewed" : r.status === "SUBMITTED" ? "Submitted" : "Draft",
+    }
+  })
+
+  return {
+    collectorName: user.name || "Collector",
+    shopName: shop.name,
+    businessName: business?.name || "Business",
+    dateRange: { start: startDate, end: endDate },
+    totalDaysWorked: reports.length,
+    totalCollected: reports.reduce((s, r) => s + Number(r.totalCollected || 0), 0),
+    totalWalletDeposits: walletTxns.filter(w => w.status !== "REJECTED").reduce((s, w) => s + Number(w.amount), 0),
+    totalCustomersVisited: reports.reduce((s, r) => s + (r.customersVisited || 0), 0),
+    reports: reportRows,
+    walletSummary: {
+      totalPending: pendingWallets.reduce((s, w) => s + Number(w.amount), 0),
+      totalConfirmed: confirmedWallets.reduce((s, w) => s + Number(w.amount), 0),
+      totalRejected: rejectedWallets.reduce((s, w) => s + Number(w.amount), 0),
+      pendingCount: pendingWallets.length,
+      confirmedCount: confirmedWallets.length,
+    },
+  }
+}
