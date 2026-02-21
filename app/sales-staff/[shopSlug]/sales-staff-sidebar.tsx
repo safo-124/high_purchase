@@ -257,7 +257,15 @@ export function SalesStaffSidebar({ shopSlug, shopName, staffName, businessName,
             <p className="text-xs text-slate-400">Sales Staff</p>
           </div>
         </div>
-        <form action="/api/auth/logout" method="POST">
+        <form onSubmit={async (e) => {
+          e.preventDefault()
+          try {
+            await fetch("/api/auth/logout", { method: "POST" })
+            window.location.href = "/login"
+          } catch {
+            window.location.href = "/login"
+          }
+        }}>
           <button
             type="submit"
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-all text-sm font-medium"

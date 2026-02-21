@@ -1,26 +1,12 @@
 "use client"
 
-import { useRouter } from "next/navigation"
-import { toast } from "sonner"
-
 export function LogoutButton() {
-  const router = useRouter()
-
   const handleLogout = async () => {
     try {
-      const response = await fetch("/api/auth/logout", {
-        method: "GET",
-        credentials: "include",
-      })
-      
-      if (response.redirected) {
-        window.location.href = response.url
-      } else {
-        router.push("/login")
-        router.refresh()
-      }
+      await fetch("/api/auth/logout", { method: "POST" })
+      window.location.href = "/login"
     } catch {
-      toast.error("Failed to logout")
+      window.location.href = "/login"
     }
   }
 

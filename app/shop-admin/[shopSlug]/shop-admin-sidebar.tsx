@@ -404,17 +404,22 @@ export function ShopAdminSidebar({ shopSlug, shopName, userName, userEmail, busi
               </Link>
             </div>
             <div className="p-1.5 border-t border-white/[0.06]">
-              <form action="/api/auth/logout" method="POST">
-                <button
-                  type="submit"
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-red-500/10 transition-colors group"
-                >
-                  <svg className="w-4 h-4 text-slate-500 group-hover:text-red-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-                  </svg>
-                  <span className="text-[13px] text-slate-400 group-hover:text-red-400 transition-colors">Sign Out</span>
-                </button>
-              </form>
+              <button
+                onClick={async () => {
+                  try {
+                    await fetch("/api/auth/logout", { method: "POST" })
+                    window.location.href = "/login"
+                  } catch {
+                    window.location.href = "/login"
+                  }
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-red-500/10 transition-colors group"
+              >
+                <svg className="w-4 h-4 text-slate-500 group-hover:text-red-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                </svg>
+                <span className="text-[13px] text-slate-400 group-hover:text-red-400 transition-colors">Sign Out</span>
+              </button>
             </div>
           </div>
         )}

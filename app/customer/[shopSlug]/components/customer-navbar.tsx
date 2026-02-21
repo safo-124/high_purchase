@@ -77,7 +77,7 @@ export function CustomerNavbar({
   const handleLogout = async () => {
     await logoutCustomer()
     toast.success("Logged out successfully")
-    router.push(`/customer/${shopSlug}/login`)
+    window.location.href = `/customer/${shopSlug}/login`
   }
 
   const isActive = (href: string) => pathname === href

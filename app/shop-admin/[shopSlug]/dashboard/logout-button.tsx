@@ -1,14 +1,13 @@
 "use client"
 
-import { useRouter } from "next/navigation"
-
 export function ShopAdminLogoutButton() {
-  const router = useRouter()
-
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" })
-    router.push("/login")
-    router.refresh()
+    try {
+      await fetch("/api/auth/logout", { method: "POST" })
+      window.location.href = "/login"
+    } catch {
+      window.location.href = "/login"
+    }
   }
 
   return (

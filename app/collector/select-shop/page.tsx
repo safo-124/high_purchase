@@ -87,14 +87,12 @@ export default async function CollectorSelectShopPage() {
         )}
 
         <div className="mt-8 text-center">
-          <form action="/api/auth/logout" method="POST">
-            <button
-              type="submit"
-              className="text-sm text-slate-500 hover:text-slate-300 transition-colors"
-            >
-              Sign out
-            </button>
-          </form>
+          <a
+            href="/api/auth/logout"
+            className="text-sm text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            Sign out
+          </a>
         </div>
       </div>
     </div>

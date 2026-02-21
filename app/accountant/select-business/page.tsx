@@ -130,12 +130,12 @@ export default async function AccountantSelectBusinessPage() {
 
         {/* Footer */}
         <div className="text-center mt-6">
-          <Link
-            href="/login"
+          <a
+            href="/api/auth/logout"
             className="text-sm text-slate-400 hover:text-white transition-colors"
           >
             Sign out
-          </Link>
+          </a>
         </div>
       </div>
     </div>
