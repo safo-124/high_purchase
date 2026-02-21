@@ -210,6 +210,248 @@ export async function getCollectorDashboard(shopSlug: string): Promise<Collector
 }
 
 // ============================================
+// ENHANCED COLLECTOR DASHBOARD (v2)
+// ============================================
+
+export interface CollectorDashboardV2Data {
+  collectorName: string
+  shopName: string
+  businessName: string
+  businessLogoUrl: string | null
+  canSellProducts: boolean
+  canCreateCustomers: boolean
+  canLoadWallet: boolean
+  // Core stats
+  assignedCustomers: number
+  activeLoans: number
+  totalOutstanding: number
+  totalCollected: number
+  todayCollected: number
+  // Wallet stats
+  walletTotalBalance: number
+  walletPending: number
+  walletPendingCount: number
+  walletConfirmedToday: number
+  walletCustomersWithBalance: number
+  // Collection analytics
+  collectionRate: number // percentage of outstanding collected
+  weeklyTrend: { date: string; collections: number; wallets: number }[]
+  monthlyCollections: { month: string; amount: number }[]
+  // Payment method breakdown
+  paymentMethodBreakdown: { method: string; amount: number; count: number }[]
+  // Purchase status breakdown
+  purchaseStatusBreakdown: { status: string; count: number }[]
+  // Top customers by outstanding
+  topOwingCustomers: { id: string; name: string; phone: string; amount: number; lastPayment: string | null }[]
+  // Recent activity
+  recentPayments: { id: string; amount: number; customerName: string; purchaseNumber: string; method: string; paidAt: string }[]
+  recentWalletDeposits: { id: string; amount: number; customerName: string; status: string; createdAt: string }[]
+}
+
+export async function getCollectorDashboardV2(shopSlug: string): Promise<CollectorDashboardV2Data> {
+  const { user, shop, membership } = await requireCollectorForShop(shopSlug)
+  const memberId = membership?.id || null
+
+  const business = await prisma.business.findUnique({
+    where: { id: shop.businessId },
+    select: { name: true, logoUrl: true },
+  })
+
+  // ==== Assigned customers with purchases ====
+  const customers = memberId
+    ? await prisma.customer.findMany({
+        where: { shopId: shop.id, assignedCollectorId: memberId, isActive: true },
+        include: {
+          purchases: {
+            where: { status: { in: ["ACTIVE", "PENDING", "OVERDUE", "COMPLETED", "DEFAULTED"] } },
+            select: { id: true, status: true, outstandingBalance: true, totalAmount: true, amountPaid: true },
+          },
+        },
+      })
+    : []
+
+  const activePurchases = customers.flatMap(c => c.purchases.filter(p => ["ACTIVE", "PENDING", "OVERDUE"].includes(p.status)))
+  const allPurchases = customers.flatMap(c => c.purchases)
+  const totalOutstanding = activePurchases.reduce((s, p) => s + Number(p.outstandingBalance), 0)
+
+  // ==== All confirmed payments by this collector ====
+  const allPayments = memberId
+    ? await prisma.payment.findMany({
+        where: { collectorId: memberId, isConfirmed: true },
+        include: {
+          purchase: { include: { customer: { select: { firstName: true, lastName: true, phone: true } } } },
+        },
+        orderBy: { paidAt: "desc" },
+      })
+    : []
+
+  const totalCollected = allPayments.reduce((s, p) => s + Number(p.amount), 0)
+
+  // Today's collections
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const todayCollected = allPayments
+    .filter(p => p.paidAt && p.paidAt >= todayStart)
+    .reduce((s, p) => s + Number(p.amount), 0)
+
+  // ==== Wallet stats ====
+  const walletCustomers = memberId
+    ? await prisma.customer.findMany({
+        where: { shopId: shop.id, assignedCollectorId: memberId },
+        select: { id: true, firstName: true, lastName: true, walletBalance: true },
+      })
+    : []
+
+  const walletTotalBalance = walletCustomers.reduce((s, c) => s + Number(c.walletBalance), 0)
+  const walletCustomersWithBalance = walletCustomers.filter(c => Number(c.walletBalance) > 0).length
+
+  const walletTransactions = memberId
+    ? await prisma.walletTransaction.findMany({
+        where: { shopId: shop.id, createdById: memberId },
+        include: { customer: { select: { firstName: true, lastName: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      })
+    : []
+
+  const walletPendingTxns = walletTransactions.filter(w => w.status === "PENDING")
+  const walletPending = walletPendingTxns.reduce((s, w) => s + Number(w.amount), 0)
+  const walletConfirmedToday = walletTransactions
+    .filter(w => w.status === "CONFIRMED" && w.confirmedAt && w.confirmedAt >= todayStart)
+    .reduce((s, w) => s + Number(w.amount), 0)
+
+  // ==== Collection rate ====
+  const totalLoanValue = allPurchases.reduce((s, p) => s + Number(p.totalAmount), 0)
+  const collectionRate = totalLoanValue > 0 ? Math.round((totalCollected / totalLoanValue) * 100) : 0
+
+  // ==== Weekly trend (last 7 days) ====
+  const weeklyTrend: { date: string; collections: number; wallets: number }[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    const dateStr = d.toISOString().split("T")[0]
+    const dayStart = new Date(dateStr + "T00:00:00")
+    const dayEnd = new Date(dateStr + "T23:59:59")
+
+    const dayCollections = allPayments
+      .filter(p => p.paidAt && p.paidAt >= dayStart && p.paidAt <= dayEnd)
+      .reduce((s, p) => s + Number(p.amount), 0)
+
+    const dayWallets = walletTransactions
+      .filter(w => w.status !== "REJECTED" && w.createdAt >= dayStart && w.createdAt <= dayEnd)
+      .reduce((s, w) => s + Number(w.amount), 0)
+
+    weeklyTrend.push({ date: dateStr, collections: dayCollections, wallets: dayWallets })
+  }
+
+  // ==== Monthly collections (last 6 months) ====
+  const monthlyCollections: { month: string; amount: number }[] = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date()
+    d.setMonth(d.getMonth() - i)
+    const monthStart = new Date(d.getFullYear(), d.getMonth(), 1)
+    const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59)
+    const monthLabel = monthStart.toLocaleDateString("en-GB", { month: "short", year: "2-digit" })
+
+    const monthAmount = allPayments
+      .filter(p => p.paidAt && p.paidAt >= monthStart && p.paidAt <= monthEnd)
+      .reduce((s, p) => s + Number(p.amount), 0)
+
+    monthlyCollections.push({ month: monthLabel, amount: monthAmount })
+  }
+
+  // ==== Payment method breakdown ====
+  const methodMap: Record<string, { amount: number; count: number }> = {}
+  allPayments.forEach(p => {
+    const m = p.paymentMethod
+    if (!methodMap[m]) methodMap[m] = { amount: 0, count: 0 }
+    methodMap[m].amount += Number(p.amount)
+    methodMap[m].count++
+  })
+  const paymentMethodBreakdown = Object.entries(methodMap).map(([method, data]) => ({
+    method: method.replace(/_/g, " "),
+    amount: data.amount,
+    count: data.count,
+  }))
+
+  // ==== Purchase status breakdown ====
+  const statusMap: Record<string, number> = {}
+  allPurchases.forEach(p => {
+    statusMap[p.status] = (statusMap[p.status] || 0) + 1
+  })
+  const purchaseStatusBreakdown = Object.entries(statusMap).map(([status, count]) => ({ status, count }))
+
+  // ==== Top owing customers ====
+  const customerOwing = customers
+    .map(c => {
+      const owed = c.purchases
+        .filter(p => ["ACTIVE", "PENDING", "OVERDUE"].includes(p.status))
+        .reduce((s, p) => s + Number(p.outstandingBalance), 0)
+      const lastPay = allPayments.find(p => p.purchase.customer.phone === c.phone)
+      return {
+        id: c.id,
+        name: `${c.firstName} ${c.lastName}`,
+        phone: c.phone,
+        amount: owed,
+        lastPayment: lastPay?.paidAt?.toISOString() || null,
+      }
+    })
+    .filter(c => c.amount > 0)
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 5)
+
+  // ==== Recent payments (last 10) ====
+  const recentPayments = allPayments.slice(0, 10).map(p => ({
+    id: p.id,
+    amount: Number(p.amount),
+    customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
+    purchaseNumber: p.purchase.purchaseNumber,
+    method: p.paymentMethod.replace(/_/g, " "),
+    paidAt: (p.paidAt || p.createdAt).toISOString(),
+  }))
+
+  // ==== Recent wallet deposits (last 10) ====
+  const recentWalletDeposits = walletTransactions
+    .filter(w => w.type === "DEPOSIT")
+    .slice(0, 10)
+    .map(w => ({
+      id: w.id,
+      amount: Number(w.amount),
+      customerName: `${w.customer.firstName} ${w.customer.lastName}`,
+      status: w.status,
+      createdAt: w.createdAt.toISOString(),
+    }))
+
+  return {
+    collectorName: user.name || "Collector",
+    shopName: shop.name,
+    businessName: business?.name || "Business",
+    businessLogoUrl: business?.logoUrl || null,
+    canSellProducts: membership?.canSellProducts ?? false,
+    canCreateCustomers: membership?.canCreateCustomers ?? false,
+    canLoadWallet: membership?.canLoadWallet ?? false,
+    assignedCustomers: customers.length,
+    activeLoans: activePurchases.length,
+    totalOutstanding,
+    totalCollected,
+    todayCollected,
+    walletTotalBalance,
+    walletPending,
+    walletPendingCount: walletPendingTxns.length,
+    walletConfirmedToday,
+    walletCustomersWithBalance,
+    collectionRate,
+    weeklyTrend,
+    monthlyCollections,
+    paymentMethodBreakdown,
+    purchaseStatusBreakdown,
+    topOwingCustomers: customerOwing,
+    recentPayments,
+    recentWalletDeposits,
+  }
+}
+
+// ============================================
 // ASSIGNED CUSTOMERS
 // ============================================
 
