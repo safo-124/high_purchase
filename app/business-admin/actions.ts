@@ -7896,6 +7896,182 @@ export async function reviewDailyReportAsBusinessAdmin(
 }
 
 /**
+ * Get per-customer breakdown for a daily report
+ * Parses the auto-generated report ID to determine type, date, and shop,
+ * then queries individual transactions grouped by customer.
+ */
+export interface ReportCustomerDetail {
+  customerName: string
+  customerId: string
+  phone: string
+  items: {
+    description: string
+    amount: number
+    reference?: string | null
+    time: string
+  }[]
+  total: number
+}
+
+export async function getBusinessDailyReportDetails(
+  businessSlug: string,
+  reportId: string
+): Promise<{ success: boolean; customers?: ReportCustomerDetail[]; error?: string }> {
+  try {
+    const { business } = await requireBusinessAdmin(businessSlug)
+
+    // Parse auto-generated report ID: auto-{type}-{YYYY-MM-DD}-{shopId}
+    const match = reportId.match(/^auto-(sales|collection|wallet)-(\d{4}-\d{2}-\d{2})-(.+)$/)
+    if (!match) {
+      return { success: false, error: "Invalid report ID format" }
+    }
+
+    const [, reportType, dateStr, shopId] = match
+
+    // Verify shop belongs to business
+    const shop = await prisma.shop.findFirst({
+      where: { id: shopId, businessId: business.id },
+      select: { id: true },
+    })
+    if (!shop) {
+      return { success: false, error: "Shop not found" }
+    }
+
+    const dayStart = new Date(dateStr + "T00:00:00")
+    const dayEnd = new Date(dateStr + "T23:59:59.999")
+
+    const customerMap = new Map<string, ReportCustomerDetail>()
+
+    if (reportType === "collection") {
+      // Get all confirmed payments for this shop on this date
+      const payments = await prisma.payment.findMany({
+        where: {
+          purchase: { customer: { shopId } },
+          isConfirmed: true,
+          createdAt: { gte: dayStart, lte: dayEnd },
+        },
+        include: {
+          purchase: {
+            include: {
+              customer: { select: { id: true, firstName: true, lastName: true, phone: true } },
+              items: { include: { product: { select: { name: true } } } },
+            },
+          },
+          collector: { include: { user: { select: { name: true } } } },
+        },
+        orderBy: { createdAt: "asc" },
+      })
+
+      for (const p of payments) {
+        const cust = p.purchase.customer
+        const key = cust.id
+        if (!customerMap.has(key)) {
+          customerMap.set(key, {
+            customerName: `${cust.firstName} ${cust.lastName}`,
+            customerId: cust.id,
+            phone: cust.phone,
+            items: [],
+            total: 0,
+          })
+        }
+        const entry = customerMap.get(key)!
+        const productNames = p.purchase.items.map(i => i.product?.name || "Item").join(", ")
+        const collectorName = p.collector?.user.name || "N/A"
+        entry.items.push({
+          description: `Payment for: ${productNames || "Purchase"} (by ${collectorName})`,
+          amount: Number(p.amount),
+          reference: p.reference,
+          time: new Date(p.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+        })
+        entry.total += Number(p.amount)
+      }
+    } else if (reportType === "wallet") {
+      // Get confirmed wallet deposits for this shop on this date
+      const transactions = await prisma.walletTransaction.findMany({
+        where: {
+          shopId,
+          type: "DEPOSIT",
+          status: "CONFIRMED",
+          createdAt: { gte: dayStart, lte: dayEnd },
+        },
+        include: {
+          customer: { select: { id: true, firstName: true, lastName: true, phone: true } },
+          createdBy: { include: { user: { select: { name: true } } } },
+        },
+        orderBy: { createdAt: "asc" },
+      })
+
+      for (const tx of transactions) {
+        const cust = tx.customer
+        const key = cust.id
+        if (!customerMap.has(key)) {
+          customerMap.set(key, {
+            customerName: `${cust.firstName} ${cust.lastName}`,
+            customerId: cust.id,
+            phone: cust.phone,
+            items: [],
+            total: 0,
+          })
+        }
+        const entry = customerMap.get(key)!
+        const staffName = tx.createdBy?.user.name || "N/A"
+        entry.items.push({
+          description: `Wallet deposit (by ${staffName})`,
+          amount: Number(tx.amount),
+          reference: tx.reference,
+          time: new Date(tx.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+        })
+        entry.total += Number(tx.amount)
+      }
+    } else if (reportType === "sales") {
+      // Get purchases for this shop on this date
+      const purchases = await prisma.purchase.findMany({
+        where: {
+          customer: { shopId },
+          createdAt: { gte: dayStart, lte: dayEnd },
+        },
+        include: {
+          customer: { select: { id: true, firstName: true, lastName: true, phone: true } },
+          items: { include: { product: { select: { name: true } } } },
+        },
+        orderBy: { createdAt: "asc" },
+      })
+
+      for (const purchase of purchases) {
+        const cust = purchase.customer
+        const key = cust.id
+        if (!customerMap.has(key)) {
+          customerMap.set(key, {
+            customerName: `${cust.firstName} ${cust.lastName}`,
+            customerId: cust.id,
+            phone: cust.phone,
+            items: [],
+            total: 0,
+          })
+        }
+        const entry = customerMap.get(key)!
+        const itemNames = purchase.items.map(i => i.product?.name || "Item").join(", ")
+        entry.items.push({
+          description: itemNames || "Purchase",
+          amount: Number(purchase.totalAmount),
+          reference: null,
+          time: new Date(purchase.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+        })
+        entry.total += Number(purchase.totalAmount)
+      }
+    }
+
+    // Sort customers by total descending
+    const customers = Array.from(customerMap.values()).sort((a, b) => b.total - a.total)
+
+    return { success: true, customers }
+  } catch (error) {
+    console.error("Error fetching report details:", error)
+    return { success: false, error: "Failed to fetch report details" }
+  }
+}
+
+/**
  * Get staff activity data for calendar view
  */
 export interface StaffActivityData {

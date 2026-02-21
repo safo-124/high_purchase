@@ -3,8 +3,10 @@
 import { useState, useMemo, useCallback } from "react"
 import { 
   reviewDailyReportAsBusinessAdmin, 
+  getBusinessDailyReportDetails,
   BusinessStaffDailyReportData,
-  DayActivitySummary 
+  DayActivitySummary,
+  ReportCustomerDetail 
 } from "../../actions"
 
 interface Shop {
@@ -59,6 +61,8 @@ export function BusinessStaffReportsContent({
   const [reviewNotes, setReviewNotes] = useState("")
   const [isReviewing, setIsReviewing] = useState(false)
   const [viewMode, setViewMode] = useState<"calendar" | "list" | "leaderboard" | "compare">("calendar")
+  const [reportDetails, setReportDetails] = useState<ReportCustomerDetail[] | null>(null)
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
 
   // Helper function to format date as YYYY-MM-DD in local timezone
   const formatDateKey = (date: Date) => {
@@ -282,7 +286,31 @@ export function BusinessStaffReportsContent({
     if (result.success) {
       setSelectedReport(null)
       setReviewNotes("")
+      setReportDetails(null)
     }
+  }
+
+  const handleSelectReport = async (report: BusinessStaffDailyReportData) => {
+    setSelectedReport(report)
+    setReviewNotes("")
+    setReportDetails(null)
+    setIsLoadingDetails(true)
+    try {
+      const result = await getBusinessDailyReportDetails(businessSlug, report.id)
+      if (result.success && result.customers) {
+        setReportDetails(result.customers)
+      }
+    } catch (err) {
+      console.error("Failed to load report details:", err)
+    } finally {
+      setIsLoadingDetails(false)
+    }
+  }
+
+  const handleCloseReport = () => {
+    setSelectedReport(null)
+    setReviewNotes("")
+    setReportDetails(null)
   }
 
   const navigateMonth = (direction: number) => {
@@ -753,10 +781,7 @@ export function BusinessStaffReportsContent({
                     selectedDateReports.map((report) => (
                     <div
                       key={report.id}
-                      onClick={() => {
-                        setSelectedReport(report)
-                        setReviewNotes("")
-                      }}
+                      onClick={() => handleSelectReport(report)}
                       className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.02] ${
                         report.reportType === "SALES"
                           ? "bg-green-500/5 border-green-500/20 hover:border-green-500/40"
@@ -888,7 +913,7 @@ export function BusinessStaffReportsContent({
                       <td className="py-4 px-6 text-center">{getStatusBadge(report.status)}</td>
                       <td className="py-4 px-6 text-center">
                         <button
-                          onClick={() => { setSelectedReport(report); setReviewNotes("") }}
+                          onClick={() => handleSelectReport(report)}
                           className="px-3 py-1.5 text-sm rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors"
                         >
                           {report.status === "REVIEWED" ? "View" : "Review"}
@@ -1104,7 +1129,7 @@ export function BusinessStaffReportsContent({
                   </p>
                 </div>
                 <button
-                  onClick={() => setSelectedReport(null)}
+                  onClick={handleCloseReport}
                   className="p-2 rounded-lg hover:bg-white/10 text-slate-400 transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1184,6 +1209,84 @@ export function BusinessStaffReportsContent({
                   </p>
                 </div>
               )}
+
+              {/* Customer Breakdown */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-slate-500 uppercase tracking-wider">Customer Breakdown</p>
+                  {reportDetails && (
+                    <span className="text-xs text-slate-400">{reportDetails.length} customer{reportDetails.length !== 1 ? "s" : ""}</span>
+                  )}
+                </div>
+
+                {isLoadingDetails ? (
+                  <div className="flex items-center justify-center py-8">
+                    <svg className="w-6 h-6 animate-spin text-indigo-400" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span className="ml-2 text-sm text-slate-400">Loading customer details...</span>
+                  </div>
+                ) : reportDetails && reportDetails.length > 0 ? (
+                  <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                    {reportDetails.map((customer) => (
+                      <div
+                        key={customer.customerId}
+                        className={`p-3 rounded-xl border ${
+                          selectedReport.reportType === "SALES"
+                            ? "bg-green-500/5 border-green-500/15"
+                            : selectedReport.reportType === "WALLET"
+                            ? "bg-cyan-500/5 border-cyan-500/15"
+                            : "bg-purple-500/5 border-purple-500/15"
+                        }`}
+                      >
+                        {/* Customer header */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                              selectedReport.reportType === "SALES"
+                                ? "bg-green-500/20 text-green-400"
+                                : selectedReport.reportType === "WALLET"
+                                ? "bg-cyan-500/20 text-cyan-400"
+                                : "bg-purple-500/20 text-purple-400"
+                            }`}>
+                              {customer.customerName.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-white">{customer.customerName}</p>
+                              <p className="text-[10px] text-slate-500">{customer.phone}</p>
+                            </div>
+                          </div>
+                          <span className={`text-sm font-bold ${
+                            selectedReport.reportType === "SALES" ? "text-green-400"
+                              : selectedReport.reportType === "WALLET" ? "text-cyan-400"
+                              : "text-purple-400"
+                          }`}>
+                            ₵{customer.total.toLocaleString()}
+                          </span>
+                        </div>
+
+                        {/* Transaction items */}
+                        <div className="space-y-1.5 ml-10">
+                          {customer.items.map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <span className="text-slate-500 flex-shrink-0">{item.time}</span>
+                                <span className="text-slate-300 truncate">{item.description}</span>
+                              </div>
+                              <span className="text-slate-300 flex-shrink-0 ml-2">₵{item.amount.toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : reportDetails && reportDetails.length === 0 ? (
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+                    <p className="text-sm text-slate-400">No individual transactions found</p>
+                  </div>
+                ) : null}
+              </div>
 
               {/* Review Section */}
               {selectedReport.status === "REVIEWED" ? (
