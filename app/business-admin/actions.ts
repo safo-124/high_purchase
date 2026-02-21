@@ -7611,10 +7611,11 @@ export async function getBusinessDailyReports(
     collectionsAmount: number
     paymentsCount: number
     newCustomersCount: number
-    collectorNames: Set<string>
+    collectorName: string
+    staffMemberId: string
     walletDepositsAmount: number
     walletDepositsCount: number
-    walletStaffNames: Set<string>
+    walletStaffName: string
   }>()
 
   // Process purchases (sales)
@@ -7636,10 +7637,11 @@ export async function getBusinessDailyReports(
         collectionsAmount: 0,
         paymentsCount: 0,
         newCustomersCount: 0,
-        collectorNames: new Set(),
+        collectorName: "",
+        staffMemberId: "",
         walletDepositsAmount: 0,
         walletDepositsCount: 0,
-        walletStaffNames: new Set(),
+        walletStaffName: "",
       })
     }
     
@@ -7649,11 +7651,13 @@ export async function getBusinessDailyReports(
     activity.itemsSold += purchase.items.reduce((sum, item) => sum + item.quantity, 0)
   }
 
-  // Process payments (collections)
+  // Process payments (collections) - group per individual collector
   for (const payment of payments) {
     const dateKey = formatDateKey(new Date(payment.createdAt))
     const shop = payment.collector?.shop || payment.purchase.customer.shop
-    const key = `${dateKey}-${shop.id}-COLLECTION`
+    const collectorId = payment.collector?.id || "unknown"
+    const collectorName = payment.collector?.user.name || "Shop Collections"
+    const key = `${dateKey}-${shop.id}-COLLECTION-${collectorId}`
     
     if (!activityMap.has(key)) {
       activityMap.set(key, {
@@ -7668,26 +7672,26 @@ export async function getBusinessDailyReports(
         collectionsAmount: 0,
         paymentsCount: 0,
         newCustomersCount: 0,
-        collectorNames: new Set(),
+        collectorName: collectorName,
+        staffMemberId: collectorId,
         walletDepositsAmount: 0,
         walletDepositsCount: 0,
-        walletStaffNames: new Set(),
+        walletStaffName: "",
       })
     }
     
     const activity = activityMap.get(key)!
     activity.collectionsAmount += Number(payment.amount)
     activity.paymentsCount += 1
-    if (payment.collector?.user.name) {
-      activity.collectorNames.add(payment.collector.user.name)
-    }
   }
 
-  // Process wallet transactions (deposits)
+  // Process wallet transactions (deposits) - group per individual staff
   for (const walletTx of walletTransactions) {
     const dateKey = formatDateKey(new Date(walletTx.createdAt))
     const shop = walletTx.shop
-    const key = `${dateKey}-${shop.id}-WALLET`
+    const staffId = walletTx.createdById || "unknown"
+    const staffName = walletTx.createdBy?.user.name || "Wallet Deposits"
+    const key = `${dateKey}-${shop.id}-WALLET-${staffId}`
     
     if (!activityMap.has(key)) {
       activityMap.set(key, {
@@ -7702,19 +7706,17 @@ export async function getBusinessDailyReports(
         collectionsAmount: 0,
         paymentsCount: 0,
         newCustomersCount: 0,
-        collectorNames: new Set(),
+        collectorName: "",
+        staffMemberId: staffId,
         walletDepositsAmount: 0,
         walletDepositsCount: 0,
-        walletStaffNames: new Set(),
+        walletStaffName: staffName,
       })
     }
     
     const activity = activityMap.get(key)!
     activity.walletDepositsAmount += Number(walletTx.amount)
     activity.walletDepositsCount += 1
-    if (walletTx.createdBy?.user.name) {
-      activity.walletStaffNames.add(walletTx.createdBy.user.name)
-    }
   }
 
   // Process new customers
@@ -7731,9 +7733,9 @@ export async function getBusinessDailyReports(
   const reports: BusinessStaffDailyReportData[] = []
   
   for (const [key, activity] of activityMap) {
-    const isSales = key.endsWith('-SALES')
-    const isCollection = key.endsWith('-COLLECTION')
-    const isWallet = key.endsWith('-WALLET')
+    const isSales = key.includes('-SALES')
+    const isCollection = key.includes('-COLLECTION')
+    const isWallet = key.includes('-WALLET')
     
     // Skip if filtering by type
     if (filters?.reportType === "SALES" && !isSales) continue
@@ -7768,18 +7770,16 @@ export async function getBusinessDailyReports(
       })
     }
     
-    // Create collection report
+    // Create collection report (per individual collector)
     if (isCollection && activity.collectionsAmount > 0) {
-      const collectorName = activity.collectorNames.size > 0 
-        ? Array.from(activity.collectorNames).join(", ")
-        : "Shop Collections"
+      const staffSuffix = activity.staffMemberId ? `-${activity.staffMemberId}` : ""
       
       reports.push({
-        id: `auto-collection-${activity.dateKey}-${activity.shopId}`,
+        id: `auto-collection-${activity.dateKey}-${activity.shopId}${staffSuffix}`,
         reportDate: activity.date,
         reportType: "COLLECTION",
         status: "REVIEWED",
-        staffName: collectorName,
+        staffName: activity.collectorName || "Shop Collections",
         staffRole: "DEBT_COLLECTOR",
         shopName: activity.shopName,
         shopSlug: activity.shopSlug,
@@ -7801,18 +7801,16 @@ export async function getBusinessDailyReports(
       })
     }
 
-    // Create wallet deposit report
+    // Create wallet deposit report (per individual staff)
     if (isWallet && activity.walletDepositsAmount > 0) {
-      const staffName = activity.walletStaffNames.size > 0
-        ? Array.from(activity.walletStaffNames).join(", ")
-        : "Wallet Deposits"
+      const staffSuffix = activity.staffMemberId ? `-${activity.staffMemberId}` : ""
       
       reports.push({
-        id: `auto-wallet-${activity.dateKey}-${activity.shopId}`,
+        id: `auto-wallet-${activity.dateKey}-${activity.shopId}${staffSuffix}`,
         reportDate: activity.date,
         reportType: "WALLET",
         status: "REVIEWED",
-        staffName: staffName,
+        staffName: activity.walletStaffName || "Wallet Deposits",
         staffRole: "WALLET",
         shopName: activity.shopName,
         shopSlug: activity.shopSlug,
@@ -7920,21 +7918,40 @@ export async function getBusinessDailyReportDetails(
   try {
     const { business } = await requireBusinessAdmin(businessSlug)
 
-    // Parse auto-generated report ID: auto-{type}-{YYYY-MM-DD}-{shopId}
+    // Parse auto-generated report ID: auto-{type}-{YYYY-MM-DD}-{shopId}[-{staffMemberId}]
     const match = reportId.match(/^auto-(sales|collection|wallet)-(\d{4}-\d{2}-\d{2})-(.+)$/)
     if (!match) {
       return { success: false, error: "Invalid report ID format" }
     }
 
-    const [, reportType, dateStr, shopId] = match
+    const [, reportType, dateStr, remainder] = match
 
-    // Verify shop belongs to business
-    const shop = await prisma.shop.findFirst({
-      where: { id: shopId, businessId: business.id },
+    // remainder could be "{shopId}" or "{shopId}-{staffMemberId}"
+    // Try to find the shop by checking progressively shorter prefixes
+    const businessShops = await prisma.shop.findMany({
+      where: { businessId: business.id },
       select: { id: true },
     })
-    if (!shop) {
-      return { success: false, error: "Shop not found" }
+    const shopIds = new Set(businessShops.map(s => s.id))
+    
+    let shopId = ""
+    let staffMemberId = ""
+    
+    // Check if the full remainder is a shopId, otherwise split at the last occurrence
+    if (shopIds.has(remainder)) {
+      shopId = remainder
+    } else {
+      // Find the shopId - try matching known shop IDs as prefixes
+      for (const sid of shopIds) {
+        if (remainder.startsWith(sid + "-")) {
+          shopId = sid
+          staffMemberId = remainder.slice(sid.length + 1)
+          break
+        }
+      }
+      if (!shopId) {
+        return { success: false, error: "Shop not found in report ID" }
+      }
     }
 
     const dayStart = new Date(dateStr + "T00:00:00")
@@ -7943,12 +7960,13 @@ export async function getBusinessDailyReportDetails(
     const customerMap = new Map<string, ReportCustomerDetail>()
 
     if (reportType === "collection") {
-      // Get all confirmed payments for this shop on this date
+      // Get confirmed payments for this shop on this date, filtered by collector if specified
       const payments = await prisma.payment.findMany({
         where: {
           purchase: { customer: { shopId } },
           isConfirmed: true,
           createdAt: { gte: dayStart, lte: dayEnd },
+          ...(staffMemberId ? { collectorId: staffMemberId } : {}),
         },
         include: {
           purchase: {
@@ -7986,13 +8004,14 @@ export async function getBusinessDailyReportDetails(
         entry.total += Number(p.amount)
       }
     } else if (reportType === "wallet") {
-      // Get confirmed wallet deposits for this shop on this date
+      // Get confirmed wallet deposits for this shop on this date, filtered by staff if specified
       const transactions = await prisma.walletTransaction.findMany({
         where: {
           shopId,
           type: "DEPOSIT",
           status: "CONFIRMED",
           createdAt: { gte: dayStart, lte: dayEnd },
+          ...(staffMemberId ? { createdById: staffMemberId } : {}),
         },
         include: {
           customer: { select: { id: true, firstName: true, lastName: true, phone: true } },
