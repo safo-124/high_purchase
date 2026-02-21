@@ -6,6 +6,7 @@ import autoTable from "jspdf-autotable"
 import { 
   reviewDailyReportAsBusinessAdmin, 
   getBusinessDailyReportDetails,
+  getBusinessDailyReports,
   BusinessStaffDailyReportData,
   DayActivitySummary,
   ReportCustomerDetail 
@@ -68,6 +69,11 @@ export function BusinessStaffReportsContent({
   const [staffSearch, setStaffSearch] = useState("")
   const [staffDropdownOpen, setStaffDropdownOpen] = useState(false)
   const staffDropdownRef = useRef<HTMLDivElement>(null)
+  const [dateRange, setDateRange] = useState<string>("30")
+  const [customStartDate, setCustomStartDate] = useState("")
+  const [customEndDate, setCustomEndDate] = useState("")
+  const [allReports, setAllReports] = useState<BusinessStaffDailyReportData[]>(reports)
+  const [isLoadingReports, setIsLoadingReports] = useState(false)
 
   // Helper function to format date as YYYY-MM-DD in local timezone
   const formatDateKey = (date: Date) => {
@@ -79,18 +85,18 @@ export function BusinessStaffReportsContent({
 
   // Filtered reports based on shop and staff
   const filteredReports = useMemo(() => {
-    return reports.filter(r => {
+    return allReports.filter(r => {
       if (shopFilter !== "all" && r.shopSlug !== shopFilter) return false
       if (staffFilter !== "all" && r.staffName !== staffFilter) return false
       return true
     })
-  }, [reports, shopFilter, staffFilter])
+  }, [allReports, shopFilter, staffFilter])
 
   // Unique staff names from reports for filter dropdown
   const uniqueStaffNames = useMemo(() => {
-    const names = new Set(reports.map(r => r.staffName))
+    const names = new Set(allReports.map(r => r.staffName))
     return Array.from(names).sort()
-  }, [reports])
+  }, [allReports])
 
   // Filtered staff names for searchable dropdown
   const filteredStaffNames = useMemo(() => {
@@ -177,7 +183,7 @@ export function BusinessStaffReportsContent({
     if (dateObj > today) return [] // Skip future dates
 
     const staffWhoReported = new Set(
-      reports
+      allReports
         .filter(r => formatDateKey(new Date(r.reportDate)) === dateKey)
         .map(r => r.staffName)
     )
@@ -189,7 +195,7 @@ export function BusinessStaffReportsContent({
     })
 
     return relevantStaff.filter(s => !staffWhoReported.has(s.name))
-  }, [reports, staffMembers, shopFilter, staffFilter, today])
+  }, [allReports, staffMembers, shopFilter, staffFilter, today])
 
   // Statistics (respects filters)
   const stats = useMemo(() => {
@@ -198,7 +204,10 @@ export function BusinessStaffReportsContent({
     const totalCollected = filteredReports.filter(r => r.reportType === "COLLECTION").reduce((sum, r) => sum + (r.totalCollected || 0), 0)
     const totalWalletDeposits = filteredReports.filter(r => r.reportType === "WALLET").reduce((sum, r) => sum + (r.totalWalletDeposits || 0), 0)
     const uniqueStaff = new Set(filteredReports.map(r => r.staffName)).size
-    return { pendingCount, totalSales, totalCollected, totalWalletDeposits, uniqueStaff }
+    // Days worked: unique dates that have at least one report
+    const uniqueDates = new Set(filteredReports.map(r => formatDateKey(new Date(r.reportDate))))
+    const daysWorked = uniqueDates.size
+    return { pendingCount, totalSales, totalCollected, totalWalletDeposits, uniqueStaff, daysWorked }
   }, [filteredReports])
 
   // Leaderboard data
@@ -336,6 +345,47 @@ export function BusinessStaffReportsContent({
     setReviewNotes("")
     setReportDetails(null)
   }
+
+  // Date range change handler
+  const handleDateRangeChange = useCallback(async (preset: string) => {
+    setDateRange(preset)
+    let startDate: Date | undefined
+    let endDate: Date | undefined
+    const now = new Date()
+
+    if (preset === "custom") {
+      if (!customStartDate || !customEndDate) return
+      startDate = new Date(customStartDate)
+      endDate = new Date(customEndDate)
+      endDate.setHours(23, 59, 59, 999)
+    } else {
+      const days = parseInt(preset)
+      if (isNaN(days)) return
+      endDate = new Date(now)
+      startDate = new Date(now)
+      startDate.setDate(startDate.getDate() - days)
+    }
+
+    setIsLoadingReports(true)
+    try {
+      const result = await getBusinessDailyReports(businessSlug, {
+        startDate: startDate?.toISOString(),
+        endDate: endDate?.toISOString(),
+      })
+      setAllReports(result)
+    } catch (error) {
+      console.error("Failed to fetch reports:", error)
+    } finally {
+      setIsLoadingReports(false)
+    }
+  }, [businessSlug, customStartDate, customEndDate])
+
+  // Trigger fetch when custom dates change
+  const handleCustomDateApply = useCallback(() => {
+    if (customStartDate && customEndDate) {
+      handleDateRangeChange("custom")
+    }
+  }, [customStartDate, customEndDate, handleDateRangeChange])
 
   const navigateMonth = (direction: number) => {
     if (direction === -1) {
@@ -752,7 +802,7 @@ export function BusinessStaffReportsContent({
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         <div className="glass-card p-5 rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center">
@@ -777,6 +827,20 @@ export function BusinessStaffReportsContent({
             <div>
               <p className="text-xs text-slate-500 uppercase tracking-wider">Pending Review</p>
               <p className="text-2xl font-bold text-amber-400">{stats.pendingCount}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-5 rounded-2xl bg-gradient-to-br from-teal-500/10 to-emerald-500/10 border border-teal-500/20">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-teal-500/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider">Days Worked</p>
+              <p className="text-2xl font-bold text-teal-400">{stats.daysWorked}</p>
             </div>
           </div>
         </div>
@@ -930,6 +994,67 @@ export function BusinessStaffReportsContent({
                 <option key={shop.id} value={shop.shopSlug}>{shop.name}</option>
               ))}
             </select>
+          </div>
+
+          {/* Date Range Picker */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-slate-400">Period:</span>
+            <div className="flex items-center gap-1">
+              {[
+                { label: "7d", value: "7" },
+                { label: "14d", value: "14" },
+                { label: "30d", value: "30" },
+                { label: "60d", value: "60" },
+                { label: "90d", value: "90" },
+                { label: "Custom", value: "custom" },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => handleDateRangeChange(opt.value)}
+                  disabled={isLoadingReports}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    dateRange === opt.value
+                      ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
+                      : "bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10 hover:text-white"
+                  } ${isLoadingReports ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {dateRange === "custom" && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="px-2 py-1.5 rounded-lg bg-slate-800 border border-white/10 text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+                <span className="text-slate-500 text-xs">to</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="px-2 py-1.5 rounded-lg bg-slate-800 border border-white/10 text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+                <button
+                  onClick={handleCustomDateApply}
+                  disabled={!customStartDate || !customEndDate || isLoadingReports}
+                  className="px-2.5 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-xs font-medium hover:bg-indigo-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Apply
+                </button>
+              </div>
+            )}
+            {isLoadingReports && (
+              <div className="flex items-center gap-1.5 text-xs text-indigo-400">
+                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Loading...
+              </div>
+            )}
           </div>
 
           {/* Export Buttons */}
