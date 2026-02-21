@@ -459,8 +459,23 @@ export function BusinessStaffReportsContent({
     const fmtStart = rangeStartDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
     const fmtEnd = rangeEndDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
 
+    // Business Name
+    doc.setFontSize(22)
+    doc.setTextColor(...primaryColor)
+    doc.text(businessName.toUpperCase(), 14, yPos)
+    yPos += 8
+
+    // Branch
+    const branchName = shopFilter !== "all"
+      ? shops.find(s => s.shopSlug === shopFilter)?.name || shopFilter
+      : shops.length === 1 ? shops[0].name : "All Branches"
+    doc.setFontSize(11)
+    doc.setTextColor(...textColor)
+    doc.text(`Branch: ${branchName}`, 14, yPos)
+    yPos += 10
+
     // Title
-    doc.setFontSize(20)
+    doc.setFontSize(16)
     doc.setTextColor(...primaryColor)
     doc.text("Staff Daily Reports", 14, yPos)
 
@@ -471,14 +486,13 @@ export function BusinessStaffReportsContent({
     // Filters info
     const filterText = [
       staffFilter !== "all" ? `Staff: ${staffFilter}` : null,
-      shopFilter !== "all" ? `Shop: ${shops.find(s => s.shopSlug === shopFilter)?.name || shopFilter}` : null,
     ].filter(Boolean).join("  |  ")
     if (filterText) {
       doc.text(filterText, 14, yPos + 13)
     }
 
     doc.setFontSize(8)
-    doc.text(`Generated: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`, pageWidth - 14, yPos, { align: "right" })
+    doc.text(`Generated: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`, pageWidth - 14, 18, { align: "right" })
 
     yPos += 22
 
