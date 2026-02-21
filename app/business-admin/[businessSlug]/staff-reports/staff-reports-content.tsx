@@ -28,6 +28,7 @@ interface StaffMember {
 
 interface Props {
   businessSlug: string
+  businessName: string
   reports: BusinessStaffDailyReportData[]
   shops: Shop[]
   staffMembers?: StaffMember[]
@@ -47,7 +48,8 @@ const MONTHS = [
 ]
 
 export function BusinessStaffReportsContent({ 
-  businessSlug, 
+  businessSlug,
+  businessName,
   reports, 
   shops,
   staffMembers = [],
@@ -615,8 +617,20 @@ export function BusinessStaffReportsContent({
 
     let yPos = 18
 
-    // Title
-    doc.setFontSize(20)
+    // Title - Business Name
+    doc.setFontSize(22)
+    doc.setTextColor(...primaryColor)
+    doc.text(businessName.toUpperCase(), 14, yPos)
+    yPos += 8
+
+    // Branch
+    doc.setFontSize(11)
+    doc.setTextColor(...textColor)
+    doc.text(`Branch: ${selectedReport.shopName}`, 14, yPos)
+    yPos += 8
+
+    // Subtitle
+    doc.setFontSize(16)
     doc.setTextColor(...primaryColor)
     doc.text("Daily Staff Report", 14, yPos)
 
@@ -627,7 +641,7 @@ export function BusinessStaffReportsContent({
 
     const typeLabel = selectedReport.reportType === "SALES" ? "Sales Report" : selectedReport.reportType === "WALLET" ? "Wallet Report" : "Collection Report"
     doc.setFontSize(8)
-    doc.text(`Generated: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`, pageWidth - 14, yPos, { align: "right" })
+    doc.text(`Generated: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`, pageWidth - 14, 18, { align: "right" })
 
     yPos += 16
 
