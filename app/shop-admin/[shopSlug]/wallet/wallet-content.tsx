@@ -47,6 +47,9 @@ export function ShopWalletContent({
   const [customerTransactions, setCustomerTransactions] = useState<WalletTransactionData[]>([])
   const [loadingTransactions, setLoadingTransactions] = useState(false)
   
+  // Pending search
+  const [pendingSearchQuery, setPendingSearchQuery] = useState("")
+  
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
@@ -362,62 +365,170 @@ export function ShopWalletContent({
 
       {/* Pending Deposits Tab */}
       {activeTab === "pending" && (
-        <div className="glass-card rounded-2xl overflow-hidden">
-          {pendingDeposits.length === 0 ? (
-            <div className="p-12 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-green-500/10 flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <div className="space-y-4">
+          {/* Search Bar */}
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search by customer name or collector..."
+              value={pendingSearchQuery}
+              onChange={(e) => setPendingSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+            />
+            {pendingSearchQuery && (
+              <button
+                onClick={() => setPendingSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-white mb-2">All caught up!</h3>
-              <p className="text-slate-400">No pending deposits to confirm</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-white/5">
-              {pendingDeposits.map((t) => (
-                <div key={t.id} className="p-4 hover:bg-white/[0.02]">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                        <svg className="w-6 h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </button>
+            )}
+          </div>
+
+          {/* Filtered Summary */}
+          {(() => {
+            const q = pendingSearchQuery.toLowerCase()
+            const filtered = q
+              ? pendingDeposits.filter(
+                  (t) =>
+                    t.customerName.toLowerCase().includes(q) ||
+                    t.createdByName.toLowerCase().includes(q)
+                )
+              : pendingDeposits
+            const filteredTotal = filtered.reduce((sum, t) => sum + t.amount, 0)
+
+            // Group by collector for summary
+            const collectorTotals = new Map<string, { count: number; total: number }>()
+            for (const t of filtered) {
+              const existing = collectorTotals.get(t.createdByName)
+              if (existing) {
+                existing.count++
+                existing.total += t.amount
+              } else {
+                collectorTotals.set(t.createdByName, { count: 1, total: t.amount })
+              }
+            }
+
+            return (
+              <>
+                {/* Summary Bar */}
+                {filtered.length > 0 && (
+                  <div className="glass-card rounded-xl p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                          <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm text-slate-400">
+                            {pendingSearchQuery ? "Filtered" : "Total"} Pending
+                          </p>
+                          <p className="text-xl font-bold text-amber-400">
+                            {formatCurrency(filteredTotal)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-slate-400">
+                        <span>{filtered.length} deposit{filtered.length !== 1 ? "s" : ""}</span>
+                        <span className="text-white/10">|</span>
+                        <span>{collectorTotals.size} staff</span>
+                      </div>
+                    </div>
+
+                    {/* Collector breakdown when searching */}
+                    {pendingSearchQuery && collectorTotals.size > 0 && (
+                      <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+                        {Array.from(collectorTotals.entries()).map(([name, data]) => (
+                          <div key={name} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-lg bg-violet-500/15 flex items-center justify-center text-violet-400 text-xs font-semibold flex-shrink-0">
+                                {name.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="text-slate-300">{name}</span>
+                              <span className="text-xs text-slate-500">({data.count} deposit{data.count !== 1 ? "s" : ""})</span>
+                            </div>
+                            <span className="font-semibold text-amber-400">{formatCurrency(data.total)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Pending list */}
+                <div className="glass-card rounded-2xl overflow-hidden">
+                  {filtered.length === 0 ? (
+                    <div className="p-12 text-center">
+                      <div className="w-16 h-16 rounded-2xl bg-green-500/10 flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-semibold text-white">{t.customerName}</h4>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">
-                            Pending
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400">
-                          <span>By: {t.createdByName}</span>
-                          <span>{formatDate(t.createdAt)}</span>
-                          {t.reference && <span>Ref: {t.reference}</span>}
-                        </div>
-                      </div>
+                      <h3 className="text-lg font-semibold text-white mb-2">
+                        {pendingSearchQuery ? "No matches found" : "All caught up!"}
+                      </h3>
+                      <p className="text-slate-400">
+                        {pendingSearchQuery
+                          ? `No pending deposits match "${pendingSearchQuery}"`
+                          : "No pending deposits to confirm"}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-green-400">{formatCurrency(t.amount)}</p>
-                        <p className="text-xs text-slate-500">{t.paymentMethod?.replace("_", " ")}</p>
-                      </div>
-                      {isShopAdmin && (
-                        <button
-                          onClick={() => handleConfirmDeposit(t.id)}
-                          disabled={isPending}
-                          className="px-4 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 font-medium text-sm transition-all disabled:opacity-50"
-                        >
-                          Confirm
-                        </button>
-                      )}
+                  ) : (
+                    <div className="divide-y divide-white/5">
+                      {filtered.map((t) => (
+                        <div key={t.id} className="p-4 hover:bg-white/[0.02]">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex items-start gap-4">
+                              <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                                <svg className="w-6 h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h4 className="font-semibold text-white">{t.customerName}</h4>
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">
+                                    Pending
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400">
+                                  <span>By: {t.createdByName}</span>
+                                  <span>{formatDate(t.createdAt)}</span>
+                                  {t.reference && <span>Ref: {t.reference}</span>}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <p className="text-2xl font-bold text-green-400">{formatCurrency(t.amount)}</p>
+                                <p className="text-xs text-slate-500">{t.paymentMethod?.replace("_", " ")}</p>
+                              </div>
+                              {isShopAdmin && (
+                                <button
+                                  onClick={() => handleConfirmDeposit(t.id)}
+                                  disabled={isPending}
+                                  className="px-4 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 font-medium text-sm transition-all disabled:opacity-50"
+                                >
+                                  Confirm
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
+              </>
+            )
+          })()}
         </div>
       )}
 
