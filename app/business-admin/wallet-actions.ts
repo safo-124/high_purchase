@@ -334,7 +334,48 @@ export async function confirmWalletTransaction(
       })
     }
 
-    // Update transaction and customer balance in a transaction
+    const depositAmount = Number(transaction.amount)
+    const customer = transaction.customer
+    const shop = transaction.shop
+
+    // Get outstanding purchases to apply wallet funds
+    const outstandingPurchases = await prisma.purchase.findMany({
+      where: {
+        customerId: transaction.customerId,
+        status: { in: ["ACTIVE", "PENDING"] },
+        outstandingBalance: { gt: 0 },
+      },
+      orderBy: { dueDate: "asc" },
+    })
+
+    let paymentsApplied: { purchaseId: string; purchaseNumber: string; amountApplied: number }[] = []
+    let remainingFunds = depositAmount
+
+    for (const purchase of outstandingPurchases) {
+      if (remainingFunds <= 0) break
+      const outstanding = Number(purchase.outstandingBalance)
+      const paymentAmount = Math.min(remainingFunds, outstanding)
+      if (paymentAmount > 0) {
+        paymentsApplied.push({
+          purchaseId: purchase.id,
+          purchaseNumber: purchase.purchaseNumber,
+          amountApplied: paymentAmount,
+        })
+        remainingFunds -= paymentAmount
+      }
+    }
+
+    // Get collector info for receipts
+    let creatorName: string | null = null
+    if (transaction.createdById) {
+      const creatorMember = await prisma.shopMember.findUnique({
+        where: { id: transaction.createdById },
+        include: { user: { select: { name: true } } },
+      })
+      creatorName = creatorMember?.user.name || null
+    }
+
+    // Update transaction, customer balance, apply payments, and generate receipts
     await prisma.$transaction(async (tx) => {
       // Update transaction status
       await tx.walletTransaction.update({
@@ -360,6 +401,131 @@ export async function confirmWalletTransaction(
           walletBalance: { increment: balanceChange },
         },
       })
+
+      // Apply wallet funds to outstanding purchases and generate receipts
+      for (const payment of paymentsApplied) {
+        const purchase = await tx.purchase.findUnique({
+          where: { id: payment.purchaseId },
+        })
+        if (!purchase) continue
+
+        const newAmountPaid = Number(purchase.amountPaid) + payment.amountApplied
+        const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
+        const isCompleted = newOutstanding <= 0
+        const previousBalance = Number(purchase.outstandingBalance)
+
+        // Create payment record
+        const createdPayment = await tx.payment.create({
+          data: {
+            purchaseId: payment.purchaseId,
+            amount: payment.amountApplied,
+            paymentMethod: "WALLET",
+            status: "COMPLETED",
+            isConfirmed: true,
+            confirmedById: confirmerMember!.id,
+            confirmedAt: new Date(),
+            paidAt: new Date(),
+            notes: `Wallet deposit payment (confirmed by business admin)`,
+          },
+        })
+
+        // Update purchase
+        await tx.purchase.update({
+          where: { id: payment.purchaseId },
+          data: {
+            amountPaid: newAmountPaid,
+            outstandingBalance: Math.max(0, newOutstanding),
+            status: isCompleted ? "COMPLETED" : purchase.status === "PENDING" ? "ACTIVE" : purchase.status,
+          },
+        })
+
+        let waybillGenerated = false
+        let waybillNumber: string | null = null
+
+        // If purchase is completed, auto-generate waybill and deduct stock
+        if (isCompleted && purchase.purchaseType !== "CASH") {
+          const purchaseItems = await tx.purchaseItem.findMany({
+            where: { purchaseId: purchase.id },
+          })
+          for (const item of purchaseItems) {
+            if (item.productId) {
+              await tx.shopProduct.updateMany({
+                where: { shopId: shop.id, productId: item.productId },
+                data: { stockQuantity: { decrement: item.quantity } },
+              })
+            }
+          }
+          const existingWaybill = await tx.waybill.findUnique({
+            where: { purchaseId: purchase.id },
+          })
+          if (!existingWaybill) {
+            const wYear = new Date().getFullYear()
+            const wTs = Date.now().toString(36).toUpperCase()
+            const wRnd = Math.random().toString(36).substring(2, 6).toUpperCase()
+            waybillNumber = `WB-${wYear}-${wTs}${wRnd}`
+            await tx.waybill.create({
+              data: {
+                waybillNumber,
+                purchaseId: purchase.id,
+                recipientName: `${customer.firstName} ${customer.lastName}`,
+                recipientPhone: customer.phone,
+                deliveryAddress: customer.address || "N/A",
+                deliveryCity: customer.city,
+                deliveryRegion: customer.region,
+                specialInstructions: `Payment completed via wallet deposit. Ready for delivery.`,
+                generatedById: user.id,
+              },
+            })
+            waybillGenerated = true
+            await tx.purchase.update({
+              where: { id: purchase.id },
+              data: { deliveryStatus: "SCHEDULED" },
+            })
+          } else {
+            waybillNumber = existingWaybill.waybillNumber
+            waybillGenerated = true
+          }
+        }
+
+        // Generate receipt (ProgressInvoice)
+        const invYear = new Date().getFullYear()
+        const invTs = Date.now().toString(36).toUpperCase()
+        const invRnd = Math.random().toString(36).substring(2, 6).toUpperCase()
+        const invoiceNumber = `INV-${invYear}-${invTs}${invRnd}`
+
+        await tx.progressInvoice.create({
+          data: {
+            invoiceNumber,
+            paymentId: createdPayment.id,
+            purchaseId: purchase.id,
+            paymentAmount: payment.amountApplied,
+            previousBalance,
+            newBalance: Math.max(0, newOutstanding),
+            totalPurchaseAmount: purchase.totalAmount,
+            totalAmountPaid: newAmountPaid,
+            collectorId: transaction.createdById,
+            collectorName: creatorName,
+            confirmedById: confirmerMember!.id,
+            confirmedByName: user.name,
+            recordedByRole: "WALLET",
+            recordedByName: creatorName,
+            paymentMethod: "WALLET",
+            customerName: `${customer.firstName} ${customer.lastName}`,
+            customerPhone: customer.phone,
+            customerAddress: customer.address,
+            purchaseNumber: purchase.purchaseNumber,
+            purchaseType: purchase.purchaseType,
+            shopId: shop.id,
+            shopName: shop.name,
+            businessId: shop.businessId,
+            businessName: business.name,
+            isPurchaseCompleted: isCompleted,
+            waybillGenerated,
+            waybillNumber,
+            notes: `Wallet deposit payment (confirmed by business admin)`,
+          },
+        })
+      }
     })
 
     await createAuditLog({
@@ -371,6 +537,7 @@ export async function confirmWalletTransaction(
         customer: `${transaction.customer.firstName} ${transaction.customer.lastName}`,
         amount: Number(transaction.amount),
         type: transaction.type,
+        paymentsApplied: paymentsApplied.length > 0 ? paymentsApplied : undefined,
       },
     })
 
@@ -436,6 +603,47 @@ export async function confirmAllCollectorWalletTransactions(
         })
       }
 
+      const depositAmount = Number(transaction.amount)
+      const customer = transaction.customer
+      const shop = transaction.shop
+
+      // Get outstanding purchases to apply wallet funds
+      const outstandingPurchases = await prisma.purchase.findMany({
+        where: {
+          customerId: transaction.customerId,
+          status: { in: ["ACTIVE", "PENDING"] },
+          outstandingBalance: { gt: 0 },
+        },
+        orderBy: { dueDate: "asc" },
+      })
+
+      let paymentsApplied: { purchaseId: string; purchaseNumber: string; amountApplied: number }[] = []
+      let remainingFunds = depositAmount
+
+      for (const purchase of outstandingPurchases) {
+        if (remainingFunds <= 0) break
+        const outstanding = Number(purchase.outstandingBalance)
+        const paymentAmount = Math.min(remainingFunds, outstanding)
+        if (paymentAmount > 0) {
+          paymentsApplied.push({
+            purchaseId: purchase.id,
+            purchaseNumber: purchase.purchaseNumber,
+            amountApplied: paymentAmount,
+          })
+          remainingFunds -= paymentAmount
+        }
+      }
+
+      // Get collector info for receipts
+      let creatorName: string | null = null
+      if (transaction.createdById) {
+        const creatorMember = await prisma.shopMember.findUnique({
+          where: { id: transaction.createdById },
+          include: { user: { select: { name: true } } },
+        })
+        creatorName = creatorMember?.user.name || null
+      }
+
       await prisma.$transaction(async (tx) => {
         await tx.walletTransaction.update({
           where: { id: transaction.id },
@@ -459,6 +667,128 @@ export async function confirmAllCollectorWalletTransactions(
             walletBalance: { increment: balanceChange },
           },
         })
+
+        // Apply wallet funds to outstanding purchases and generate receipts
+        for (const payment of paymentsApplied) {
+          const purchase = await tx.purchase.findUnique({
+            where: { id: payment.purchaseId },
+          })
+          if (!purchase) continue
+
+          const newAmountPaid = Number(purchase.amountPaid) + payment.amountApplied
+          const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
+          const isCompleted = newOutstanding <= 0
+          const previousBalance = Number(purchase.outstandingBalance)
+
+          const createdPayment = await tx.payment.create({
+            data: {
+              purchaseId: payment.purchaseId,
+              amount: payment.amountApplied,
+              paymentMethod: "WALLET",
+              status: "COMPLETED",
+              isConfirmed: true,
+              confirmedById: confirmerMember!.id,
+              confirmedAt: new Date(),
+              paidAt: new Date(),
+              notes: `Wallet deposit payment (bulk confirmed by business admin)`,
+            },
+          })
+
+          await tx.purchase.update({
+            where: { id: payment.purchaseId },
+            data: {
+              amountPaid: newAmountPaid,
+              outstandingBalance: Math.max(0, newOutstanding),
+              status: isCompleted ? "COMPLETED" : purchase.status === "PENDING" ? "ACTIVE" : purchase.status,
+            },
+          })
+
+          let waybillGenerated = false
+          let waybillNumber: string | null = null
+
+          if (isCompleted && purchase.purchaseType !== "CASH") {
+            const purchaseItems = await tx.purchaseItem.findMany({
+              where: { purchaseId: purchase.id },
+            })
+            for (const item of purchaseItems) {
+              if (item.productId) {
+                await tx.shopProduct.updateMany({
+                  where: { shopId: shop.id, productId: item.productId },
+                  data: { stockQuantity: { decrement: item.quantity } },
+                })
+              }
+            }
+            const existingWaybill = await tx.waybill.findUnique({
+              where: { purchaseId: purchase.id },
+            })
+            if (!existingWaybill) {
+              const wYear = new Date().getFullYear()
+              const wTs = Date.now().toString(36).toUpperCase()
+              const wRnd = Math.random().toString(36).substring(2, 6).toUpperCase()
+              waybillNumber = `WB-${wYear}-${wTs}${wRnd}`
+              await tx.waybill.create({
+                data: {
+                  waybillNumber,
+                  purchaseId: purchase.id,
+                  recipientName: `${customer.firstName} ${customer.lastName}`,
+                  recipientPhone: customer.phone,
+                  deliveryAddress: customer.address || "N/A",
+                  deliveryCity: customer.city,
+                  deliveryRegion: customer.region,
+                  specialInstructions: `Payment completed via wallet deposit. Ready for delivery.`,
+                  generatedById: user.id,
+                },
+              })
+              waybillGenerated = true
+              await tx.purchase.update({
+                where: { id: purchase.id },
+                data: { deliveryStatus: "SCHEDULED" },
+              })
+            } else {
+              waybillNumber = existingWaybill.waybillNumber
+              waybillGenerated = true
+            }
+          }
+
+          // Generate receipt (ProgressInvoice)
+          const invYear = new Date().getFullYear()
+          const invTs = Date.now().toString(36).toUpperCase()
+          const invRnd = Math.random().toString(36).substring(2, 6).toUpperCase()
+          const invoiceNumber = `INV-${invYear}-${invTs}${invRnd}`
+
+          await tx.progressInvoice.create({
+            data: {
+              invoiceNumber,
+              paymentId: createdPayment.id,
+              purchaseId: purchase.id,
+              paymentAmount: payment.amountApplied,
+              previousBalance,
+              newBalance: Math.max(0, newOutstanding),
+              totalPurchaseAmount: purchase.totalAmount,
+              totalAmountPaid: newAmountPaid,
+              collectorId: transaction.createdById,
+              collectorName: creatorName,
+              confirmedById: confirmerMember!.id,
+              confirmedByName: user.name,
+              recordedByRole: "WALLET",
+              recordedByName: creatorName,
+              paymentMethod: "WALLET",
+              customerName: `${customer.firstName} ${customer.lastName}`,
+              customerPhone: customer.phone,
+              customerAddress: customer.address,
+              purchaseNumber: purchase.purchaseNumber,
+              purchaseType: purchase.purchaseType,
+              shopId: shop.id,
+              shopName: shop.name,
+              businessId: shop.businessId,
+              businessName: business.name,
+              isPurchaseCompleted: isCompleted,
+              waybillGenerated,
+              waybillNumber,
+              notes: `Wallet deposit payment (bulk confirmed by business admin)`,
+            },
+          })
+        }
       })
 
       confirmedCount++
@@ -474,6 +804,7 @@ export async function confirmAllCollectorWalletTransactions(
           type: transaction.type,
           bulkConfirm: true,
           collectorName,
+          paymentsApplied: paymentsApplied.length > 0 ? paymentsApplied : undefined,
         },
       })
     }

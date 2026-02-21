@@ -333,6 +333,22 @@ export async function shopAdminConfirmDeposit(
       })
 
       // Apply payments to outstanding purchases
+      // Get business name and collector info for receipts
+      const business = await tx.business.findUnique({
+        where: { id: shop.businessId },
+        select: { name: true },
+      })
+      const businessName = business?.name || shop.name
+
+      let creatorName: string | null = null
+      if (transaction.createdById) {
+        const creatorMember = await tx.shopMember.findUnique({
+          where: { id: transaction.createdById },
+          include: { user: { select: { name: true } } },
+        })
+        creatorName = creatorMember?.user.name || null
+      }
+
       for (const payment of paymentsApplied) {
         // Get current purchase data
         const purchase = await tx.purchase.findUnique({
@@ -344,9 +360,10 @@ export async function shopAdminConfirmDeposit(
         const newAmountPaid = Number(purchase.amountPaid) + payment.amountApplied
         const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
         const isCompleted = newOutstanding <= 0
+        const previousBalance = Number(purchase.outstandingBalance)
 
         // Create payment record
-        await tx.payment.create({
+        const createdPayment = await tx.payment.create({
           data: {
             purchaseId: payment.purchaseId,
             amount: payment.amountApplied,
@@ -369,6 +386,10 @@ export async function shopAdminConfirmDeposit(
             status: isCompleted ? "COMPLETED" : purchase.status === "PENDING" ? "ACTIVE" : purchase.status,
           },
         })
+
+        // Track waybill info for receipt
+        let waybillGenerated = false
+        let waybillNumber: string | null = null
 
         // If purchase is completed, auto-generate waybill and deduct stock
         if (isCompleted && purchase.purchaseType !== "CASH") {
@@ -395,10 +416,10 @@ export async function shopAdminConfirmDeposit(
           })
 
           if (!existingWaybill) {
-            const year = new Date().getFullYear()
-            const timestamp = Date.now().toString(36).toUpperCase()
-            const random = Math.random().toString(36).substring(2, 6).toUpperCase()
-            const waybillNumber = `WB-${year}-${timestamp}${random}`
+            const wYear = new Date().getFullYear()
+            const wTimestamp = Date.now().toString(36).toUpperCase()
+            const wRandom = Math.random().toString(36).substring(2, 6).toUpperCase()
+            waybillNumber = `WB-${wYear}-${wTimestamp}${wRandom}`
 
             await tx.waybill.create({
               data: {
@@ -414,12 +435,56 @@ export async function shopAdminConfirmDeposit(
               },
             })
 
+            waybillGenerated = true
+
             await tx.purchase.update({
               where: { id: purchase.id },
               data: { deliveryStatus: "SCHEDULED" },
             })
+          } else {
+            waybillNumber = existingWaybill.waybillNumber
+            waybillGenerated = true
           }
         }
+
+        // Generate receipt (ProgressInvoice) for this wallet payment
+        const invYear = new Date().getFullYear()
+        const invTimestamp = Date.now().toString(36).toUpperCase()
+        const invRandom = Math.random().toString(36).substring(2, 6).toUpperCase()
+        const invoiceNumber = `INV-${invYear}-${invTimestamp}${invRandom}`
+
+        await tx.progressInvoice.create({
+          data: {
+            invoiceNumber,
+            paymentId: createdPayment.id,
+            purchaseId: purchase.id,
+            paymentAmount: payment.amountApplied,
+            previousBalance,
+            newBalance: Math.max(0, newOutstanding),
+            totalPurchaseAmount: purchase.totalAmount,
+            totalAmountPaid: newAmountPaid,
+            collectorId: transaction.createdById,
+            collectorName: creatorName,
+            confirmedById: membership?.id || null,
+            confirmedByName: user.name,
+            recordedByRole: "WALLET",
+            recordedByName: creatorName,
+            paymentMethod: "WALLET",
+            customerName: `${customer.firstName} ${customer.lastName}`,
+            customerPhone: customer.phone,
+            customerAddress: customer.address,
+            purchaseNumber: purchase.purchaseNumber,
+            purchaseType: purchase.purchaseType,
+            shopId: shop.id,
+            shopName: shop.name,
+            businessId: shop.businessId,
+            businessName,
+            isPurchaseCompleted: isCompleted,
+            waybillGenerated,
+            waybillNumber,
+            notes: `Wallet deposit payment`,
+          },
+        })
       }
     })
 
