@@ -52,7 +52,7 @@ export default async function ShopAdminLayout({ children, params }: ShopAdminLay
       />
 
       {/* Main Content */}
-      <main className="flex-1 lg:ml-64 relative z-10 pt-16 lg:pt-0 pb-16 lg:pb-0">
+      <main className="flex-1 lg:ml-[260px] relative z-10 pt-16 lg:pt-0 pb-16 lg:pb-0">
         {children}
       </main>
     </div>
