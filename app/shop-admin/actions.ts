@@ -4401,6 +4401,83 @@ export async function getProgressInvoice(shopSlug: string, invoiceId: string): P
 }
 
 /**
+ * Wallet Deposit Receipt data for shop-admin
+ */
+export interface ShopWalletDepositReceiptData {
+  id: string
+  receiptNumber: string
+  type: string
+  amount: number
+  balanceBefore: number
+  balanceAfter: number
+  description: string | null
+  reference: string | null
+  paymentMethod: string | null
+  status: string
+  customerName: string
+  customerPhone: string
+  customerAddress: string | null
+  shopName: string
+  businessName: string
+  collectorName: string | null
+  confirmedByName: string | null
+  confirmedAt: Date | null
+  createdAt: Date
+}
+
+/**
+ * Get confirmed wallet deposit transactions as receipts for a shop
+ */
+export async function getShopWalletDepositReceipts(shopSlug: string): Promise<ShopWalletDepositReceiptData[]> {
+  const { shop } = await requireShopAdminForShop(shopSlug)
+
+  const transactions = await prisma.walletTransaction.findMany({
+    where: {
+      shopId: shop.id,
+      status: "CONFIRMED",
+      type: { in: ["DEPOSIT", "REFUND", "ADJUSTMENT"] },
+    },
+    include: {
+      customer: { include: { user: true } },
+      createdBy: { include: { user: true } },
+      confirmedBy: { include: { user: true } },
+    },
+    orderBy: { confirmedAt: "desc" },
+    take: 300,
+  })
+
+  const business = await prisma.business.findUnique({
+    where: { id: shop.businessId },
+  })
+
+  return transactions.map((tx) => {
+    const year = new Date(tx.confirmedAt || tx.createdAt).getFullYear()
+    const ts = (tx.confirmedAt || tx.createdAt).getTime().toString(36)
+    return {
+      id: tx.id,
+      receiptNumber: `WDR-${year}-${ts}`,
+      type: tx.type as string,
+      amount: Number(tx.amount),
+      balanceBefore: Number(tx.balanceBefore),
+      balanceAfter: Number(tx.balanceAfter),
+      description: tx.description,
+      reference: tx.reference,
+      paymentMethod: tx.paymentMethod,
+      status: tx.status as string,
+      customerName: tx.customer.user?.name || "Unknown",
+      customerPhone: tx.customer.user?.phone || "",
+      customerAddress: tx.customer.user?.address || null,
+      shopName: shop.name,
+      businessName: business?.name || "",
+      collectorName: tx.createdBy?.user?.name || null,
+      confirmedByName: tx.confirmedBy?.user?.name || null,
+      confirmedAt: tx.confirmedAt,
+      createdAt: tx.createdAt,
+    }
+  })
+}
+
+/**
  * Get invoices for a specific purchase
  */
 export async function getPurchaseInvoices(shopSlug: string, purchaseId: string): Promise<ProgressInvoiceData[]> {
