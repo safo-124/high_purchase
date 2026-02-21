@@ -6740,6 +6740,92 @@ export async function getBusinessProgressInvoice(businessSlug: string, invoiceId
   }
 }
 
+// ============================================
+// WALLET DEPOSIT RECEIPTS
+// ============================================
+
+export interface WalletDepositReceiptData {
+  id: string
+  receiptNumber: string
+  type: string // DEPOSIT, REFUND, ADJUSTMENT
+  amount: number
+  balanceBefore: number
+  balanceAfter: number
+  description: string | null
+  reference: string | null
+  paymentMethod: string | null
+  status: string
+  customerName: string
+  customerPhone: string
+  customerAddress: string | null
+  shopId: string
+  shopName: string
+  businessId: string
+  businessName: string
+  collectorName: string | null
+  confirmedByName: string | null
+  confirmedAt: Date | null
+  createdAt: Date
+}
+
+/**
+ * Get all confirmed wallet deposit transactions as receipts
+ */
+export async function getBusinessWalletDepositReceipts(businessSlug: string): Promise<WalletDepositReceiptData[]> {
+  const { business } = await requireBusinessAdmin(businessSlug)
+
+  const transactions = await prisma.walletTransaction.findMany({
+    where: {
+      shop: { businessId: business.id },
+      status: "CONFIRMED",
+    },
+    include: {
+      customer: true,
+      shop: {
+        include: {
+          business: { select: { name: true } },
+        },
+      },
+      createdBy: {
+        include: { user: { select: { name: true } } },
+      },
+      confirmedBy: {
+        include: { user: { select: { name: true } } },
+      },
+    },
+    orderBy: { confirmedAt: "desc" },
+    take: 300,
+  })
+
+  return transactions.map((tx) => {
+    const year = tx.confirmedAt ? tx.confirmedAt.getFullYear() : tx.createdAt.getFullYear()
+    const ts = (tx.confirmedAt || tx.createdAt).getTime().toString(36).toUpperCase().slice(-6)
+    return {
+      id: tx.id,
+      receiptNumber: `WDR-${year}-${ts}`,
+      type: tx.type,
+      amount: Number(tx.amount),
+      balanceBefore: Number(tx.balanceBefore),
+      balanceAfter: Number(tx.balanceAfter),
+      description: tx.description,
+      reference: tx.reference,
+      paymentMethod: tx.paymentMethod,
+      status: tx.status,
+      customerName: `${tx.customer.firstName} ${tx.customer.lastName}`,
+      customerPhone: tx.customer.phone,
+      customerAddress: tx.customer.address,
+      shopId: tx.shopId,
+      shopName: tx.shop.name,
+      businessId: tx.shop.businessId,
+      businessName: tx.shop.business?.name || tx.shop.name,
+      collectorName: tx.createdBy?.user.name || null,
+      confirmedByName: tx.confirmedBy?.user.name || null,
+      confirmedAt: tx.confirmedAt,
+      createdAt: tx.createdAt,
+    }
+  })
+}
+
 // ==========================================
 // EDIT PURCHASE ITEMS
 // ==========================================
