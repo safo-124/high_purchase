@@ -94,11 +94,19 @@ export function BusinessStaffReportsContent({
     })
   }, [allReports, shopFilter, staffFilter])
 
-  // Unique staff names from reports for filter dropdown
+  // Unique staff names from all staff members + reports for filter dropdown
   const uniqueStaffNames = useMemo(() => {
-    const names = new Set(allReports.map(r => r.staffName))
+    const names = new Set<string>()
+    // Add all registered staff members
+    for (const s of staffMembers) {
+      names.add(s.name)
+    }
+    // Also add any staff names from reports (in case they're not in staffMembers)
+    for (const r of allReports) {
+      names.add(r.staffName)
+    }
     return Array.from(names).sort()
-  }, [allReports])
+  }, [allReports, staffMembers])
 
   // Filtered staff names for searchable dropdown
   const filteredStaffNames = useMemo(() => {
