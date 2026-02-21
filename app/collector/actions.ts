@@ -1653,6 +1653,157 @@ export async function getCollectorProgressInvoice(shopSlug: string, invoiceId: s
   }
 }
 // ============================================
+// PURCHASE INVOICES (Collector View - what customers owe)
+// ============================================
+
+export interface CollectorPurchaseInvoiceListData {
+  id: string
+  invoiceNumber: string
+  purchaseNumber: string
+  purchaseType: string
+  customerName: string
+  customerPhone: string
+  totalAmount: number
+  downPayment: number
+  installments: number
+  dueDate: Date
+  status: string
+  shopName: string
+  businessName: string
+  itemsSnapshot: {
+    productName: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+  }[]
+  createdAt: Date
+}
+
+export interface CollectorPurchaseInvoiceDetailData {
+  id: string
+  invoiceNumber: string
+  purchaseNumber: string
+  purchaseType: string
+  subtotal: number
+  interestAmount: number
+  totalAmount: number
+  downPayment: number
+  installments: number
+  dueDate: Date
+  customerName: string
+  customerPhone: string
+  customerAddress: string | null
+  collectorName: string | null
+  shopName: string
+  businessName: string
+  paymentMethods: string[]
+  bankName: string | null
+  bankAccountNumber: string | null
+  bankAccountName: string | null
+  mobileMoneyProvider: string | null
+  mobileMoneyNumber: string | null
+  mobileMoneyName: string | null
+  itemsSnapshot: {
+    productName: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+  }[]
+  status: string
+  notes: string | null
+  createdAt: Date
+}
+
+/**
+ * Get purchase invoices assigned to this collector
+ */
+export async function getCollectorPurchaseInvoices(shopSlug: string): Promise<CollectorPurchaseInvoiceListData[]> {
+  const { shop, membership } = await requireCollectorForShop(shopSlug)
+
+  if (!membership?.id) {
+    return []
+  }
+
+  const invoices = await prisma.purchaseInvoice.findMany({
+    where: {
+      shopId: shop.id,
+      collectorId: membership.id,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  })
+
+  return invoices.map((inv) => ({
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    purchaseNumber: inv.purchaseNumber,
+    purchaseType: inv.purchaseType,
+    customerName: inv.customerName,
+    customerPhone: inv.customerPhone,
+    totalAmount: Number(inv.totalAmount),
+    downPayment: Number(inv.downPayment),
+    installments: inv.installments,
+    dueDate: inv.dueDate,
+    status: inv.status,
+    shopName: inv.shopName,
+    businessName: inv.businessName,
+    itemsSnapshot: (inv.itemsSnapshot as { productName: string; quantity: number; unitPrice: number; totalPrice: number }[]) || [],
+    createdAt: inv.createdAt,
+  }))
+}
+
+/**
+ * Get a single purchase invoice by ID for this collector
+ */
+export async function getCollectorPurchaseInvoice(shopSlug: string, invoiceId: string): Promise<CollectorPurchaseInvoiceDetailData | null> {
+  const { shop, membership } = await requireCollectorForShop(shopSlug)
+
+  if (!membership?.id) {
+    return null
+  }
+
+  const invoice = await prisma.purchaseInvoice.findFirst({
+    where: {
+      id: invoiceId,
+      shopId: shop.id,
+      collectorId: membership.id,
+    },
+  })
+
+  if (!invoice) return null
+
+  return {
+    id: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    purchaseNumber: invoice.purchaseNumber,
+    purchaseType: invoice.purchaseType,
+    subtotal: Number(invoice.subtotal),
+    interestAmount: Number(invoice.interestAmount),
+    totalAmount: Number(invoice.totalAmount),
+    downPayment: Number(invoice.downPayment),
+    installments: invoice.installments,
+    dueDate: invoice.dueDate,
+    customerName: invoice.customerName,
+    customerPhone: invoice.customerPhone,
+    customerAddress: invoice.customerAddress,
+    collectorName: invoice.collectorName,
+    shopName: invoice.shopName,
+    businessName: invoice.businessName,
+    paymentMethods: invoice.paymentMethods,
+    bankName: invoice.bankName,
+    bankAccountNumber: invoice.bankAccountNumber,
+    bankAccountName: invoice.bankAccountName,
+    mobileMoneyProvider: invoice.mobileMoneyProvider,
+    mobileMoneyNumber: invoice.mobileMoneyNumber,
+    mobileMoneyName: invoice.mobileMoneyName,
+    itemsSnapshot: (invoice.itemsSnapshot as { productName: string; quantity: number; unitPrice: number; totalPrice: number }[]) || [],
+    status: invoice.status,
+    notes: invoice.notes,
+    createdAt: invoice.createdAt,
+  }
+}
+
+// ============================================
 // COLLECTION RECEIPTS
 // ============================================
 
