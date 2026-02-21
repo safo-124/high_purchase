@@ -125,6 +125,29 @@ export function ShopWalletContent({
     })
   }
 
+  const handleConfirmAll = async (transactionIds: string[]) => {
+    if (!confirm(`Are you sure you want to confirm ${transactionIds.length} deposit${transactionIds.length !== 1 ? "s" : ""}? This action cannot be undone.`)) return
+    startTransition(async () => {
+      let confirmed = 0
+      let failed = 0
+      for (const id of transactionIds) {
+        const result = await shopAdminConfirmDeposit(shopSlug, id)
+        if (result.success) {
+          confirmed++
+        } else {
+          failed++
+        }
+      }
+      if (failed > 0) {
+        setError(`${failed} deposit${failed !== 1 ? "s" : ""} failed to confirm`)
+      }
+      if (confirmed > 0) {
+        setSuccess(`${confirmed} deposit${confirmed !== 1 ? "s" : ""} confirmed successfully`)
+      }
+      router.refresh()
+    })
+  }
+
   const filteredCustomers = customers.filter((c) =>
     `${c.firstName} ${c.lastName} ${c.phone}`.toLowerCase().includes(searchQuery.toLowerCase())
   )
@@ -435,10 +458,22 @@ export function ShopWalletContent({
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-400">
-                        <span>{filtered.length} deposit{filtered.length !== 1 ? "s" : ""}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-slate-400">{filtered.length} deposit{filtered.length !== 1 ? "s" : ""}</span>
                         <span className="text-white/10">|</span>
-                        <span>{collectorTotals.size} staff</span>
+                        <span className="text-sm text-slate-400">{collectorTotals.size} staff</span>
+                        {isShopAdmin && filtered.length > 1 && (
+                          <button
+                            onClick={() => handleConfirmAll(filtered.map(t => t.id))}
+                            disabled={isPending}
+                            className="ml-2 px-4 py-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 font-medium text-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {isPending ? "Confirming..." : `Confirm All (${filtered.length})`}
+                          </button>
+                        )}
                       </div>
                     </div>
 

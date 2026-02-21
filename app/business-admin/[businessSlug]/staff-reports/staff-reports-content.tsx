@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { 
   reviewDailyReportAsBusinessAdmin, 
   BusinessStaffDailyReportData,
@@ -13,10 +13,19 @@ interface Shop {
   shopSlug: string
 }
 
+interface StaffMember {
+  id: string
+  name: string
+  role: string
+  shopName: string
+  shopSlug: string
+}
+
 interface Props {
   businessSlug: string
   reports: BusinessStaffDailyReportData[]
   shops: Shop[]
+  staffMembers?: StaffMember[]
   dailyActivities?: Record<string, DayActivitySummary>
   monthSummary?: {
     totalSales: number
@@ -36,6 +45,7 @@ export function BusinessStaffReportsContent({
   businessSlug, 
   reports, 
   shops,
+  staffMembers = [],
   dailyActivities = {},
   monthSummary
 }: Props) {
@@ -44,10 +54,11 @@ export function BusinessStaffReportsContent({
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [shopFilter, setShopFilter] = useState<string>("all")
+  const [staffFilter, setStaffFilter] = useState<string>("all")
   const [selectedReport, setSelectedReport] = useState<BusinessStaffDailyReportData | null>(null)
   const [reviewNotes, setReviewNotes] = useState("")
   const [isReviewing, setIsReviewing] = useState(false)
-  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar")
+  const [viewMode, setViewMode] = useState<"calendar" | "list" | "leaderboard" | "compare">("calendar")
 
   // Helper function to format date as YYYY-MM-DD in local timezone
   const formatDateKey = (date: Date) => {
@@ -56,6 +67,21 @@ export function BusinessStaffReportsContent({
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   }
+
+  // Filtered reports based on shop and staff
+  const filteredReports = useMemo(() => {
+    return reports.filter(r => {
+      if (shopFilter !== "all" && r.shopSlug !== shopFilter) return false
+      if (staffFilter !== "all" && r.staffName !== staffFilter) return false
+      return true
+    })
+  }, [reports, shopFilter, staffFilter])
+
+  // Unique staff names from reports for filter dropdown
+  const uniqueStaffNames = useMemo(() => {
+    const names = new Set(reports.map(r => r.staffName))
+    return Array.from(names).sort()
+  }, [reports])
 
   // Get calendar days for current month
   const calendarDays = useMemo(() => {
@@ -70,52 +96,37 @@ export function BusinessStaffReportsContent({
     const prevMonthLastDay = new Date(currentYear, currentMonth, 0).getDate()
     for (let i = startingDayOfWeek - 1; i >= 0; i--) {
       const date = new Date(currentYear, currentMonth - 1, prevMonthLastDay - i)
-      days.push({
-        date,
-        isCurrentMonth: false,
-        dateKey: formatDateKey(date)
-      })
+      days.push({ date, isCurrentMonth: false, dateKey: formatDateKey(date) })
     }
 
     // Current month days
     for (let i = 1; i <= totalDaysInMonth; i++) {
       const date = new Date(currentYear, currentMonth, i)
-      days.push({
-        date,
-        isCurrentMonth: true,
-        dateKey: formatDateKey(date)
-      })
+      days.push({ date, isCurrentMonth: true, dateKey: formatDateKey(date) })
     }
 
     // Next month days to fill remaining slots
-    const remainingDays = 42 - days.length // 6 rows × 7 days
+    const remainingDays = 42 - days.length
     for (let i = 1; i <= remainingDays; i++) {
       const date = new Date(currentYear, currentMonth + 1, i)
-      days.push({
-        date,
-        isCurrentMonth: false,
-        dateKey: formatDateKey(date)
-      })
+      days.push({ date, isCurrentMonth: false, dateKey: formatDateKey(date) })
     }
 
     return days
   }, [currentMonth, currentYear])
 
-  // Get reports for selected date
+  // Get reports for selected date (respects filters)
   const selectedDateReports = useMemo(() => {
     if (!selectedDate) return []
-    return reports.filter(r => {
+    return filteredReports.filter(r => {
       const reportDate = new Date(r.reportDate)
-      const reportDateKey = formatDateKey(reportDate)
-      if (reportDateKey !== selectedDate) return false
-      if (shopFilter !== "all" && r.shopSlug !== shopFilter) return false
-      return true
+      return formatDateKey(reportDate) === selectedDate
     })
-  }, [selectedDate, reports, shopFilter])
+  }, [selectedDate, filteredReports])
 
-  // Get activity summary for a date
-  const getDateActivity = (dateKey: string) => {
-    const dayReports = reports.filter(r => {
+  // Get activity for a date (respects filters)
+  const getDateActivity = useCallback((dateKey: string) => {
+    const dayReports = filteredReports.filter(r => {
       const reportDate = new Date(r.reportDate)
       return formatDateKey(reportDate) === dateKey
     })
@@ -128,17 +139,140 @@ export function BusinessStaffReportsContent({
       count: dayReports.length,
       hasPending: dayReports.some(r => r.status === "SUBMITTED")
     }
-  }
+  }, [filteredReports])
 
-  // Statistics
+  // Missing reports for a date: staff who should have reported but didn't
+  const getMissingStaff = useCallback((dateKey: string) => {
+    const dateObj = new Date(dateKey + "T12:00:00")
+    const dayOfWeek = dateObj.getDay()
+    if (dayOfWeek === 0) return [] // Skip Sundays
+    if (dateObj > today) return [] // Skip future dates
+
+    const staffWhoReported = new Set(
+      reports
+        .filter(r => formatDateKey(new Date(r.reportDate)) === dateKey)
+        .map(r => r.staffName)
+    )
+
+    const relevantStaff = staffMembers.filter(s => {
+      if (shopFilter !== "all" && s.shopSlug !== shopFilter) return false
+      if (staffFilter !== "all" && s.name !== staffFilter) return false
+      return s.role === "SALES_STAFF" || s.role === "DEBT_COLLECTOR"
+    })
+
+    return relevantStaff.filter(s => !staffWhoReported.has(s.name))
+  }, [reports, staffMembers, shopFilter, staffFilter, today])
+
+  // Statistics (respects filters)
   const stats = useMemo(() => {
-    const pendingCount = reports.filter(r => r.status === "SUBMITTED").length
-    const totalSales = reports.filter(r => r.reportType === "SALES").reduce((sum, r) => sum + (r.totalSalesAmount || 0), 0)
-    const totalCollected = reports.filter(r => r.reportType === "COLLECTION").reduce((sum, r) => sum + (r.totalCollected || 0), 0)
-    const totalWalletDeposits = reports.filter(r => r.reportType === "WALLET").reduce((sum, r) => sum + (r.totalWalletDeposits || 0), 0)
-    const uniqueStaff = new Set(reports.map(r => r.staffName)).size
+    const pendingCount = filteredReports.filter(r => r.status === "SUBMITTED").length
+    const totalSales = filteredReports.filter(r => r.reportType === "SALES").reduce((sum, r) => sum + (r.totalSalesAmount || 0), 0)
+    const totalCollected = filteredReports.filter(r => r.reportType === "COLLECTION").reduce((sum, r) => sum + (r.totalCollected || 0), 0)
+    const totalWalletDeposits = filteredReports.filter(r => r.reportType === "WALLET").reduce((sum, r) => sum + (r.totalWalletDeposits || 0), 0)
+    const uniqueStaff = new Set(filteredReports.map(r => r.staffName)).size
     return { pendingCount, totalSales, totalCollected, totalWalletDeposits, uniqueStaff }
-  }, [reports])
+  }, [filteredReports])
+
+  // Leaderboard data
+  const leaderboard = useMemo(() => {
+    const staffMap = new Map<string, {
+      name: string; role: string; shopName: string
+      totalSales: number; totalCollected: number; totalWalletDeposits: number
+      reportCount: number; daysWorked: Set<string>
+    }>()
+
+    for (const r of filteredReports) {
+      const existing = staffMap.get(r.staffName)
+      if (existing) {
+        if (r.reportType === "SALES") existing.totalSales += r.totalSalesAmount || 0
+        if (r.reportType === "COLLECTION") existing.totalCollected += r.totalCollected || 0
+        if (r.reportType === "WALLET") existing.totalWalletDeposits += r.totalWalletDeposits || 0
+        existing.reportCount++
+        existing.daysWorked.add(formatDateKey(new Date(r.reportDate)))
+      } else {
+        staffMap.set(r.staffName, {
+          name: r.staffName, role: r.staffRole, shopName: r.shopName,
+          totalSales: r.reportType === "SALES" ? (r.totalSalesAmount || 0) : 0,
+          totalCollected: r.reportType === "COLLECTION" ? (r.totalCollected || 0) : 0,
+          totalWalletDeposits: r.reportType === "WALLET" ? (r.totalWalletDeposits || 0) : 0,
+          reportCount: 1,
+          daysWorked: new Set([formatDateKey(new Date(r.reportDate))]),
+        })
+      }
+    }
+
+    return Array.from(staffMap.values())
+      .map(s => ({ ...s, daysWorked: s.daysWorked.size, totalRevenue: s.totalSales + s.totalCollected + s.totalWalletDeposits }))
+      .sort((a, b) => b.totalRevenue - a.totalRevenue)
+  }, [filteredReports])
+
+  // Staff comparison data
+  const comparisonData = useMemo(() => {
+    const staffMap = new Map<string, {
+      name: string; role: string; shopName: string
+      salesCount: number; totalSales: number; collectionCount: number; totalCollected: number
+      walletCount: number; totalWalletDeposits: number; totalReports: number; avgDaily: number
+      daysWorked: Set<string>
+    }>()
+
+    for (const r of filteredReports) {
+      const existing = staffMap.get(r.staffName)
+      if (existing) {
+        if (r.reportType === "SALES") { existing.salesCount++; existing.totalSales += r.totalSalesAmount || 0 }
+        if (r.reportType === "COLLECTION") { existing.collectionCount++; existing.totalCollected += r.totalCollected || 0 }
+        if (r.reportType === "WALLET") { existing.walletCount++; existing.totalWalletDeposits += r.totalWalletDeposits || 0 }
+        existing.totalReports++
+        existing.daysWorked.add(formatDateKey(new Date(r.reportDate)))
+      } else {
+        staffMap.set(r.staffName, {
+          name: r.staffName, role: r.staffRole, shopName: r.shopName,
+          salesCount: r.reportType === "SALES" ? 1 : 0,
+          totalSales: r.reportType === "SALES" ? (r.totalSalesAmount || 0) : 0,
+          collectionCount: r.reportType === "COLLECTION" ? 1 : 0,
+          totalCollected: r.reportType === "COLLECTION" ? (r.totalCollected || 0) : 0,
+          walletCount: r.reportType === "WALLET" ? 1 : 0,
+          totalWalletDeposits: r.reportType === "WALLET" ? (r.totalWalletDeposits || 0) : 0,
+          totalReports: 1, avgDaily: 0,
+          daysWorked: new Set([formatDateKey(new Date(r.reportDate))]),
+        })
+      }
+    }
+
+    return Array.from(staffMap.values()).map(s => {
+      const days = s.daysWorked.size
+      const total = s.totalSales + s.totalCollected + s.totalWalletDeposits
+      return { ...s, daysWorked: days, avgDaily: days > 0 ? total / days : 0 }
+    }).sort((a, b) => (b.totalSales + b.totalCollected + b.totalWalletDeposits) - (a.totalSales + a.totalCollected + a.totalWalletDeposits))
+  }, [filteredReports])
+
+  // Daily trends for charts
+  const dailyTrends = useMemo(() => {
+    const dateMap = new Map<string, { sales: number; collections: number; walletDeposits: number }>()
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+    
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = formatDateKey(new Date(currentYear, currentMonth, d))
+      dateMap.set(key, { sales: 0, collections: 0, walletDeposits: 0 })
+    }
+
+    for (const r of filteredReports) {
+      const key = formatDateKey(new Date(r.reportDate))
+      const existing = dateMap.get(key)
+      if (existing) {
+        if (r.reportType === "SALES") existing.sales += r.totalSalesAmount || 0
+        if (r.reportType === "COLLECTION") existing.collections += r.totalCollected || 0
+        if (r.reportType === "WALLET") existing.walletDeposits += r.totalWalletDeposits || 0
+      }
+    }
+
+    return Array.from(dateMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, data]) => ({ date, day: parseInt(date.split("-")[2]), ...data }))
+  }, [filteredReports, currentMonth, currentYear])
+
+  const maxTrendValue = useMemo(() => {
+    return Math.max(1, ...dailyTrends.map(d => Math.max(d.sales, d.collections, d.walletDeposits)))
+  }, [dailyTrends])
 
   const handleReview = async () => {
     if (!selectedReport) return
@@ -153,19 +287,11 @@ export function BusinessStaffReportsContent({
 
   const navigateMonth = (direction: number) => {
     if (direction === -1) {
-      if (currentMonth === 0) {
-        setCurrentMonth(11)
-        setCurrentYear(currentYear - 1)
-      } else {
-        setCurrentMonth(currentMonth - 1)
-      }
+      if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(currentYear - 1) }
+      else { setCurrentMonth(currentMonth - 1) }
     } else {
-      if (currentMonth === 11) {
-        setCurrentMonth(0)
-        setCurrentYear(currentYear + 1)
-      } else {
-        setCurrentMonth(currentMonth + 1)
-      }
+      if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(currentYear + 1) }
+      else { setCurrentMonth(currentMonth + 1) }
     }
     setSelectedDate(null)
   }
@@ -176,8 +302,30 @@ export function BusinessStaffReportsContent({
     setSelectedDate(formatDateKey(today))
   }
 
-  const isToday = (dateKey: string) => {
-    return dateKey === formatDateKey(today)
+  const isToday = (dateKey: string) => dateKey === formatDateKey(today)
+
+  // CSV Export
+  const handleExportCSV = () => {
+    const rows = [
+      ["Date", "Shop", "Staff", "Role", "Type", "Sales Amount", "Collected", "Wallet Deposits", "Status", "Notes"]
+    ]
+    for (const r of filteredReports) {
+      rows.push([
+        new Date(r.reportDate).toLocaleDateString("en-GB"),
+        r.shopName, r.staffName, r.staffRole, r.reportType,
+        String(r.totalSalesAmount || 0), String(r.totalCollected || 0),
+        String(r.totalWalletDeposits || 0), r.status,
+        (r.notes || "").replace(/,/g, ";"),
+      ])
+    }
+    const csv = rows.map(row => row.map(cell => `"${cell}"`).join(",")).join("\n")
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `staff-reports-${MONTHS[currentMonth]}-${currentYear}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const getRoleBadge = (role: string) => {
@@ -241,7 +389,7 @@ export function BusinessStaffReportsContent({
             </div>
             <div>
               <p className="text-xs text-slate-500 uppercase tracking-wider">Total Reports</p>
-              <p className="text-2xl font-bold text-white">{reports.length}</p>
+              <p className="text-2xl font-bold text-white">{filteredReports.length}</p>
             </div>
           </div>
         </div>
@@ -306,45 +454,52 @@ export function BusinessStaffReportsContent({
       {/* View Toggle & Filters */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2 p-1 rounded-xl bg-white/5 border border-white/10">
-          <button
-            onClick={() => setViewMode("calendar")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              viewMode === "calendar" 
-                ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/25" 
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              Calendar
-            </span>
-          </button>
-          <button
-            onClick={() => setViewMode("list")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              viewMode === "list" 
-                ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/25" 
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-              </svg>
-              List
-            </span>
-          </button>
+          {[
+            { id: "calendar" as const, label: "Calendar", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg> },
+            { id: "list" as const, label: "List", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg> },
+            { id: "leaderboard" as const, label: "Leaderboard", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg> },
+            { id: "compare" as const, label: "Compare", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg> },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setViewMode(tab.id)}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                viewMode === tab.id 
+                  ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/25" 
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                {tab.icon}
+                <span className="hidden sm:inline">{tab.label}</span>
+              </span>
+            </button>
+          ))}
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Staff Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-400">Staff:</span>
+            <select
+              value={staffFilter}
+              onChange={(e) => setStaffFilter(e.target.value)}
+              className="px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 max-w-[160px]"
+            >
+              <option value="all">All Staff</option>
+              {uniqueStaffNames.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Shop Filter */}
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-400">Shop:</span>
             <select
               value={shopFilter}
               onChange={(e) => setShopFilter(e.target.value)}
-              className="px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              className="px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 max-w-[160px]"
             >
               <option value="all">All Shops</option>
               {shops.map((shop) => (
@@ -352,10 +507,63 @@ export function BusinessStaffReportsContent({
               ))}
             </select>
           </div>
+
+          {/* Export Button */}
+          <button
+            onClick={handleExportCSV}
+            className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 text-sm font-medium transition-all flex items-center gap-1.5"
+            title="Export to CSV"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span className="hidden sm:inline">Export CSV</span>
+          </button>
         </div>
       </div>
 
-      {viewMode === "calendar" ? (
+      {/* ============ CALENDAR VIEW ============ */}
+      {viewMode === "calendar" && (
+        <>
+          {/* Mini Trend Chart */}
+          <div className="glass-card rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-white">Daily Activity — {MONTHS[currentMonth]} {currentYear}</h3>
+              <div className="flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-green-500" /><span className="text-slate-400">Sales</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-purple-500" /><span className="text-slate-400">Collections</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-cyan-500" /><span className="text-slate-400">Wallet</span></div>
+              </div>
+            </div>
+            <div className="flex items-end gap-[3px] h-24">
+              {dailyTrends.map((d) => {
+                const total = d.sales + d.collections + d.walletDeposits
+                const salesH = total > 0 ? (d.sales / maxTrendValue) * 100 : 0
+                const collectH = total > 0 ? (d.collections / maxTrendValue) * 100 : 0
+                const walletH = total > 0 ? (d.walletDeposits / maxTrendValue) * 100 : 0
+                const isTodayBar = isToday(d.date)
+                return (
+                  <div
+                    key={d.date}
+                    className={`flex-1 flex flex-col justify-end gap-px rounded-t-sm cursor-pointer group relative ${isTodayBar ? "ring-1 ring-indigo-500/50 ring-offset-1 ring-offset-transparent rounded-sm" : ""}`}
+                    onClick={() => { setSelectedDate(d.date) }}
+                    title={`Day ${d.day}: ₵${total.toLocaleString()}`}
+                  >
+                    {walletH > 0 && <div className="bg-cyan-500/80 rounded-t-sm transition-all group-hover:bg-cyan-400" style={{ height: `${Math.max(walletH, 2)}%` }} />}
+                    {collectH > 0 && <div className="bg-purple-500/80 transition-all group-hover:bg-purple-400" style={{ height: `${Math.max(collectH, 2)}%` }} />}
+                    {salesH > 0 && <div className="bg-green-500/80 transition-all group-hover:bg-green-400 rounded-b-sm" style={{ height: `${Math.max(salesH, 2)}%` }} />}
+                    {total === 0 && <div className="bg-white/5 rounded-sm" style={{ height: "3%" }} />}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex justify-between mt-1.5 text-[9px] text-slate-600">
+              <span>1</span>
+              <span>{Math.ceil(dailyTrends.length / 2)}</span>
+              <span>{dailyTrends.length}</span>
+            </div>
+          </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Calendar */}
           <div className="lg:col-span-2 glass-card rounded-2xl overflow-hidden">
@@ -403,6 +611,7 @@ export function BusinessStaffReportsContent({
             <div className="grid grid-cols-7">
               {calendarDays.map((day, index) => {
                 const activity = getDateActivity(day.dateKey)
+                const missing = getMissingStaff(day.dateKey)
                 const isSelected = selectedDate === day.dateKey
                 const isTodayDate = isToday(day.dateKey)
                 
@@ -444,6 +653,15 @@ export function BusinessStaffReportsContent({
                         )}
                       </div>
                     )}
+
+                    {/* Missing reports indicator */}
+                    {day.isCurrentMonth && missing.length > 0 && (
+                      <div className="absolute bottom-1 right-1" title={`${missing.length} staff didn't report`}>
+                        <div className="w-4 h-4 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center">
+                          <span className="text-[8px] font-bold text-red-400">{missing.length}</span>
+                        </div>
+                      </div>
+                    )}
                   </button>
                 )
               })}
@@ -467,6 +685,10 @@ export function BusinessStaffReportsContent({
                 <div className="w-2 h-2 rounded-full bg-amber-500" />
                 <span className="text-xs text-slate-400">Pending Review</span>
               </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center"><span className="text-[7px] text-red-400">!</span></div>
+                <span className="text-xs text-slate-400">Missing Reports</span>
+              </div>
             </div>
           </div>
 
@@ -475,7 +697,7 @@ export function BusinessStaffReportsContent({
             <div className="p-4 border-b border-white/10 bg-gradient-to-r from-purple-500/10 to-pink-500/10">
               <h3 className="font-bold text-white">
                 {selectedDate 
-                  ? new Date(selectedDate).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })
+                  ? new Date(selectedDate + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })
                   : "Select a Day"
                 }
               </h3>
@@ -484,7 +706,7 @@ export function BusinessStaffReportsContent({
               </p>
             </div>
 
-            <div className="p-4 max-h-[500px] overflow-y-auto">
+            <div className="p-4 max-h-[600px] overflow-y-auto">
               {!selectedDate ? (
                 <div className="text-center py-8">
                   <div className="w-16 h-16 rounded-2xl bg-slate-800/50 flex items-center justify-center mx-auto mb-4">
@@ -494,18 +716,41 @@ export function BusinessStaffReportsContent({
                   </div>
                   <p className="text-slate-400 text-sm">Select a day from the calendar</p>
                 </div>
-              ) : selectedDateReports.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="w-16 h-16 rounded-2xl bg-slate-800/50 flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
-                  <p className="text-slate-400 text-sm">No reports for this day</p>
-                </div>
               ) : (
                 <div className="space-y-3">
-                  {selectedDateReports.map((report) => (
+                  {/* Missing staff warning */}
+                  {(() => {
+                    const missing = getMissingStaff(selectedDate)
+                    if (missing.length === 0) return null
+                    return (
+                      <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                        <p className="text-xs font-semibold text-red-400 mb-2 flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                          {missing.length} staff didn&apos;t submit reports
+                        </p>
+                        <div className="space-y-1">
+                          {missing.map(s => (
+                            <div key={s.id} className="flex items-center justify-between text-xs">
+                              <span className="text-slate-300">{s.name}</span>
+                              <span className="text-slate-500">{s.shopName}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {selectedDateReports.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 rounded-2xl bg-slate-800/50 flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <p className="text-slate-400 text-sm">No reports for this day</p>
+                    </div>
+                  ) : (
+                    selectedDateReports.map((report) => (
                     <div
                       key={report.id}
                       onClick={() => {
@@ -583,16 +828,20 @@ export function BusinessStaffReportsContent({
                         </div>
                       )}
                     </div>
-                  ))}
+                  ))
+                  )}
                 </div>
               )}
             </div>
           </div>
         </div>
-      ) : (
-        /* List View */
+        </>
+      )}
+
+      {/* ============ LIST VIEW ============ */}
+      {viewMode === "list" && (
         <div className="glass-card rounded-2xl overflow-hidden">
-          {reports.length === 0 ? (
+          {filteredReports.length === 0 ? (
             <div className="text-center py-16">
               <div className="w-16 h-16 rounded-2xl bg-slate-800/50 flex items-center justify-center mx-auto mb-4">
                 <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -617,17 +866,13 @@ export function BusinessStaffReportsContent({
                   </tr>
                 </thead>
                 <tbody>
-                  {reports
-                    .filter(r => shopFilter === "all" || r.shopSlug === shopFilter)
-                    .map((report) => (
+                  {filteredReports.map((report) => (
                     <tr key={report.id} className="border-b border-white/5 hover:bg-white/5">
                       <td className="py-4 px-6 text-white">
                         {new Date(report.reportDate).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
                       </td>
                       <td className="py-4 px-6">
-                        <span className="px-2 py-1 text-xs rounded-full bg-white/5 border border-white/10 text-slate-300">
-                          {report.shopName}
-                        </span>
+                        <span className="px-2 py-1 text-xs rounded-full bg-white/5 border border-white/10 text-slate-300">{report.shopName}</span>
                       </td>
                       <td className="py-4 px-6 text-white font-medium">{report.staffName}</td>
                       <td className="py-4 px-6 text-center">{getRoleBadge(report.staffRole)}</td>
@@ -643,10 +888,7 @@ export function BusinessStaffReportsContent({
                       <td className="py-4 px-6 text-center">{getStatusBadge(report.status)}</td>
                       <td className="py-4 px-6 text-center">
                         <button
-                          onClick={() => {
-                            setSelectedReport(report)
-                            setReviewNotes("")
-                          }}
+                          onClick={() => { setSelectedReport(report); setReviewNotes("") }}
                           className="px-3 py-1.5 text-sm rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors"
                         >
                           {report.status === "REVIEWED" ? "View" : "Review"}
@@ -661,7 +903,195 @@ export function BusinessStaffReportsContent({
         </div>
       )}
 
-      {/* Review Modal */}
+      {/* ============ LEADERBOARD VIEW ============ */}
+      {viewMode === "leaderboard" && (
+        <div className="space-y-6">
+          {leaderboard.length === 0 ? (
+            <div className="glass-card rounded-2xl p-12 text-center">
+              <p className="text-slate-400">No data available for the leaderboard</p>
+            </div>
+          ) : (
+            <>
+              {/* Top 3 Podium */}
+              {leaderboard.length >= 1 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[1, 0, 2].map(pos => {
+                    const staff = leaderboard[pos]
+                    if (!staff) return <div key={pos} />
+                    const rank = pos + 1
+                    const colors = [
+                      "",
+                      "from-yellow-500/20 to-amber-500/10 border-yellow-500/30",
+                      "from-slate-400/20 to-slate-500/10 border-slate-400/30",
+                      "from-orange-600/20 to-orange-700/10 border-orange-600/30"
+                    ]
+                    const medals = ["", "🥇", "🥈", "🥉"]
+                    const textColor = ["", "text-yellow-400", "text-slate-300", "text-orange-400"]
+                    
+                    return (
+                      <div key={pos} className={`glass-card rounded-2xl p-5 bg-gradient-to-br ${colors[rank]} border ${rank === 1 ? "md:order-2 md:-mt-4" : rank === 2 ? "md:order-1" : "md:order-3"}`}>
+                        <div className="text-center">
+                          <div className="text-3xl mb-2">{medals[rank]}</div>
+                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-xl font-bold mx-auto mb-3">
+                            {staff.name.charAt(0)}
+                          </div>
+                          <h4 className="font-bold text-white text-lg">{staff.name}</h4>
+                          <p className="text-xs text-slate-400 mb-3">{staff.shopName}</p>
+                          <p className={`text-2xl font-bold ${textColor[rank]}`}>
+                            ₵{staff.totalRevenue.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1">{staff.daysWorked} days  •  {staff.reportCount} reports</p>
+                          <div className="mt-3 pt-3 border-t border-white/10 grid grid-cols-3 gap-1 text-center">
+                            <div><p className="text-[10px] text-slate-500">Sales</p><p className="text-xs font-medium text-green-400">₵{staff.totalSales.toLocaleString()}</p></div>
+                            <div><p className="text-[10px] text-slate-500">Collected</p><p className="text-xs font-medium text-purple-400">₵{staff.totalCollected.toLocaleString()}</p></div>
+                            <div><p className="text-[10px] text-slate-500">Wallet</p><p className="text-xs font-medium text-cyan-400">₵{staff.totalWalletDeposits.toLocaleString()}</p></div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Rest of the leaderboard */}
+              {leaderboard.length > 3 && (
+                <div className="glass-card rounded-2xl overflow-hidden">
+                  <div className="divide-y divide-white/5">
+                    {leaderboard.slice(3).map((staff, idx) => {
+                      const maxRevenue = leaderboard[0]?.totalRevenue || 1
+                      const barWidth = (staff.totalRevenue / maxRevenue) * 100
+                      return (
+                        <div key={staff.name} className="p-4 hover:bg-white/[0.02] relative">
+                          <div className="absolute inset-y-0 left-0 bg-indigo-500/5 transition-all" style={{ width: `${barWidth}%` }} />
+                          <div className="relative flex items-center gap-4">
+                            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-500 font-bold text-sm flex-shrink-0">
+                              {idx + 4}
+                            </div>
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500/30 to-purple-500/20 flex items-center justify-center text-indigo-300 font-semibold text-sm flex-shrink-0">
+                              {staff.name.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-white truncate">{staff.name}</p>
+                              <p className="text-xs text-slate-500">{staff.shopName}  •  {staff.daysWorked} days</p>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm">
+                              {staff.totalSales > 0 && <span className="text-green-400">₵{staff.totalSales.toLocaleString()}</span>}
+                              {staff.totalCollected > 0 && <span className="text-purple-400">₵{staff.totalCollected.toLocaleString()}</span>}
+                              {staff.totalWalletDeposits > 0 && <span className="text-cyan-400">₵{staff.totalWalletDeposits.toLocaleString()}</span>}
+                              <span className="font-bold text-white min-w-[80px] text-right">₵{staff.totalRevenue.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ============ COMPARE VIEW ============ */}
+      {viewMode === "compare" && (
+        <div className="glass-card rounded-2xl overflow-hidden">
+          {comparisonData.length === 0 ? (
+            <div className="text-center py-16">
+              <p className="text-slate-400">No data available for comparison</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/10 bg-white/5">
+                    <th className="text-left py-4 px-6 text-sm font-medium text-slate-400 sticky left-0 bg-[#0f172a] z-10">Staff</th>
+                    <th className="text-center py-4 px-4 text-sm font-medium text-slate-400">Shop</th>
+                    <th className="text-center py-4 px-4 text-sm font-medium text-slate-400">Days</th>
+                    <th className="text-center py-4 px-4 text-sm font-medium text-slate-400">Reports</th>
+                    <th className="text-right py-4 px-4 text-sm font-medium text-green-400">Sales</th>
+                    <th className="text-right py-4 px-4 text-sm font-medium text-purple-400">Collected</th>
+                    <th className="text-right py-4 px-4 text-sm font-medium text-cyan-400">Wallet</th>
+                    <th className="text-right py-4 px-4 text-sm font-medium text-white">Total</th>
+                    <th className="text-right py-4 px-4 text-sm font-medium text-slate-400">Avg/Day</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparisonData.map((staff) => {
+                    const total = staff.totalSales + staff.totalCollected + staff.totalWalletDeposits
+                    const maxTotal = comparisonData[0] ? comparisonData[0].totalSales + comparisonData[0].totalCollected + comparisonData[0].totalWalletDeposits : 1
+                    return (
+                      <tr key={staff.name} className="border-b border-white/5 hover:bg-white/5 relative">
+                        <td className="py-4 px-6 sticky left-0 bg-[#0f172a] z-10">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500/30 to-purple-500/20 flex items-center justify-center text-indigo-300 font-semibold text-xs flex-shrink-0">
+                              {staff.name.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="font-medium text-white text-sm">{staff.name}</p>
+                              <p className="text-xs text-slate-500">{staff.role === "SALES_STAFF" ? "Sales" : staff.role === "DEBT_COLLECTOR" ? "Collector" : staff.role}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <span className="text-xs text-slate-400">{staff.shopName}</span>
+                        </td>
+                        <td className="py-4 px-4 text-center text-white font-medium">{staff.daysWorked}</td>
+                        <td className="py-4 px-4 text-center text-slate-400">{staff.totalReports}</td>
+                        <td className="py-4 px-4 text-right">
+                          <div>
+                            <span className="text-green-400 font-medium">₵{staff.totalSales.toLocaleString()}</span>
+                            <div className="mt-1 h-1 rounded-full bg-white/5 overflow-hidden">
+                              <div className="h-full bg-green-500 rounded-full" style={{ width: `${maxTotal > 0 ? (staff.totalSales / maxTotal) * 100 : 0}%` }} />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-right">
+                          <div>
+                            <span className="text-purple-400 font-medium">₵{staff.totalCollected.toLocaleString()}</span>
+                            <div className="mt-1 h-1 rounded-full bg-white/5 overflow-hidden">
+                              <div className="h-full bg-purple-500 rounded-full" style={{ width: `${maxTotal > 0 ? (staff.totalCollected / maxTotal) * 100 : 0}%` }} />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-right">
+                          <div>
+                            <span className="text-cyan-400 font-medium">₵{staff.totalWalletDeposits.toLocaleString()}</span>
+                            <div className="mt-1 h-1 rounded-full bg-white/5 overflow-hidden">
+                              <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${maxTotal > 0 ? (staff.totalWalletDeposits / maxTotal) * 100 : 0}%` }} />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-right font-bold text-white">₵{total.toLocaleString()}</td>
+                        <td className="py-4 px-4 text-right text-slate-400">₵{Math.round(staff.avgDaily).toLocaleString()}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-white/10 bg-white/5">
+                    <td className="py-4 px-6 font-bold text-white sticky left-0 bg-[#0f172a] z-10" colSpan={4}>Totals</td>
+                    <td className="py-4 px-4 text-right font-bold text-green-400">
+                      ₵{comparisonData.reduce((s, d) => s + d.totalSales, 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-4 text-right font-bold text-purple-400">
+                      ₵{comparisonData.reduce((s, d) => s + d.totalCollected, 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-4 text-right font-bold text-cyan-400">
+                      ₵{comparisonData.reduce((s, d) => s + d.totalWalletDeposits, 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-4 text-right font-bold text-white">
+                      ₵{comparisonData.reduce((s, d) => s + d.totalSales + d.totalCollected + d.totalWalletDeposits, 0).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-4" />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ============ REVIEW MODAL ============ */}
       {selectedReport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="glass-card rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">

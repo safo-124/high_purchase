@@ -1,5 +1,5 @@
 import { requireBusinessAdmin } from "@/lib/auth"
-import { getBusinessDailyReports, getBusinessShops } from "../../actions"
+import { getBusinessDailyReports, getBusinessShops, getBusinessStaff } from "../../actions"
 import { BusinessStaffReportsContent } from "./staff-reports-content"
 
 interface Props {
@@ -10,10 +10,22 @@ export default async function BusinessStaffReportsPage({ params }: Props) {
   const { businessSlug } = await params
   await requireBusinessAdmin(businessSlug)
 
-  const [reports, shops] = await Promise.all([
+  const [reports, shops, allStaff] = await Promise.all([
     getBusinessDailyReports(businessSlug),
     getBusinessShops(businessSlug),
+    getBusinessStaff(businessSlug),
   ])
+
+  // Extract unique active staff for filters and missing report detection
+  const staffMembers = allStaff
+    .filter(s => s.isActive)
+    .map(s => ({
+      id: s.id,
+      name: s.userName || "Unknown",
+      role: s.role as string,
+      shopName: s.shopName,
+      shopSlug: s.shopSlug,
+    }))
 
   return (
     <div className="p-6">
@@ -26,6 +38,7 @@ export default async function BusinessStaffReportsPage({ params }: Props) {
         businessSlug={businessSlug} 
         reports={reports} 
         shops={shops}
+        staffMembers={staffMembers}
       />
     </div>
   )
