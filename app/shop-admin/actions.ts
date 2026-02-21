@@ -4435,7 +4435,7 @@ export async function getShopWalletDepositReceipts(shopSlug: string): Promise<Sh
     where: {
       shopId: shop.id,
       status: "CONFIRMED",
-      type: { in: ["DEPOSIT", "REFUND", "ADJUSTMENT"] },
+      type: "DEPOSIT",
     },
     include: {
       customer: { include: { user: true } },

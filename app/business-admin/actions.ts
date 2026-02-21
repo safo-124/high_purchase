@@ -6778,6 +6778,7 @@ export async function getBusinessWalletDepositReceipts(businessSlug: string): Pr
     where: {
       shop: { businessId: business.id },
       status: "CONFIRMED",
+      type: "DEPOSIT",
     },
     include: {
       customer: true,
