@@ -740,7 +740,7 @@ export async function getProductsForCollector(shopSlug: string): Promise<Product
 }
 
 // ============================================
-// CUSTOMERS FOR SALE (ALL SHOP CUSTOMERS)
+// CUSTOMERS FOR SALE (ASSIGNED TO THIS COLLECTOR)
 // ============================================
 
 export interface CustomerForCollectorSale {
@@ -752,12 +752,14 @@ export interface CustomerForCollectorSale {
 }
 
 export async function getCustomersForCollectorSale(shopSlug: string): Promise<CustomerForCollectorSale[]> {
-  const { shop } = await requireCollectorForShop(shopSlug)
+  const { shop, membership } = await requireCollectorForShop(shopSlug)
 
   const customers = await prisma.customer.findMany({
     where: {
       shopId: shop.id,
       isActive: true,
+      // Only show customers assigned to this collector
+      ...(membership ? { assignedCollectorId: membership.id } : {}),
     },
     select: {
       id: true,
