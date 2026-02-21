@@ -451,11 +451,11 @@ export async function shopAdminConfirmDeposit(
         const invYear = new Date().getFullYear()
         const invTimestamp = Date.now().toString(36).toUpperCase()
         const invRandom = Math.random().toString(36).substring(2, 6).toUpperCase()
-        const invoiceNumber = `INV-${invYear}-${invTimestamp}${invRandom}`
+        const receiptNumber = `RCT-${invYear}-${invTimestamp}${invRandom}`
 
         await tx.progressInvoice.create({
           data: {
-            invoiceNumber,
+            invoiceNumber: receiptNumber,
             paymentId: createdPayment.id,
             purchaseId: purchase.id,
             paymentAmount: payment.amountApplied,

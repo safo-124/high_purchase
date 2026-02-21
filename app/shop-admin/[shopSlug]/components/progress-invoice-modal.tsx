@@ -41,7 +41,7 @@ export function ProgressInvoiceModal({ shopSlug, invoiceId, onClose, onViewWaybi
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Invoice - ${invoice?.invoiceNumber}</title>
+          <title>Receipt - ${invoice?.invoiceNumber}</title>
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -189,7 +189,7 @@ export function ProgressInvoiceModal({ shopSlug, invoiceId, onClose, onViewWaybi
         ) : !invoice ? (
           <div className="text-center py-20">
             <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">Invoice not found</p>
+            <p className="text-gray-500">Receipt not found</p>
             <button onClick={onClose} className="mt-4 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm">
               Close
             </button>
@@ -200,7 +200,7 @@ export function ProgressInvoiceModal({ shopSlug, invoiceId, onClose, onViewWaybi
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                 <FileText className="w-5 h-5 text-indigo-600" />
-                Progress Invoice
+                Payment Receipt
               </h2>
               <div className="flex items-center gap-2">
                 {invoice.waybillGenerated && onViewWaybill && (
@@ -231,7 +231,7 @@ export function ProgressInvoiceModal({ shopSlug, invoiceId, onClose, onViewWaybi
               <div className="header text-center border-b-2 border-black pb-4 mb-5">
                 <div className="business-name text-2xl font-bold">{invoice.businessName}</div>
                 <div className="shop-name text-sm text-gray-600">{invoice.shopName}</div>
-                <div className="invoice-title text-xl font-bold mt-4 tracking-widest">PROGRESS INVOICE</div>
+                <div className="invoice-title text-xl font-bold mt-4 tracking-widest">PAYMENT RECEIPT</div>
                 <div className="invoice-number text-gray-600">{invoice.invoiceNumber}</div>
                 <span className={`status-badge inline-block mt-2 px-3 py-1 rounded-full text-xs font-bold ${
                   invoice.isPurchaseCompleted ? "status-completed bg-green-100 text-green-700" : "status-partial bg-amber-100 text-amber-700"

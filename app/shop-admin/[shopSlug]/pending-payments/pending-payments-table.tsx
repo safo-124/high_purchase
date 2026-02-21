@@ -15,7 +15,7 @@ interface PendingPaymentsTableProps {
 
 interface ConfirmationResult {
   invoiceId: string
-  invoiceNumber: string
+  receiptNumber: string
   purchaseCompleted: boolean
   waybillGenerated: boolean
   waybillNumber: string | null
@@ -60,7 +60,7 @@ export function PendingPaymentsTable({ payments, shopSlug }: PendingPaymentsTabl
         const data = result.data as {
           purchaseCompleted: boolean
           invoiceId: string
-          invoiceNumber: string
+          receiptNumber: string
           waybillGenerated: boolean
           waybillNumber: string | null
         }
@@ -74,7 +74,7 @@ export function PendingPaymentsTable({ payments, shopSlug }: PendingPaymentsTabl
         if (data.purchaseCompleted) {
           toast.success(`Payment confirmed! Purchase completed. Waybill ${data.waybillNumber} generated.`)
         } else {
-          toast.success(`Payment confirmed! Invoice ${data.invoiceNumber} generated.`)
+          toast.success(`Payment confirmed! Receipt ${data.receiptNumber} generated.`)
         }
       } else {
         toast.error(result.error || "Failed to confirm payment")

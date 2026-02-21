@@ -4711,11 +4711,11 @@ export async function confirmBusinessPayment(
       },
     })
 
-    // Generate Progress Invoice for this payment
+    // Generate Receipt for this payment
     const year = new Date().getFullYear()
     const timestamp = Date.now().toString(36).toUpperCase()
     const random = Math.random().toString(36).substring(2, 6).toUpperCase()
-    const invoiceNumber = `INV-${year}-${timestamp}${random}`
+    const receiptNumber = `RCT-${year}-${timestamp}${random}`
 
     // Get collector info if available
     let collectorName: string | null = null
@@ -4804,7 +4804,7 @@ export async function confirmBusinessPayment(
     const shop = purchase.customer.shop
     const progressInvoice = await prisma.progressInvoice.create({
       data: {
-        invoiceNumber,
+        invoiceNumber: receiptNumber,
         paymentId: payment.id,
         purchaseId: purchase.id,
         paymentAmount: payment.amount,
@@ -4838,7 +4838,7 @@ export async function confirmBusinessPayment(
       entityType: "ProgressInvoice",
       entityId: progressInvoice.id,
       metadata: {
-        invoiceNumber,
+        receiptNumber,
         paymentId: payment.id,
         purchaseId: purchase.id,
         amount: Number(payment.amount),
@@ -4882,7 +4882,7 @@ export async function confirmBusinessPayment(
         const now = new Date()
         await sendCollectionReceipt({
           businessId: business.id,
-          receiptNumber: invoiceNumber,
+          receiptNumber,
           customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
           customerPhone: purchase.customer.phone,
           customerEmail: purchase.customer.email,

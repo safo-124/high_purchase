@@ -491,11 +491,11 @@ export async function confirmWalletTransaction(
         const invYear = new Date().getFullYear()
         const invTs = Date.now().toString(36).toUpperCase()
         const invRnd = Math.random().toString(36).substring(2, 6).toUpperCase()
-        const invoiceNumber = `INV-${invYear}-${invTs}${invRnd}`
+        const receiptNumber = `RCT-${invYear}-${invTs}${invRnd}`
 
         await tx.progressInvoice.create({
           data: {
-            invoiceNumber,
+            invoiceNumber: receiptNumber,
             paymentId: createdPayment.id,
             purchaseId: purchase.id,
             paymentAmount: payment.amountApplied,
@@ -754,11 +754,11 @@ export async function confirmAllCollectorWalletTransactions(
           const invYear = new Date().getFullYear()
           const invTs = Date.now().toString(36).toUpperCase()
           const invRnd = Math.random().toString(36).substring(2, 6).toUpperCase()
-          const invoiceNumber = `INV-${invYear}-${invTs}${invRnd}`
+          const receiptNumber = `RCT-${invYear}-${invTs}${invRnd}`
 
           await tx.progressInvoice.create({
             data: {
-              invoiceNumber,
+              invoiceNumber: receiptNumber,
               paymentId: createdPayment.id,
               purchaseId: purchase.id,
               paymentAmount: payment.amountApplied,

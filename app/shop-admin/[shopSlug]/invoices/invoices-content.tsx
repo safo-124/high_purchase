@@ -137,7 +137,7 @@ export function InvoicesContent({ invoices, shopSlug }: InvoicesContentProps) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search invoices, customers, purchase #..."
+            placeholder="Search receipts, customers, purchase #..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/50"
@@ -288,7 +288,7 @@ export function InvoicesContent({ invoices, shopSlug }: InvoicesContentProps) {
         )}
       </div>
 
-      {/* Invoice Modal */}
+      {/* Receipt Modal */}
       {selectedInvoiceId && (
         <ProgressInvoiceModal
           shopSlug={shopSlug}

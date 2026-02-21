@@ -39,7 +39,7 @@ export function ProgressInvoiceModal({ businessSlug, invoiceId, onClose }: Progr
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Invoice - ${invoice?.invoiceNumber}</title>
+          <title>Receipt - ${invoice?.invoiceNumber}</title>
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -111,7 +111,7 @@ export function ProgressInvoiceModal({ businessSlug, invoiceId, onClose }: Progr
           </div>
         ) : !invoice ? (
           <div className="text-center py-20">
-            <p className="text-gray-500">Invoice not found</p>
+            <p className="text-gray-500">Receipt not found</p>
           </div>
         ) : (
           <>
@@ -125,7 +125,7 @@ export function ProgressInvoiceModal({ businessSlug, invoiceId, onClose }: Progr
                   <p className="text-xs text-gray-500">Shop Admin: {invoice.shopAdminName}</p>
                 )}
                 <p className="text-xl font-bold mt-4 uppercase tracking-widest text-gray-800">
-                  Progress Invoice
+                  Payment Receipt
                 </p>
                 <p className="text-gray-600">{invoice.invoiceNumber}</p>
                 <div className="flex justify-center gap-2 mt-3">
@@ -295,7 +295,7 @@ export function ProgressInvoiceModal({ businessSlug, invoiceId, onClose }: Progr
               {/* Footer */}
               <div className="mt-10 text-center text-sm border-t border-gray-200 pt-5">
                 <p className="text-purple-600 font-medium">Thank you for your payment!</p>
-                <p className="text-gray-500">This is a computer-generated invoice</p>
+                <p className="text-gray-500">This is a computer-generated receipt</p>
                 <p className="mt-2 text-gray-400 text-xs">
                   Generated on {new Date().toLocaleString()}
                 </p>
@@ -322,7 +322,7 @@ export function ProgressInvoiceModal({ businessSlug, invoiceId, onClose }: Progr
                     d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
                   />
                 </svg>
-                Print Invoice
+                Print Receipt
               </button>
             </div>
           </>

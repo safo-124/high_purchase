@@ -3216,11 +3216,11 @@ export async function confirmPayment(
       },
     })
 
-    // Generate Progress Invoice for this payment
+    // Generate Receipt for this payment
     const year = new Date().getFullYear()
     const timestamp = Date.now().toString(36).toUpperCase()
     const random = Math.random().toString(36).substring(2, 6).toUpperCase()
-    const invoiceNumber = `INV-${year}-${timestamp}${random}`
+    const receiptNumber = `RCT-${year}-${timestamp}${random}`
 
     // Get collector info if available
     let collectorName: string | null = null
@@ -3310,7 +3310,7 @@ export async function confirmPayment(
     // Create the progress invoice
     const progressInvoice = await prisma.progressInvoice.create({
       data: {
-        invoiceNumber,
+        invoiceNumber: receiptNumber,
         paymentId: payment.id,
         purchaseId: purchase.id,
         paymentAmount: payment.amount,
@@ -3356,7 +3356,7 @@ export async function confirmPayment(
       entityType: "ProgressInvoice",
       entityId: progressInvoice.id,
       metadata: {
-        invoiceNumber,
+        receiptNumber,
         paymentId: payment.id,
         purchaseId: purchase.id,
         amount: Number(payment.amount),
@@ -3404,7 +3404,7 @@ export async function confirmPayment(
         const now = new Date()
         await sendCollectionReceipt({
           businessId: shop.businessId,
-          receiptNumber: invoiceNumber,
+          receiptNumber,
           customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
           customerPhone: purchase.customer.phone,
           customerEmail: purchase.customer.email,
@@ -3437,7 +3437,7 @@ export async function confirmPayment(
     try {
       const now = new Date()
       const receiptPdfBase64 = await generateReceiptPDF({
-        receiptNumber: invoiceNumber,
+        receiptNumber,
         purchaseNumber: purchase.purchaseNumber,
         customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
         customerPhone: purchase.customer.phone,
@@ -3464,7 +3464,7 @@ export async function confirmPayment(
         businessId: shop.businessId,
         shopId: shop.id,
         receiptPdfBase64,
-        receiptNumber: invoiceNumber,
+        receiptNumber,
         purchaseNumber: purchase.purchaseNumber,
         paymentAmount: Number(payment.amount),
         newBalance: Math.max(0, newOutstanding),
@@ -3486,7 +3486,7 @@ export async function confirmPayment(
       data: { 
         purchaseCompleted: isCompleted,
         invoiceId: progressInvoice.id,
-        invoiceNumber,
+        receiptNumber,
         waybillGenerated,
         waybillNumber,
       } 

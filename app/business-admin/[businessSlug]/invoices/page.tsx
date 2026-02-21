@@ -25,14 +25,14 @@ export default async function BusinessInvoicesPage({ params }: Props) {
     <div className="p-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">All Invoices</h1>
-        <p className="text-slate-400">Progress invoices from all shops under your business</p>
+        <h1 className="text-3xl font-bold text-white mb-2">Payment Receipts</h1>
+        <p className="text-slate-400">Receipts generated for each payment made by customers</p>
       </div>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="glass-card p-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Invoices</p>
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Receipts</p>
           <p className="text-2xl font-bold text-white">{totalInvoices}</p>
           <p className="text-xs text-slate-500 mt-1">Payment records</p>
         </div>
