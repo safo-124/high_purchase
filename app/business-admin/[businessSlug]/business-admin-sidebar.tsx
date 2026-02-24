@@ -357,7 +357,7 @@ export function BusinessAdminSidebar({
       )
     )
     if (currentGroup && !expandedGroups.includes(currentGroup.name)) {
-      setExpandedGroups(prev => [...prev, currentGroup.name])
+      setExpandedGroups([currentGroup.name])
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
@@ -378,7 +378,7 @@ export function BusinessAdminSidebar({
     setExpandedGroups(prev => 
       prev.includes(groupName) 
         ? prev.filter(g => g !== groupName)
-        : [...prev, groupName]
+        : [groupName]
     )
   }
 
