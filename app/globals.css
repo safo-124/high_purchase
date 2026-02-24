@@ -503,6 +503,32 @@
   background-clip: text;
 }
 
+/* Hero Text Gradient — brighter, more vivid */
+.text-gradient-hero {
+  background: linear-gradient(135deg, #e0d4ff 0%, #c4b5fd 30%, #a78bfa 60%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Emerald Text Gradient — for accounting module */
+.text-gradient-emerald {
+  background: linear-gradient(135deg, #a7f3d0 0%, #6ee7b7 30%, #34d399 60%, #10b981 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Slow pulse animation for glows */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 /* ============================================
    LANDING PAGE ANIMATIONS
    ============================================ */
