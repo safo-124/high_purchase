@@ -574,3 +574,147 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.15);
 }
+
+/* ============================================
+   LIGHT MODE OVERRIDES
+   ============================================ */
+
+.light-mode .bg-mesh {
+  background: 
+    radial-gradient(at 40% 20%, rgba(120, 80, 220, 0.06) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, rgba(80, 120, 220, 0.05) 0px, transparent 50%),
+    linear-gradient(135deg, #f8f7ff 0%, #f0eef8 25%, #edf1ff 50%, #f3eef8 75%, #eff2ff 100%);
+}
+
+.light-mode .orb {
+  opacity: 0.3;
+}
+
+.light-mode .orb-1 {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(59, 130, 246, 0.08));
+}
+
+.light-mode .orb-2 {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.08), rgba(139, 92, 246, 0.1));
+}
+
+.light-mode .orb-3 {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.06), rgba(59, 130, 246, 0.08));
+}
+
+.light-mode .glass-card {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(255, 255, 255, 0.6) 100%
+  );
+  border: 1px solid rgba(139, 92, 246, 0.12);
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+}
+
+.light-mode .glass-card:hover {
+  border-color: rgba(139, 92, 246, 0.2);
+  box-shadow: 
+    0 8px 24px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+}
+
+.light-mode .glass-header {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(248, 247, 255, 0.88) 100%
+  );
+  border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Light mode text colors */
+.light-mode .text-white {
+  color: #1e1b4b !important;
+}
+
+.light-mode .text-slate-300 {
+  color: #475569 !important;
+}
+
+.light-mode .text-slate-400 {
+  color: #64748b !important;
+}
+
+.light-mode .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+.light-mode .text-slate-600 {
+  color: #64748b !important;
+}
+
+.light-mode .text-purple-300 {
+  color: #7c3aed !important;
+}
+
+.light-mode .text-purple-400 {
+  color: #7c3aed !important;
+}
+
+/* Light mode nav */
+.light-mode .nav-link:hover {
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.light-mode .nav-link.active {
+  background: rgba(139, 92, 246, 0.1);
+  color: #7c3aed !important;
+}
+
+/* Light mode inputs */
+.light-mode .glass-input,
+.light-mode input[class*="bg-white/5"],
+.light-mode textarea[class*="bg-white/5"],
+.light-mode select[class*="bg-white/5"] {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-color: rgba(139, 92, 246, 0.15) !important;
+  color: #1e1b4b !important;
+}
+
+.light-mode .glass-input::placeholder,
+.light-mode input::placeholder,
+.light-mode textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Light mode scrollbar */
+.light-mode ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.light-mode ::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.15);
+}
+
+.light-mode ::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.25);
+}
+
+/* Light mode table */
+.light-mode tr:hover {
+  background: rgba(139, 92, 246, 0.03) !important;
+}
+
+.light-mode th {
+  color: #64748b !important;
+}
+
+.light-mode td {
+  border-color: rgba(139, 92, 246, 0.06) !important;
+}
+
+/* Light mode logo */
+.light-mode .logo-glow {
+  box-shadow: 
+    0 4px 16px rgba(139, 92, 246, 0.25),
+    0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+}

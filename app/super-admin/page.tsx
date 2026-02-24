@@ -1,6 +1,8 @@
 import { requireSuperAdmin } from "../../lib/auth"
 import Link from "next/link"
 import { LogoutButton } from "./logout-button"
+import { MobileNav } from "./mobile-nav"
+import { ThemeToggle } from "./theme-toggle"
 import {
   getSuperAdminStats,
   getRevenueChartData,
@@ -8,6 +10,7 @@ import {
   getPlatformHealth,
   getPlatformAlerts,
 } from "./actions"
+import { getDashboardQuickStats } from "./analytics-actions"
 import {
   RevenueChart,
   PurchaseTypePieChart,
@@ -15,15 +18,51 @@ import {
   RegionBarChart,
 } from "./dashboard-charts"
 
+const NAV_SECTIONS = [
+  { label: "Core", links: [
+    { href: "/super-admin", label: "Dashboard" },
+    { href: "/super-admin/businesses", label: "Businesses" },
+    { href: "/super-admin/users", label: "Users" },
+    { href: "/super-admin/audit-logs", label: "Audit Logs" },
+  ]},
+  { label: "Operations", links: [
+    { href: "/super-admin/analytics", label: "Analytics" },
+    { href: "/super-admin/health", label: "Health" },
+    { href: "/super-admin/revenue", label: "Revenue" },
+  ]},
+  { label: "Communication", links: [
+    { href: "/super-admin/messages", label: "Messages" },
+    { href: "/super-admin/announcements", label: "Announcements" },
+    { href: "/super-admin/tickets", label: "Tickets" },
+    { href: "/super-admin/email-templates", label: "Templates" },
+  ]},
+  { label: "Billing", links: [
+    { href: "/super-admin/subscriptions", label: "Subscriptions" },
+    { href: "/super-admin/coupons", label: "Coupons" },
+    { href: "/super-admin/invoices", label: "Invoices" },
+  ]},
+  { label: "System", links: [
+    { href: "/super-admin/registrations", label: "Registrations" },
+    { href: "/super-admin/settings", label: "Settings" },
+    { href: "/super-admin/login-activity", label: "Login Log" },
+    { href: "/super-admin/permissions", label: "Permissions" },
+    { href: "/super-admin/site-content", label: "Site Content" },
+    { href: "/super-admin/export", label: "Export" },
+  ]},
+]
+
+const ALL_NAV_LINKS = NAV_SECTIONS.flatMap(s => s.links)
+
 export default async function SuperAdminDashboard() {
   const user = await requireSuperAdmin()
 
-  const [stats, chartData, topBusinesses, health, alerts] = await Promise.all([
+  const [stats, chartData, topBusinesses, health, alerts, quickStats] = await Promise.all([
     getSuperAdminStats(),
     getRevenueChartData(),
     getTopBusinesses(),
     getPlatformHealth(),
     getPlatformAlerts(),
+    getDashboardQuickStats(),
   ])
 
   const formatGHS = (n: number) =>
@@ -51,6 +90,7 @@ export default async function SuperAdminDashboard() {
         <div className="w-full px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
+              <MobileNav links={ALL_NAV_LINKS} activeHref="/super-admin" sections={NAV_SECTIONS} />
               <div className="w-11 h-11 rounded-xl logo-glow flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -61,17 +101,22 @@ export default async function SuperAdminDashboard() {
                 <p className="text-xs text-slate-400">Super Admin Portal</p>
               </div>
             </div>
-            <nav className="hidden md:flex items-center gap-2">
-              <Link href="/super-admin" className="nav-link active text-white text-sm font-medium">Dashboard</Link>
-              <Link href="/super-admin/businesses" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Businesses</Link>
-              <Link href="/super-admin/users" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Users</Link>
-              <Link href="/super-admin/audit-logs" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Audit Logs</Link>
-              <Link href="/super-admin/messages" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Messages</Link>
-              <Link href="/super-admin/registrations" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Registrations</Link>
-              <Link href="/super-admin/subscriptions" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Subscriptions</Link>
-              <Link href="/super-admin/site-content" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Site Content</Link>
+            <nav className="hidden lg:flex items-center gap-1 flex-wrap">
+              {NAV_SECTIONS.map(section => (
+                <div key={section.label} className="flex items-center">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider px-1 hidden xl:inline">{section.label}</span>
+                  {section.links.map(link => (
+                    <Link key={link.href} href={link.href}
+                      className={`nav-link text-xs font-medium px-2 py-1 ${
+                        link.href === "/super-admin" ? "active text-white" : "text-slate-300 hover:text-white"
+                      }`}>{link.label}</Link>
+                  ))}
+                  <div className="w-px h-4 bg-white/10 mx-1 hidden xl:block" />
+                </div>
+              ))}
             </nav>
             <div className="flex items-center gap-4">
+              <ThemeToggle />
               <div className="hidden sm:block text-right">
                 <p className="text-sm font-medium text-white">{user.name}</p>
                 <p className="text-xs text-slate-400">{user.email}</p>
@@ -97,6 +142,64 @@ export default async function SuperAdminDashboard() {
             Welcome back, <span className="text-gradient">{user.name?.split(" ")[0]}</span>
           </h2>
           <p className="text-slate-400 text-lg">Here&apos;s what&apos;s happening with your platform today.</p>
+        </div>
+
+        {/* ===== Quick Action Stats ===== */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-10">
+          <Link href="/super-admin/messages" className="glass-card p-4 hover:bg-white/5 transition-colors group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-lg">✉️</span>
+              {quickStats.unreadMessages > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">{quickStats.unreadMessages}</span>
+              )}
+            </div>
+            <p className="text-xl font-bold text-white">{quickStats.unreadMessages}</p>
+            <p className="text-[11px] text-slate-400 group-hover:text-white transition-colors">Unread Messages</p>
+          </Link>
+          <Link href="/super-admin/registrations" className="glass-card p-4 hover:bg-white/5 transition-colors group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-lg">📋</span>
+              {quickStats.pendingRegistrations > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">{quickStats.pendingRegistrations}</span>
+              )}
+            </div>
+            <p className="text-xl font-bold text-white">{quickStats.pendingRegistrations}</p>
+            <p className="text-[11px] text-slate-400 group-hover:text-white transition-colors">Pending Registrations</p>
+          </Link>
+          <Link href="/super-admin/tickets" className="glass-card p-4 hover:bg-white/5 transition-colors group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-lg">🎫</span>
+              {quickStats.openTickets > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">{quickStats.openTickets}</span>
+              )}
+            </div>
+            <p className="text-xl font-bold text-white">{quickStats.openTickets}</p>
+            <p className="text-[11px] text-slate-400 group-hover:text-white transition-colors">Open Tickets</p>
+          </Link>
+          <Link href="/super-admin/subscriptions" className="glass-card p-4 hover:bg-white/5 transition-colors group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-lg">⏰</span>
+              {quickStats.expiringSubs > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">{quickStats.expiringSubs}</span>
+              )}
+            </div>
+            <p className="text-xl font-bold text-white">{quickStats.expiringSubs}</p>
+            <p className="text-[11px] text-slate-400 group-hover:text-white transition-colors">Expiring Subs (7d)</p>
+          </Link>
+          <Link href="/super-admin/revenue" className="glass-card p-4 hover:bg-white/5 transition-colors group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-lg">❌</span>
+            </div>
+            <p className="text-xl font-bold text-white">{quickStats.failedPayments}</p>
+            <p className="text-[11px] text-slate-400 group-hover:text-white transition-colors">Failed Payments (7d)</p>
+          </Link>
+          <Link href="/super-admin/login-activity" className="glass-card p-4 hover:bg-white/5 transition-colors group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-lg">🔐</span>
+            </div>
+            <p className="text-xl font-bold text-white">{quickStats.todayLogins}</p>
+            <p className="text-[11px] text-slate-400 group-hover:text-white transition-colors">Logins Today</p>
+          </Link>
         </div>
 
         {/* ===== Financial Overview ===== */}

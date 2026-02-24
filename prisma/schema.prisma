@@ -1837,3 +1837,253 @@ model SiteContent {
   @@index([key])
   @@index([group])
 }
+
+// ============================================================================
+// ANNOUNCEMENTS & BROADCASTS
+// ============================================================================
+
+model Announcement {
+  id              String             @id @default(cuid())
+  title           String
+  content         String             @db.Text
+  type            AnnouncementType   @default(IN_APP)
+  targetAudience  TargetAudience     @default(ALL)
+  targetValue     String?            // Plan ID or Role name when targeting specific
+  priority        AnnouncementPriority @default(NORMAL)
+  isActive        Boolean            @default(true)
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+  sentById        String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([targetAudience])
+}
+
+enum AnnouncementType {
+  IN_APP
+  EMAIL
+  BOTH
+}
+
+enum TargetAudience {
+  ALL
+  BUSINESS_ADMINS
+  SHOP_ADMINS
+  COLLECTORS
+  CUSTOMERS
+  PLAN
+}
+
+enum AnnouncementPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+// ============================================================================
+// EMAIL TEMPLATES
+// ============================================================================
+
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  subject     String
+  htmlContent String   @db.Text
+  variables   String?  @db.Text // JSON array of variable names e.g. ["name", "amount"]
+  category    String   @default("general") // welcome, rejection, reminder, reset, notification
+  isActive    Boolean  @default(true)
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+}
+
+// ============================================================================
+// SUPPORT TICKETS
+// ============================================================================
+
+model SupportTicket {
+  id            String         @id @default(cuid())
+  ticketNumber  String         @unique
+  subject       String
+  description   String         @db.Text
+  priority      TicketPriority @default(MEDIUM)
+  status        TicketStatus   @default(OPEN)
+  category      String         @default("general") // billing, technical, account, general
+  contactMessageId String?     // Linked from a contact message
+  businessId    String?        // Related business
+  createdById   String?        // User who created it (or null for anonymous)
+  assignedToId  String?        // Admin assigned to handle
+  resolvedAt    DateTime?
+  closedAt      DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  comments      TicketComment[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([createdAt])
+}
+
+model TicketComment {
+  id         String        @id @default(cuid())
+  ticketId   String
+  authorId   String
+  content    String        @db.Text
+  isInternal Boolean       @default(false) // Internal notes not visible to user
+  createdAt  DateTime      @default(now())
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([authorId])
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING
+  RESOLVED
+  CLOSED
+}
+
+// ============================================================================
+// COUPONS & PROMO CODES
+// ============================================================================
+
+model Coupon {
+  id            String       @id @default(cuid())
+  code          String       @unique
+  description   String?
+  discountType  DiscountType
+  discountValue Decimal      @db.Decimal(10, 2) // Percentage or fixed amount
+  appliesTo     String?      // Subscription plan ID, null = all plans
+  minAmount     Decimal?     @db.Decimal(10, 2)
+  maxDiscount   Decimal?     @db.Decimal(10, 2) // Cap for percentage discounts
+  validFrom     DateTime
+  validUntil    DateTime
+  maxUses       Int          @default(0) // 0 = unlimited
+  usedCount     Int          @default(0)
+  isActive      Boolean      @default(true)
+  createdById   String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([code])
+  @@index([isActive])
+  @@index([validFrom, validUntil])
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+// ============================================================================
+// SUBSCRIPTION INVOICES
+// ============================================================================
+
+model SubscriptionInvoice {
+  id              String        @id @default(cuid())
+  invoiceNumber   String        @unique
+  subscriptionId  String
+  businessId      String
+  businessName    String
+  planName        String
+  amount          Decimal       @db.Decimal(10, 2)
+  currency        String        @default("GHS")
+  tax             Decimal       @default(0) @db.Decimal(10, 2)
+  totalAmount     Decimal       @db.Decimal(10, 2)
+  status          InvoiceStatus @default(DRAFT)
+  dueDate         DateTime
+  paidAt          DateTime?
+  notes           String?       @db.Text
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([subscriptionId])
+  @@index([businessId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+  VOID
+}
+
+// ============================================================================
+// LOGIN ACTIVITY LOG
+// ============================================================================
+
+model LoginActivity {
+  id            String   @id @default(cuid())
+  userId        String?
+  email         String
+  userName      String?
+  role          String?
+  ipAddress     String?
+  userAgent     String?  @db.Text
+  success       Boolean
+  failureReason String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([email])
+  @@index([success])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// ADMIN PERMISSIONS (Sub-Admin / Role-Based)
+// ============================================================================
+
+model AdminPermission {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  userName    String?
+  userEmail   String?
+  permissions String   @db.Text // JSON object with granular permission flags
+  grantedBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ============================================================================
+// SYSTEM SETTINGS
+// ============================================================================
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  type      String   @default("string") // string, number, boolean, json
+  label     String?
+  group     String   @default("general") // general, security, billing, notifications, maintenance
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@index([group])
+}
