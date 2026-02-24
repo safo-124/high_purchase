@@ -2682,6 +2682,63 @@ export async function recordPayment(
       return payment
     })
 
+    // Generate ProgressInvoice (receipt) for auto-confirmed payments
+    let receiptNumber: string | null = null
+    if (autoConfirm) {
+      try {
+        const year = new Date().getFullYear()
+        const timestamp = Date.now().toString(36).toUpperCase()
+        const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+        receiptNumber = `RCT-${year}-${timestamp}${random}`
+
+        const previousBalance = Number(purchase.outstandingBalance)
+        const newAmountPaid = Number(purchase.amountPaid) + payload.amount
+        const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
+        const isCompleted = newOutstanding <= 0
+
+        // Get business name
+        const business = await prisma.business.findUnique({
+          where: { id: shop.businessId },
+        })
+
+        await prisma.progressInvoice.create({
+          data: {
+            invoiceNumber: receiptNumber,
+            paymentId: result.id,
+            purchaseId: purchase.id,
+            paymentAmount: payload.amount,
+            previousBalance,
+            newBalance: Math.max(0, newOutstanding),
+            totalPurchaseAmount: purchase.totalAmount,
+            totalAmountPaid: newAmountPaid,
+            collectorId: payload.collectorId || null,
+            collectorName: null,
+            confirmedById: membership?.id || null,
+            confirmedByName: user.name,
+            recordedByRole: "SHOP_ADMIN",
+            recordedByName: user.name,
+            paymentMethod: payload.paymentMethod,
+            customerName: `${purchase.customer.firstName} ${purchase.customer.lastName}`,
+            customerPhone: purchase.customer.phone,
+            customerAddress: purchase.customer.address,
+            purchaseNumber: purchase.purchaseNumber,
+            purchaseType: purchase.purchaseType,
+            shopId: shop.id,
+            shopName: shop.name,
+            businessId: shop.businessId,
+            businessName: business?.name || shop.name,
+            isPurchaseCompleted: isCompleted,
+            waybillGenerated: false,
+            waybillNumber: null,
+            notes: result.notes,
+          },
+        })
+      } catch (invoiceError) {
+        console.error("Failed to create progress invoice:", invoiceError)
+        // Don't fail the payment if invoice creation fails
+      }
+    }
+
     await createAuditLog({
       actorUserId: user.id,
       action: autoConfirm ? "PAYMENT_RECORDED_AND_CONFIRMED" : "PAYMENT_RECORDED_PENDING",
@@ -2696,6 +2753,7 @@ export async function recordPayment(
         recordedBy: user.name,
         awaitingConfirmation: !autoConfirm,
         isWalletPayment,
+        receiptNumber,
       },
     })
 
@@ -2732,6 +2790,7 @@ export async function recordPayment(
     revalidatePath(`/shop-admin/${shopSlug}/customers`)
     revalidatePath(`/shop-admin/${shopSlug}/purchases`)
     revalidatePath(`/shop-admin/${shopSlug}/pending-payments`)
+    revalidatePath(`/shop-admin/${shopSlug}/receipts`)
 
     return {
       success: true,
@@ -2739,6 +2798,7 @@ export async function recordPayment(
         paymentId: result.id,
         awaitingConfirmation: !autoConfirm,
         isWalletPayment,
+        receiptNumber,
       },
     }
   } catch (error) {
