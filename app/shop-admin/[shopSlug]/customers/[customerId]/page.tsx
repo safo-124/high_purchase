@@ -42,6 +42,7 @@ async function getCustomerDetails(shopSlug: string, customerId: string) {
     createdAt: customer.createdAt,
     assignedCollectorName: customer.assignedCollector?.user.name || null,
     walletBalance: Number(customer.walletBalance),
+    shopName: shop.name,
   }
 }
 
@@ -185,6 +186,10 @@ export default async function CustomerDetailPage({ params }: CustomerDetailPageP
           customerId={customer.id}
           products={products}
           walletBalance={customer.walletBalance}
+          customerName={`${customer.firstName} ${customer.lastName}`}
+          customerPhone={customer.phone}
+          customerEmail={customer.email}
+          shopName={customer.shopName}
         />
       </main>
     </div>

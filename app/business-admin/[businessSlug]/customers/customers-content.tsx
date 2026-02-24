@@ -4,6 +4,7 @@ import { useState, useTransition, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { recordPaymentAsBusinessAdmin, getBusinessCustomerPurchases, createBusinessCustomer, updateBusinessCustomer, deleteBusinessCustomer, updateBusinessPurchaseItems, getBusinessShopProducts, getBusinessPurchaseDetails, BusinessShopProduct, BusinessPurchaseDetails } from "../../actions"
+import { generateReceiptPDF, ReceiptPDFData } from "@/lib/pdf-generator"
 
 interface Customer {
   id: string
@@ -337,6 +338,46 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
     }
   }
 
+  // Helper to generate and download a receipt PDF after a confirmed payment
+  const downloadReceipt = (purchase: Purchase, paidAmount: number, newAmountPaid: number) => {
+    const customer = paymentModal.customer
+    if (!customer) return
+    const now = new Date()
+    const newOutstanding = purchase.totalAmount - newAmountPaid
+    const receiptData: ReceiptPDFData = {
+      receiptNumber: `RCP-${Date.now()}`,
+      purchaseNumber: purchase.purchaseNumber,
+      customerName: customer.fullName,
+      customerPhone: customer.phone,
+      customerEmail: customer.email,
+      shopName: customer.shopName,
+      businessName: businessSlug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+      paymentAmount: paidAmount,
+      paymentMethod: paymentMethod.replace(/_/g, " "),
+      reference: paymentReference || null,
+      previousBalance: purchase.outstandingBalance,
+      newBalance: Math.max(0, newOutstanding),
+      totalPurchaseAmount: purchase.totalAmount,
+      totalAmountPaid: newAmountPaid,
+      paymentDate: now.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+      paymentTime: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+      isFullyPaid: newOutstanding <= 0,
+    }
+    try {
+      const pdfDataUri = generateReceiptPDF(receiptData)
+      // Trigger download
+      const link = document.createElement("a")
+      link.href = pdfDataUri
+      link.download = `Receipt_${purchase.purchaseNumber}_${now.toISOString().split("T")[0]}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (err) {
+      console.error("Failed to generate receipt:", err)
+      toast.error("Payment recorded but receipt generation failed")
+    }
+  }
+
   const handleRecordPayment = async () => {
     if (!selectedPurchaseId || !paymentAmount) {
       toast.error("Please select a purchase and enter an amount")
@@ -370,6 +411,7 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
         let remainingAmount = amount
         let successCount = 0
         let errorMessage = ""
+        const paidPurchases: { purchase: Purchase; paidAmount: number; newAmountPaid: number }[] = []
         
         // Apply payments to purchases in order (oldest first based on order in array)
         for (const purchase of paymentModal.purchases) {
@@ -388,6 +430,11 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
           if (result.success) {
             successCount++
             remainingAmount -= paymentForThis
+            paidPurchases.push({
+              purchase,
+              paidAmount: paymentForThis,
+              newAmountPaid: purchase.amountPaid + paymentForThis,
+            })
           } else {
             errorMessage = result.error || "Failed to record payment"
             break
@@ -396,6 +443,10 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
         
         if (successCount > 0) {
           toast.success(`Payment applied to ${successCount} purchase(s)`)
+          // Generate receipts for each purchase that was paid
+          for (const { purchase, paidAmount, newAmountPaid } of paidPurchases) {
+            downloadReceipt(purchase, paidAmount, newAmountPaid)
+          }
           setPaymentModal({ open: false, customer: null, purchases: [], loading: false })
           router.refresh()
         } else if (errorMessage) {
@@ -422,6 +473,10 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
       
       if (result.success) {
         toast.success("Payment recorded and confirmed")
+        // Generate and download receipt
+        if (selectedPurchase) {
+          downloadReceipt(selectedPurchase, amount, selectedPurchase.amountPaid + amount)
+        }
         setPaymentModal({ open: false, customer: null, purchases: [], loading: false })
         router.refresh()
       } else {

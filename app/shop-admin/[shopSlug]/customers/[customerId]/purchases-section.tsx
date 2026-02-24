@@ -4,6 +4,7 @@ import { useState } from "react"
 import { PurchaseData, recordPayment, updatePurchaseItems, ProductForSale } from "../../../actions"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { generateReceiptPDF, ReceiptPDFData } from "@/lib/pdf-generator"
 
 interface PurchasesSectionProps {
   purchases: PurchaseData[]
@@ -11,6 +12,10 @@ interface PurchasesSectionProps {
   customerId: string
   products: ProductForSale[]
   walletBalance?: number
+  customerName?: string
+  customerPhone?: string
+  customerEmail?: string | null
+  shopName?: string
 }
 
 interface EditCartItem {
@@ -29,7 +34,7 @@ const statusStyles: Record<string, { bg: string; text: string; label: string }> 
   DEFAULTED: { bg: "bg-red-500/20", text: "text-red-400", label: "Defaulted" },
 }
 
-export function PurchasesSection({ purchases, shopSlug, products, walletBalance = 0 }: PurchasesSectionProps) {
+export function PurchasesSection({ purchases, shopSlug, products, walletBalance = 0, customerName = "", customerPhone = "", customerEmail, shopName = "" }: PurchasesSectionProps) {
   const router = useRouter()
   const [expandedPurchase, setExpandedPurchase] = useState<string | null>(null)
   const [paymentModal, setPaymentModal] = useState<{ open: boolean; purchase: PurchaseData | null }>({
@@ -179,6 +184,42 @@ export function PurchasesSection({ purchases, shopSlug, products, walletBalance 
         toast.success("Payment recorded - awaiting confirmation")
       } else {
         toast.success("Payment recorded and confirmed")
+        // Generate and download receipt for confirmed payments
+        const purchase = paymentModal.purchase
+        const now = new Date()
+        const newAmountPaid = purchase.amountPaid + amount
+        const newOutstanding = purchase.totalAmount - newAmountPaid
+        try {
+          const receiptData: ReceiptPDFData = {
+            receiptNumber: `RCP-${Date.now()}`,
+            purchaseNumber: purchase.purchaseNumber,
+            customerName: customerName || purchase.customerName,
+            customerPhone: customerPhone,
+            customerEmail: customerEmail,
+            shopName: shopName || shopSlug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+            businessName: "",
+            paymentAmount: amount,
+            paymentMethod: paymentMethod.replace(/_/g, " "),
+            reference: paymentReference || null,
+            previousBalance: purchase.outstandingBalance,
+            newBalance: Math.max(0, newOutstanding),
+            totalPurchaseAmount: purchase.totalAmount,
+            totalAmountPaid: newAmountPaid,
+            paymentDate: now.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+            paymentTime: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+            isFullyPaid: newOutstanding <= 0,
+          }
+          const pdfDataUri = generateReceiptPDF(receiptData)
+          const link = document.createElement("a")
+          link.href = pdfDataUri
+          link.download = `Receipt_${purchase.purchaseNumber}_${now.toISOString().split("T")[0]}.pdf`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+        } catch (err) {
+          console.error("Failed to generate receipt:", err)
+          toast.error("Payment recorded but receipt generation failed")
+        }
       }
       setPaymentModal({ open: false, purchase: null })
       setPaymentAmount("")
