@@ -276,7 +276,7 @@ export function CollectorDashboardContent({ shopSlug, dashboard }: Props) {
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs sm:text-sm lg:text-base text-slate-400 font-medium">Wallet Overview</p>
             <Link
-              href={`/collector/${shopSlug}/wallets`}
+              href={`/collector/${shopSlug}/wallet`}
               className="text-[10px] lg:text-xs text-cyan-400 hover:text-cyan-300"
             >
               View All
