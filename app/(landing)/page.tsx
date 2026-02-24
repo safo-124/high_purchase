@@ -613,6 +613,363 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* ===== REAL ANALYTICS & CHARTS SHOWCASE ===== */}
+      <section className="relative z-10 py-20 sm:py-28 px-4 sm:px-6 lg:px-8 border-t border-white/5 overflow-hidden">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-200 h-200 bg-linear-to-br from-cyan-600/8 via-purple-600/5 to-blue-600/8 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="max-w-7xl mx-auto relative">
+          <div className="text-center mb-14 sm:mb-18">
+            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-xs sm:text-sm text-cyan-300 font-medium mb-4">&#128200; Real-Time Analytics</span>
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-5">
+              Powerful Charts &amp; <span className="text-gradient-hero">Live Insights</span>
+            </h2>
+            <p className="text-base sm:text-lg text-slate-400 max-w-2xl mx-auto">
+              Every metric visualized beautifully. Revenue trends, collection health, payment breakdowns, and business performance &mdash; all updating in real time.
+            </p>
+          </div>
+
+          {/* Row 1: Revenue Trend (large) + Sale Type Pie */}
+          <div className="grid lg:grid-cols-3 gap-6 mb-6">
+            {/* Revenue Trend - Area Chart */}
+            <div className="lg:col-span-2 glass-card p-6 group hover:border-cyan-500/20 transition-all">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Revenue Trend</h3>
+                  <p className="text-sm text-slate-400">Last 6 months performance</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-cyan-500" />
+                    <span className="text-xs text-slate-400">Revenue</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-purple-500" />
+                    <span className="text-xs text-slate-400">Purchases</span>
+                  </div>
+                </div>
+              </div>
+              <div className="relative h-64">
+                {/* Y-axis labels */}
+                <div className="absolute left-0 top-0 bottom-8 w-10 flex flex-col justify-between text-right pr-2">
+                  {["3k", "2k", "1k", "0"].map((v) => (
+                    <span key={v} className="text-[10px] text-slate-600">{v}</span>
+                  ))}
+                </div>
+                {/* Grid lines */}
+                <div className="absolute left-10 right-0 top-0 bottom-8">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="absolute left-0 right-0 border-t border-white/5" style={{ top: `${(i / 3) * 100}%` }} />
+                  ))}
+                </div>
+                {/* Chart SVG */}
+                <svg viewBox="0 0 500 200" className="absolute left-10 right-0 top-0 bottom-8 w-[calc(100%-40px)] h-[calc(100%-32px)]" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="chartRevGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.35" />
+                      <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.02" />
+                    </linearGradient>
+                    <linearGradient id="chartPurGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
+                      <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.02" />
+                    </linearGradient>
+                  </defs>
+                  {/* Revenue area */}
+                  <path d="M0,180 C30,175 60,170 83,165 C110,158 140,145 167,130 C200,112 230,90 250,75 C280,55 310,45 333,35 C370,20 420,12 500,8 L500,200 L0,200 Z" fill="url(#chartRevGrad)" />
+                  <path d="M0,180 C30,175 60,170 83,165 C110,158 140,145 167,130 C200,112 230,90 250,75 C280,55 310,45 333,35 C370,20 420,12 500,8" fill="none" stroke="#06b6d4" strokeWidth="2.5" strokeLinejoin="round" />
+                  {/* Purchase area */}
+                  <path d="M0,190 C30,188 60,185 83,182 C110,178 140,172 167,165 C200,155 230,140 250,128 C280,112 310,100 333,88 C370,70 420,55 500,45 L500,200 L0,200 Z" fill="url(#chartPurGrad)" />
+                  <path d="M0,190 C30,188 60,185 83,182 C110,178 140,172 167,165 C200,155 230,140 250,128 C280,112 310,100 333,88 C370,70 420,55 500,45" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinejoin="round" strokeDasharray="6 3" />
+                  {/* Data points on revenue line */}
+                  {[
+                    { x: 0, y: 180 }, { x: 83, y: 165 }, { x: 167, y: 130 },
+                    { x: 250, y: 75 }, { x: 333, y: 35 }, { x: 500, y: 8 },
+                  ].map((p, i) => (
+                    <circle key={i} cx={p.x} cy={p.y} r="4" fill="#0f172a" stroke="#06b6d4" strokeWidth="2" />
+                  ))}
+                </svg>
+                {/* X-axis labels */}
+                <div className="absolute left-10 right-0 bottom-0 flex justify-between">
+                  {["Sep", "Oct", "Nov", "Dec", "Jan", "Feb"].map((m) => (
+                    <span key={m} className="text-[10px] text-slate-600">{m}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Sale Type Distribution - Donut */}
+            <div className="glass-card p-6 group hover:border-cyan-500/20 transition-all">
+              <div className="mb-5">
+                <h3 className="text-lg font-semibold text-white">Sale Type Distribution</h3>
+                <p className="text-sm text-slate-400">Breakdown by sale type</p>
+              </div>
+              <div className="flex items-center justify-center mb-6">
+                <div className="relative w-44 h-44">
+                  <svg className="w-44 h-44" viewBox="0 0 180 180">
+                    {/* Background ring */}
+                    <circle cx="90" cy="90" r="70" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="22" />
+                    {/* Credit sales - large slice */}
+                    <circle cx="90" cy="90" r="70" fill="none" stroke="#06b6d4" strokeWidth="22" strokeDasharray="352" strokeDashoffset="88" strokeLinecap="round" className="-rotate-90 origin-center" style={{ transformOrigin: '90px 90px' }} />
+                    {/* Cash sales */}
+                    <circle cx="90" cy="90" r="70" fill="none" stroke="#10b981" strokeWidth="22" strokeDasharray="88 352" strokeDashoffset="-264" strokeLinecap="round" className="-rotate-90 origin-center" style={{ transformOrigin: '90px 90px' }} />
+                    {/* Layaway */}
+                    <circle cx="90" cy="90" r="70" fill="none" stroke="#f59e0b" strokeWidth="22" strokeDasharray="44 396" strokeDashoffset="-176" strokeLinecap="round" className="-rotate-90 origin-center" style={{ transformOrigin: '90px 90px' }} />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-bold text-white">100%</span>
+                    <span className="text-xs text-slate-500">of sales</span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2.5">
+                {[
+                  { name: "Credit Sales", value: "60%", color: "bg-cyan-500" },
+                  { name: "Cash Sales", value: "25%", color: "bg-emerald-500" },
+                  { name: "Layaway Sales", value: "15%", color: "bg-amber-500" },
+                ].map((item) => (
+                  <div key={item.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${item.color}`} />
+                      <span className="text-sm text-slate-300">{item.name}</span>
+                    </div>
+                    <span className="text-sm font-medium text-white">{item.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2: Payment Methods Bar Chart + Purchase Status + Wallet Overview */}
+          <div className="grid lg:grid-cols-3 gap-6 mb-6">
+            {/* Payment Methods - Horizontal Bar Chart */}
+            <div className="glass-card p-6 group hover:border-purple-500/20 transition-all">
+              <div className="mb-5">
+                <h3 className="text-lg font-semibold text-white">Payment Methods</h3>
+                <p className="text-sm text-slate-400">How customers pay</p>
+              </div>
+              <div className="space-y-5">
+                {[
+                  { name: "Cash", value: 4, max: 5, color: "from-emerald-500 to-green-400", pct: "80%" },
+                  { name: "Mobile Money", value: 3, max: 5, color: "from-cyan-500 to-blue-400", pct: "60%" },
+                  { name: "Bank Transfer", value: 1, max: 5, color: "from-purple-500 to-violet-400", pct: "20%" },
+                  { name: "Wallet", value: 2, max: 5, color: "from-amber-500 to-orange-400", pct: "40%" },
+                ].map((method) => (
+                  <div key={method.name}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm text-slate-300">{method.name}</span>
+                      <span className="text-xs font-medium text-slate-400">{method.value}</span>
+                    </div>
+                    <div className="h-3 rounded-full bg-white/5 overflow-hidden">
+                      <div className={`h-full rounded-full bg-linear-to-r ${method.color} transition-all duration-700`} style={{ width: method.pct }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Purchase Status */}
+            <div className="glass-card p-6 group hover:border-blue-500/20 transition-all">
+              <div className="mb-5">
+                <h3 className="text-lg font-semibold text-white">Purchase Status</h3>
+                <p className="text-sm text-slate-400">Current purchase state overview</p>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mb-5">
+                <div className="text-center p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20">
+                  <p className="text-3xl font-bold text-blue-400">1</p>
+                  <p className="text-xs text-slate-400 mt-1">Active</p>
+                </div>
+                <div className="text-center p-4 rounded-2xl bg-green-500/10 border border-green-500/20">
+                  <p className="text-3xl font-bold text-green-400">0</p>
+                  <p className="text-xs text-slate-400 mt-1">Completed</p>
+                </div>
+                <div className="text-center p-4 rounded-2xl bg-red-500/10 border border-red-500/20">
+                  <p className="text-3xl font-bold text-red-400">0</p>
+                  <p className="text-xs text-slate-400 mt-1">Overdue</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-center">
+                <div className="relative w-32 h-32">
+                  <svg className="w-32 h-32" viewBox="0 0 128 128">
+                    <circle cx="64" cy="64" r="48" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="16" />
+                    <circle cx="64" cy="64" r="48" fill="none" stroke="#3b82f6" strokeWidth="16" strokeDasharray="301.6" strokeDashoffset="0" strokeLinecap="round" className="-rotate-90" style={{ transformOrigin: '64px 64px' }} />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-lg font-bold text-white">100%</span>
+                    <span className="text-[10px] text-slate-500">Active</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Wallet Overview - Line Chart */}
+            <div className="glass-card p-6 group hover:border-indigo-500/20 transition-all">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Wallet Overview</h3>
+                  <p className="text-sm text-slate-400">Customer wallet balances &amp; activity</p>
+                </div>
+                <span className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                  BALANCE: GH&#8373;1,200
+                </span>
+              </div>
+              <div className="relative h-32 mb-4">
+                <svg viewBox="0 0 300 120" className="w-full h-full" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="walletLineGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.3" />
+                      <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  {/* Grid */}
+                  {[0,1,2,3].map((i) => (
+                    <line key={i} x1="0" y1={i*40} x2="300" y2={i*40} stroke="rgba(255,255,255,0.04)" />
+                  ))}
+                  {/* Area fill */}
+                  <path d="M0,100 C20,100 40,100 60,95 C80,90 100,85 120,50 C140,15 160,10 180,30 C200,50 220,70 240,60 C260,50 280,40 300,35 L300,120 L0,120 Z" fill="url(#walletLineGrad)" />
+                  {/* Line */}
+                  <path d="M0,100 C20,100 40,100 60,95 C80,90 100,85 120,50 C140,15 160,10 180,30 C200,50 220,70 240,60 C260,50 280,40 300,35" fill="none" stroke="#8b5cf6" strokeWidth="2.5" />
+                  {/* Red line for spent */}
+                  <path d="M0,110 C40,108 80,105 120,100 C160,95 200,92 240,98 C270,102 290,105 300,108" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.6" />
+                </svg>
+                <div className="absolute bottom-0 left-0 right-0 flex justify-between px-1">
+                  {["Feb 10", "Feb 12", "Feb 14", "Feb 16", "Feb 18", "Feb 20", "Feb 22", "Feb 24"].map((d, i) => (
+                    <span key={i} className="text-[8px] text-slate-600">{i % 2 === 0 ? d : ""}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-4 mb-3">
+                <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-purple-500" /><span className="text-[10px] text-slate-500">Deposits</span></div>
+                <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" /><span className="text-[10px] text-slate-500">Spent</span></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2.5 rounded-lg bg-white/3 border border-white/5">
+                  <p className="text-[10px] text-slate-500">With Balance</p>
+                  <p className="text-base font-bold text-blue-400">2</p>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white/3 border border-white/5">
+                  <p className="text-[10px] text-slate-500">Total Transactions</p>
+                  <p className="text-base font-bold text-white">6</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 3: Business Overview + Today's / This Week metrics + Customer Growth */}
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Business Overview */}
+            <div className="glass-card p-6 group hover:border-blue-500/20 transition-all">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/30 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Business Overview</h3>
+                  <p className="text-sm text-slate-400">Key metrics at a glance</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "Shops", value: "1", icon: "\uD83C\uDFEA", color: "from-purple-500/15 to-purple-500/5 border-purple-500/20" },
+                  { label: "Active Shops", value: "1", icon: "\u2705", color: "from-green-500/15 to-green-500/5 border-green-500/20" },
+                  { label: "Products", value: "3", icon: "\u2699\uFE0F", color: "from-blue-500/15 to-blue-500/5 border-blue-500/20" },
+                  { label: "Customers", value: "2", icon: "\uD83D\uDC65", color: "from-cyan-500/15 to-cyan-500/5 border-cyan-500/20" },
+                  { label: "Purchases", value: "1", icon: "\uD83D\uDCE6", color: "from-amber-500/15 to-amber-500/5 border-amber-500/20" },
+                  { label: "Staff", value: "4", icon: "\uD83D\uDC68\u200D\uD83D\uDCBC", color: "from-pink-500/15 to-pink-500/5 border-pink-500/20" },
+                ].map((m) => (
+                  <div key={m.label} className={`p-3 rounded-xl bg-linear-to-br ${m.color} border text-center`}>
+                    <span className="text-lg block mb-1">{m.icon}</span>
+                    <p className="text-xl font-bold text-white">{m.value}</p>
+                    <p className="text-[10px] text-slate-400">{m.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Today + This Week Collection Cards */}
+            <div className="space-y-6">
+              <div className="glass-card p-6 group hover:border-green-500/20 transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-linear-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 1v8m0 0v1" /></svg>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-400">Today&apos;s Collections</p>
+                    <p className="text-2xl font-bold text-white">GH&#8373;200</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
+                    <div className="h-full w-[7%] rounded-full bg-linear-to-r from-green-500 to-emerald-400" />
+                  </div>
+                  <span className="text-xs text-green-400">7%</span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">of monthly target</p>
+              </div>
+              <div className="glass-card p-6 group hover:border-purple-500/20 transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-400">This Week</p>
+                    <p className="text-2xl font-bold text-white">GH&#8373;2,700</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
+                    <div className="h-full w-full rounded-full bg-linear-to-r from-purple-500 to-pink-400" />
+                  </div>
+                  <span className="text-xs text-purple-400">100%</span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">of monthly total</p>
+              </div>
+            </div>
+
+            {/* New Customers Line */}
+            <div className="glass-card p-6 group hover:border-emerald-500/20 transition-all">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-linear-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">New Customers (30d)</h3>
+                    <p className="text-3xl font-bold text-white mt-1">2</p>
+                  </div>
+                </div>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                  100% of total
+                </span>
+              </div>
+              <div className="relative h-32">
+                <svg viewBox="0 0 300 100" className="w-full h-full" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="custGrowthGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+                      <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  {[0,1,2,3].map((i) => (
+                    <line key={i} x1="0" y1={i*33} x2="300" y2={i*33} stroke="rgba(255,255,255,0.04)" />
+                  ))}
+                  <path d="M0,70 C50,65 75,60 100,55 C130,48 160,40 200,35 C230,30 260,28 300,25 L300,100 L0,100 Z" fill="url(#custGrowthGrad)" />
+                  <path d="M0,70 C50,65 75,60 100,55 C130,48 160,40 200,35 C230,30 260,28 300,25" fill="none" stroke="#10b981" strokeWidth="2.5" />
+                  {[
+                    { x: 0, y: 70 }, { x: 75, y: 60 }, { x: 150, y: 45 }, { x: 225, y: 32 }, { x: 300, y: 25 },
+                  ].map((p, i) => (
+                    <circle key={i} cx={p.x} cy={p.y} r="4" fill="#0f172a" stroke="#10b981" strokeWidth="2" />
+                  ))}
+                </svg>
+                <div className="absolute bottom-0 left-0 right-0 flex justify-between">
+                  {["W1", "W2", "W3", "W4", "W5"].map((w) => (
+                    <span key={w} className="text-[9px] text-slate-600">{w}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ===== HOW IT WORKS ===== */}
       <section className="relative z-10 py-20 sm:py-28 px-4 sm:px-6 lg:px-8 border-t border-white/5">
         <div className="max-w-7xl mx-auto">
