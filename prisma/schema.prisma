@@ -71,6 +71,8 @@ model Business {
   // Bonus system relations
   bonusRules      BonusRule[]      @relation("BusinessBonusRules")
   bonusRecords    BonusRecord[]    @relation("BusinessBonusRecords")
+  // Subscription relations
+  subscription    Subscription?    @relation("BusinessSubscription")
 }
 
 model BusinessPolicy {
@@ -1633,4 +1635,205 @@ enum BonusStatus {
   PAID
   REJECTED
   CANCELLED
+}
+
+// ============================================================================
+// CONTACT MESSAGES
+// ============================================================================
+
+model ContactMessage {
+  id          String               @id @default(cuid())
+  name        String
+  email       String
+  phone       String?
+  subject     String
+  message     String               @db.Text
+  status      ContactMessageStatus @default(UNREAD)
+  repliedAt   DateTime?
+  repliedBy   String?              // Super admin user ID
+  replyNote   String?              @db.Text
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum ContactMessageStatus {
+  UNREAD
+  READ
+  REPLIED
+  ARCHIVED
+}
+
+// ============================================================================
+// BUSINESS REGISTRATION REQUESTS
+// ============================================================================
+
+model BusinessRegistration {
+  id               String                     @id @default(cuid())
+  // Applicant info
+  ownerName        String
+  ownerEmail       String
+  ownerPhone       String
+  // Business info
+  businessName     String
+  businessType     String?                    // e.g. "Electronics", "Furniture"
+  city             String?
+  address          String?
+  numberOfShops    Int                        @default(1)
+  numberOfStaff    Int                        @default(1)
+  monthlyRevenue   String?                    // Estimated range
+  howHeard         String?                    // How they heard about us
+  message          String?                    @db.Text
+
+  status           RegistrationStatus         @default(PENDING)
+  reviewedAt       DateTime?
+  reviewedById     String?                    // Super admin user ID
+  reviewedByName   String?
+  rejectionReason  String?                    @db.Text
+  businessId       String?                    // Set when approved & business created
+
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([ownerEmail])
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ============================================================================
+// SUBSCRIPTION / PLANS
+// ============================================================================
+
+model SubscriptionPlan {
+  id                String         @id @default(cuid())
+  name              String         @unique    // "starter", "professional", "enterprise"
+  displayName       String                    // "Starter", "Professional", "Enterprise"
+  price             Decimal        @default(0) @db.Decimal(10, 2)
+  currency          String         @default("GHS")
+  billingPeriod     BillingPeriod  @default(MONTHLY)
+  // Limits
+  maxShops          Int            @default(1)
+  maxCustomers      Int            @default(50)
+  maxStaff          Int            @default(3)
+  maxSmsPerMonth    Int            @default(50)
+  // Feature flags
+  advancedPos       Boolean        @default(false)
+  advancedAnalytics Boolean        @default(false)
+  prioritySupport   Boolean        @default(false)
+  customBranding    Boolean        @default(false)
+  apiAccess         Boolean        @default(false)
+  accountingModule  Boolean        @default(false)
+  bonusSystem       Boolean        @default(false)
+
+  isActive          Boolean        @default(true)
+  sortOrder         Int            @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  subscriptions     Subscription[] @relation("PlanSubscriptions")
+}
+
+model Subscription {
+  id              String             @id @default(cuid())
+  businessId      String             @unique
+  planId          String
+  status          SubscriptionStatus @default(ACTIVE)
+  // Billing
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  // Payment tracking
+  lastPaymentAt      DateTime?
+  lastPaymentAmount  Decimal?       @db.Decimal(10, 2)
+  lastPaymentMethod  String?        // "momo", "bank", "card"
+  lastPaymentRef     String?
+  
+  cancelledAt     DateTime?
+  cancelReason    String?
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  business        Business           @relation("BusinessSubscription", fields: [businessId], references: [id], onDelete: Cascade)
+  plan            SubscriptionPlan   @relation("PlanSubscriptions", fields: [planId], references: [id])
+  payments        SubscriptionPayment[] @relation("SubscriptionPayments")
+
+  @@index([businessId])
+  @@index([planId])
+  @@index([status])
+  @@index([currentPeriodEnd])
+}
+
+model SubscriptionPayment {
+  id              String        @id @default(cuid())
+  subscriptionId  String
+  amount          Decimal       @db.Decimal(10, 2)
+  currency        String        @default("GHS")
+  paymentMethod   String        // "momo", "bank_transfer", "card"
+  paymentRef      String?       // Transaction reference
+  momoNumber      String?       // For mobile money
+  momoProvider    String?       // "mtn", "vodafone", "airteltigo"
+  bankName        String?       // For bank transfers
+  status          SubPaymentStatus @default(PENDING)
+  
+  paidAt          DateTime?
+  confirmedAt     DateTime?
+  confirmedById   String?       // Super admin who confirmed
+  failureReason   String?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  subscription    Subscription  @relation("SubscriptionPayments", fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum BillingPeriod {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  SUSPENDED
+  TRIAL
+}
+
+enum SubPaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// ============================================================================
+// SITE CONTENT (Admin-Editable Landing Page Content)
+// ============================================================================
+
+model SiteContent {
+  id        String   @id @default(cuid())
+  key       String   @unique  // e.g. "hero_title", "hero_subtitle", "phone", "testimonials"
+  value     String   @db.Text // JSON or plain text
+  type      String   @default("text") // "text", "json", "html", "image"
+  label     String?  // Human-readable label for admin UI
+  group     String   @default("general") // "general", "hero", "social", "contact", "testimonials"
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@index([group])
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { submitContactForm } from "../actions"
 
 export default function ContactPage() {
   const [formData, setFormData] = useState({
@@ -12,11 +13,25 @@ export default function ContactPage() {
     message: "",
   })
   const [submitted, setSubmitted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // In production, this would send to an API
-    setSubmitted(true)
+    setLoading(true)
+    setError("")
+    try {
+      const result = await submitContactForm(formData)
+      if (result.success) {
+        setSubmitted(true)
+      } else {
+        setError(result.error || "Something went wrong.")
+      }
+    } catch {
+      setError("Something went wrong. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -129,11 +144,18 @@ export default function ContactPage() {
                       />
                     </div>
 
+                    {error && (
+                      <div className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+                        {error}
+                      </div>
+                    )}
+
                     <button
                       type="submit"
-                      className="w-full sm:w-auto px-8 py-3.5 text-sm font-semibold text-white rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-lg shadow-purple-500/25"
+                      disabled={loading}
+                      className="w-full sm:w-auto px-8 py-3.5 text-sm font-semibold text-white rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-lg shadow-purple-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Send Message →
+                      {loading ? "Sending..." : "Send Message →"}
                     </button>
                   </form>
                 )}

@@ -60,6 +60,10 @@ export default async function AuditLogsPage({
               <Link href="/super-admin/businesses" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Businesses</Link>
               <Link href="/super-admin/users" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Users</Link>
               <Link href="/super-admin/audit-logs" className="nav-link active text-white text-sm font-medium">Audit Logs</Link>
+              <Link href="/super-admin/messages" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Messages</Link>
+              <Link href="/super-admin/registrations" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Registrations</Link>
+              <Link href="/super-admin/subscriptions" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Subscriptions</Link>
+              <Link href="/super-admin/site-content" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Site Content</Link>
             </nav>
             <div className="flex items-center gap-4">
               <div className="hidden sm:block text-right">

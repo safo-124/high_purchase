@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { getSessionUser } from "../../lib/auth"
 import { redirect } from "next/navigation"
+import { getPlatformStats } from "./actions"
 
 export default async function HomePage() {
   const user = await getSessionUser()
@@ -11,6 +12,8 @@ export default async function HomePage() {
     if (user.role === "SALES_STAFF") redirect("/sales-staff/select-shop")
     if (user.role === "DEBT_COLLECTOR") redirect("/collector/select-shop")
   }
+
+  const stats = await getPlatformStats()
 
   return (
     <>
@@ -41,7 +44,7 @@ export default async function HomePage() {
 
               <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 justify-center lg:justify-start landing-fade-in landing-delay-3">
                 <Link
-                  href="/login"
+                  href="/register"
                   className="group w-full sm:w-auto px-8 py-4 text-base font-semibold text-white rounded-2xl bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-xl shadow-purple-500/25 hover:shadow-purple-500/40 hover:-translate-y-0.5 text-center relative overflow-hidden"
                 >
                   <span className="relative z-10">Get Started Free &rarr;</span>
@@ -341,9 +344,9 @@ export default async function HomePage() {
           <p className="text-center text-xs uppercase tracking-widest text-slate-500 mb-8">Trusted by businesses across Ghana</p>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
             {[
-              { value: "500+", label: "Businesses", icon: "\uD83C\uDFE2", color: "from-purple-500/20 to-purple-500/5 border-purple-500/20" },
-              { value: "10,000+", label: "Customers Served", icon: "\uD83D\uDC65", color: "from-blue-500/20 to-blue-500/5 border-blue-500/20" },
-              { value: "GHS 5M+", label: "Payments Processed", icon: "\uD83D\uDCB0", color: "from-green-500/20 to-green-500/5 border-green-500/20" },
+              { value: stats.businesses > 0 ? `${stats.businesses.toLocaleString()}+` : "Growing", label: "Businesses", icon: "\uD83C\uDFE2", color: "from-purple-500/20 to-purple-500/5 border-purple-500/20" },
+              { value: stats.customers > 0 ? `${stats.customers.toLocaleString()}+` : "Growing", label: "Customers Served", icon: "\uD83D\uDC65", color: "from-blue-500/20 to-blue-500/5 border-blue-500/20" },
+              { value: stats.totalCollected > 0 ? `GHS ${stats.totalCollected >= 1_000_000 ? `${(stats.totalCollected / 1_000_000).toFixed(1)}M` : stats.totalCollected >= 1000 ? `${(stats.totalCollected / 1000).toFixed(0)}K` : stats.totalCollected.toLocaleString()}+` : "GHS 0", label: "Payments Processed", icon: "\uD83D\uDCB0", color: "from-green-500/20 to-green-500/5 border-green-500/20" },
               { value: "99.9%", label: "Uptime", icon: "\u26A1", color: "from-amber-500/20 to-amber-500/5 border-amber-500/20" },
             ].map((stat) => (
               <div key={stat.label} className={`text-center p-5 rounded-2xl bg-linear-to-b border ${stat.color} transition-all hover:scale-[1.03]`}>
@@ -1267,7 +1270,7 @@ export default async function HomePage() {
                 Join hundreds of Ghanaian businesses already using High Purchase to sell more, collect faster, and manage finances smarter.
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-4 justify-center">
-                <Link href="/login" className="group w-full sm:w-auto px-10 py-4 text-base font-semibold text-white rounded-2xl bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-xl shadow-purple-500/25 hover:shadow-purple-500/40 hover:-translate-y-0.5 relative overflow-hidden">
+                <Link href="/register" className="group w-full sm:w-auto px-10 py-4 text-base font-semibold text-white rounded-2xl bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-xl shadow-purple-500/25 hover:shadow-purple-500/40 hover:-translate-y-0.5 relative overflow-hidden">
                   <span className="relative z-10">Get Started Free &rarr;</span>
                   <div className="absolute inset-0 bg-linear-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
                 </Link>

@@ -62,18 +62,14 @@ export default async function BusinessesPage() {
 
             {/* Navigation */}
             <nav className="hidden md:flex items-center gap-2">
-              <Link href="/super-admin" className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Dashboard
-              </Link>
-              <Link href="/super-admin/businesses" className="nav-link active text-white text-sm font-medium">
-                Businesses
-              </Link>
-              <Link href="/super-admin/users" className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Users
-              </Link>
-              <Link href="/super-admin/audit-logs" className="nav-link text-slate-300 hover:text-white text-sm font-medium">
-                Audit Logs
-              </Link>
+              <Link href="/super-admin" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Dashboard</Link>
+              <Link href="/super-admin/businesses" className="nav-link active text-white text-sm font-medium">Businesses</Link>
+              <Link href="/super-admin/users" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Users</Link>
+              <Link href="/super-admin/audit-logs" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Audit Logs</Link>
+              <Link href="/super-admin/messages" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Messages</Link>
+              <Link href="/super-admin/registrations" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Registrations</Link>
+              <Link href="/super-admin/subscriptions" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Subscriptions</Link>
+              <Link href="/super-admin/site-content" className="nav-link text-slate-300 hover:text-white text-sm font-medium">Site Content</Link>
             </nav>
 
             {/* User Menu */}
