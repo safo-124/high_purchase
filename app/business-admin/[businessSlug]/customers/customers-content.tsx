@@ -32,6 +32,7 @@ interface Customer {
   productNames: string[]
   hasAccount: boolean
   accountEmail: string | null
+  walletBalance: number
 }
 
 interface Shop {
@@ -160,7 +161,7 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
   }>({ open: false, customer: null, purchases: [], loading: false })
   const [selectedPurchaseId, setSelectedPurchaseId] = useState("")
   const [paymentAmount, setPaymentAmount] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "BANK_TRANSFER" | "MOBILE_MONEY" | "CARD">("CASH")
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "BANK_TRANSFER" | "MOBILE_MONEY" | "CARD" | "WALLET">("CASH")
   const [paymentReference, setPaymentReference] = useState("")
 
   // New customer modal state
@@ -348,6 +349,15 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
       return
     }
 
+    // Validate wallet balance
+    if (paymentMethod === "WALLET") {
+      const walletBalance = paymentModal.customer?.walletBalance ?? 0
+      if (amount > walletBalance) {
+        toast.error(`Insufficient wallet balance. Available: GH₵${walletBalance.toLocaleString()}`)
+        return
+      }
+    }
+
     // Handle "all purchases" selection
     if (selectedPurchaseId === "all") {
       const totalOutstanding = paymentModal.purchases.reduce((sum, p) => sum + p.outstandingBalance, 0)
@@ -411,12 +421,7 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
       })
       
       if (result.success) {
-        const data = result.data as { awaitingConfirmation?: boolean } | undefined
-        if (data?.awaitingConfirmation) {
-          toast.success("Payment recorded - awaiting confirmation")
-        } else {
-          toast.success("Payment recorded and confirmed")
-        }
+        toast.success("Payment recorded and confirmed")
         setPaymentModal({ open: false, customer: null, purchases: [], loading: false })
         router.refresh()
       } else {
@@ -1164,7 +1169,13 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                     <option value="MOBILE_MONEY" className="bg-slate-800">Mobile Money</option>
                     <option value="BANK_TRANSFER" className="bg-slate-800">Bank Transfer</option>
                     <option value="CARD" className="bg-slate-800">Card</option>
+                    <option value="WALLET" className="bg-slate-800">Wallet (Balance: GH₵{paymentModal.customer?.walletBalance?.toLocaleString() ?? "0"})</option>
                   </select>
+                  {paymentMethod === "WALLET" && (
+                    <p className="mt-1 text-xs text-amber-400">
+                      💰 Wallet Balance: GH₵{paymentModal.customer?.walletBalance?.toLocaleString() ?? "0"}
+                    </p>
+                  )}
                 </div>
 
                 {/* Reference */}
@@ -1197,8 +1208,8 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
                   </button>
                 </div>
 
-                <p className="text-xs text-slate-500 text-center">
-                  Payment will be pending confirmation by a shop admin
+                <p className="text-xs text-emerald-400/70 text-center">
+                  Payment will be automatically confirmed
                 </p>
               </div>
             )}

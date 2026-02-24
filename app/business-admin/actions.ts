@@ -1264,6 +1264,7 @@ export async function getBusinessCustomers(businessSlug: string) {
       productNames,
       hasAccount: !!customer.user,
       accountEmail: customer.user?.email || null,
+      walletBalance: Number(customer.walletBalance),
     }
   })
 }
@@ -5776,7 +5777,8 @@ export async function recordPaymentAsBusinessAdmin(
 
     // Handle WALLET payments - always auto-confirm since wallet funds are verified
     const isWalletPayment = payload.paymentMethod === "WALLET"
-    const autoConfirm = isWalletPayment ? true : (payload.autoConfirm ?? false)
+    // Business admin payments are always auto-confirmed
+    const autoConfirm = true
 
     // For wallet payments, verify balance
     if (isWalletPayment) {
