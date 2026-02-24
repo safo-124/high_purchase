@@ -15,7 +15,7 @@ export default async function HomePage() {
   return (
     <>
       {/* ===== HERO ===== */}
-      <section className="relative z-10 pt-28 sm:pt-36 lg:pt-28 pb-20 sm:pb-28 lg:pb-12 px-4 sm:px-6 lg:px-8 overflow-hidden lg:min-h-screen lg:flex lg:flex-col lg:justify-center">
+      <section className="relative z-10 pt-24 sm:pt-36 lg:pt-0 pb-16 sm:pb-28 lg:pb-0 px-4 sm:px-6 lg:px-8 overflow-hidden lg:h-dvh lg:flex lg:flex-col lg:justify-center">
         <div className="absolute top-20 left-1/2 -translate-x-1/2 w-200 h-125 bg-linear-to-b from-purple-600/20 via-blue-600/10 to-transparent rounded-full blur-3xl pointer-events-none" />
 
         <div className="max-w-7xl mx-auto relative">
