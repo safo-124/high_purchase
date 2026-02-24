@@ -1,6 +1,8 @@
 import Link from "next/link"
 import { requireSalesStaffForShop } from "@/lib/auth"
 import { getSalesStaffDashboard, getProductsForSale, getCustomersForSale } from "../../actions"
+import { getStaffBonusSummary } from "@/app/shared-bonus-utils"
+import { StaffBonusSection } from "@/components/bonus-display"
 
 interface SalesStaffDashboardProps {
   params: Promise<{ shopSlug: string }>
@@ -8,11 +10,22 @@ interface SalesStaffDashboardProps {
 
 export default async function SalesStaffDashboard({ params }: SalesStaffDashboardProps) {
   const { shopSlug } = await params
-  await requireSalesStaffForShop(shopSlug)
+  const { shop, membership } = await requireSalesStaffForShop(shopSlug)
 
-  const dashboard = await getSalesStaffDashboard(shopSlug)
-  const products = await getProductsForSale(shopSlug)
-  const customers = await getCustomersForSale(shopSlug)
+  const [dashboard, products, customers] = await Promise.all([
+    getSalesStaffDashboard(shopSlug),
+    getProductsForSale(shopSlug),
+    getCustomersForSale(shopSlug),
+  ])
+
+  const bonusSummary = membership
+    ? await getStaffBonusSummary({
+        businessId: shop.businessId,
+        shopId: shop.id,
+        staffMemberId: membership.id,
+        staffRole: "SALES_STAFF",
+      })
+    : null
 
   // Products in stock
   const inStockProducts = products.filter((p) => p.stockQuantity > 0)
@@ -77,6 +90,13 @@ export default async function SalesStaffDashboard({ params }: SalesStaffDashboar
             </div>
           </div>
         </div>
+
+        {/* Bonus Section */}
+        {bonusSummary && bonusSummary.hasActiveBonuses && (
+          <div className="mb-8">
+            <StaffBonusSection bonusSummary={bonusSummary} currency="GHS" />
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div className="mb-8">

@@ -350,7 +350,7 @@ export async function createSale(
   payload: SalePayload
 ): Promise<ActionResult> {
   try {
-    const { user, shop } = await requireSalesStaffForShop(shopSlug)
+    const { user, shop, membership } = await requireSalesStaffForShop(shopSlug)
 
     // Validate inputs
     if (!payload.customerId) {
@@ -576,6 +576,27 @@ export async function createSale(
         where: { id: purchase.id },
         data: { deliveryStatus: "SCHEDULED" },
       })
+    }
+
+    // --- BONUS TRIGGER: Sale ---
+    if (membership) {
+      try {
+        const { triggerBonusCalculation } = await import("../business-admin/bonus-actions")
+        await triggerBonusCalculation({
+          businessId: shop.businessId,
+          shopId: shop.id,
+          triggerType: "SALE",
+          staffMemberId: membership.id,
+          staffUserId: user.id,
+          staffName: user.name || "Unknown",
+          staffRole: "SALES_STAFF",
+          sourceId: purchase.id,
+          sourceRef: `Sale ${purchaseNumber}`,
+          amount: totalAmount,
+        })
+      } catch (bonusError) {
+        console.error("Failed to trigger sale bonus:", bonusError)
+      }
     }
 
     revalidatePath(`/sales-staff/${shopSlug}/dashboard`)

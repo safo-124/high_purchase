@@ -1,6 +1,7 @@
 import { requireCollectorForShop } from "@/lib/auth"
 import { getCollectorDashboardV2 } from "../../actions"
 import { CollectorDashboardContent } from "./dashboard-content"
+import { getStaffBonusSummary } from "@/app/shared-bonus-utils"
 
 interface CollectorDashboardPageProps {
   params: Promise<{ shopSlug: string }>
@@ -8,9 +9,18 @@ interface CollectorDashboardPageProps {
 
 export default async function CollectorDashboardPage({ params }: CollectorDashboardPageProps) {
   const { shopSlug } = await params
-  await requireCollectorForShop(shopSlug)
+  const { shop, membership } = await requireCollectorForShop(shopSlug)
 
   const dashboard = await getCollectorDashboardV2(shopSlug)
+
+  const bonusSummary = membership
+    ? await getStaffBonusSummary({
+        businessId: shop.businessId,
+        shopId: shop.id,
+        staffMemberId: membership.id,
+        staffRole: "DEBT_COLLECTOR",
+      })
+    : null
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 max-w-5xl xl:max-w-6xl mx-auto">
@@ -22,6 +32,7 @@ export default async function CollectorDashboardPage({ params }: CollectorDashbo
       <CollectorDashboardContent
         shopSlug={shopSlug}
         dashboard={dashboard}
+        bonusSummary={bonusSummary}
       />
     </div>
   )

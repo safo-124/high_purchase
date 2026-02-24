@@ -1,6 +1,7 @@
 import { requireShopAdminForShop } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 import ShopDashboardContent from "./shop-dashboard-content"
+import { getShopBonusSummary } from "@/app/shared-bonus-utils"
 
 async function getShopStats(shopId: string) {
   const now = new Date()
@@ -209,9 +210,10 @@ export default async function ShopAdminDashboard({
   const { shopSlug } = await params
   const { user, shop } = await requireShopAdminForShop(shopSlug)
 
-  const [stats, walletStats] = await Promise.all([
+  const [stats, walletStats, bonusData] = await Promise.all([
     getShopStats(shop.id),
     getShopWalletStats(shop.id),
+    getShopBonusSummary({ businessId: shop.businessId, shopId: shop.id }),
   ])
 
   return (
@@ -223,6 +225,7 @@ export default async function ShopAdminDashboard({
       currency="GHS"
       stats={stats}
       walletStats={walletStats}
+      bonusData={bonusData}
     />
   )
 }

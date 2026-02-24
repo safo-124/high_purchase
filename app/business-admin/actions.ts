@@ -5933,6 +5933,49 @@ export async function recordPaymentAsBusinessAdmin(
       },
     })
 
+    // --- BONUS TRIGGER: Payment Collection ---
+    if (autoConfirm && payload.collectorId) {
+      try {
+        const { triggerBonusCalculation } = await import("./bonus-actions")
+        const collectorMember = await prisma.shopMember.findUnique({
+          where: { id: payload.collectorId },
+          include: { user: { select: { id: true, name: true } } },
+        })
+        if (collectorMember) {
+          await triggerBonusCalculation({
+            businessId: business.id,
+            shopId: purchase.customer.shop.id,
+            triggerType: "COLLECTION",
+            staffMemberId: collectorMember.id,
+            staffUserId: collectorMember.user.id,
+            staffName: collectorMember.user.name || "Unknown",
+            staffRole: "DEBT_COLLECTOR",
+            sourceId: result.id,
+            sourceRef: `Payment for ${purchase.purchaseNumber}`,
+            amount: payload.amount,
+          })
+          // Check FULL_PAYMENT
+          const newOutstanding = Number(purchase.totalAmount) - (Number(purchase.amountPaid) + payload.amount)
+          if (newOutstanding <= 0) {
+            await triggerBonusCalculation({
+              businessId: business.id,
+              shopId: purchase.customer.shop.id,
+              triggerType: "FULL_PAYMENT",
+              staffMemberId: collectorMember.id,
+              staffUserId: collectorMember.user.id,
+              staffName: collectorMember.user.name || "Unknown",
+              staffRole: "DEBT_COLLECTOR",
+              sourceId: purchase.id,
+              sourceRef: `Full payment: ${purchase.purchaseNumber}`,
+              amount: Number(purchase.totalAmount),
+            })
+          }
+        }
+      } catch (bonusError) {
+        console.error("Failed to trigger bonus calculation:", bonusError)
+      }
+    }
+
     revalidatePath(`/business-admin/${businessSlug}/payments`)
     revalidatePath(`/business-admin/${businessSlug}/customers`)
     revalidatePath(`/business-admin/${businessSlug}/receipts`)

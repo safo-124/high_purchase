@@ -3,6 +3,8 @@
 import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
 import type { CollectorDashboardV2Data } from "../../actions"
+import type { StaffBonusSummary } from "@/lib/bonus-types"
+import { StaffBonusSection } from "@/components/bonus-display"
 
 // ========== Mini SVG Pie Chart ==========
 function PieChart({
@@ -143,9 +145,10 @@ function useIsDesktop() {
 interface Props {
   shopSlug: string
   dashboard: CollectorDashboardV2Data
+  bonusSummary?: StaffBonusSummary | null
 }
 
-export function CollectorDashboardContent({ shopSlug, dashboard }: Props) {
+export function CollectorDashboardContent({ shopSlug, dashboard, bonusSummary }: Props) {
   const [activityTab, setActivityTab] = useState<"payments" | "wallets">("payments")
   const isLg = useIsDesktop()
 
@@ -591,6 +594,11 @@ export function CollectorDashboardContent({ shopSlug, dashboard }: Props) {
           </div>
         )}
       </div>
+
+      {/* ========== BONUS SECTION ========== */}
+      {bonusSummary && bonusSummary.hasActiveBonuses && (
+        <StaffBonusSection bonusSummary={bonusSummary} currency="₵" />
+      )}
 
       {/* ========== QUICK ACTIONS ========== */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-4">

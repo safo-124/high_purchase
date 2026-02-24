@@ -606,6 +606,27 @@ export async function createCustomerAsCollector(
       metadata: { shopSlug, collectorId: membership?.id, hasAccount: !!userAccount },
     })
 
+    // --- BONUS TRIGGER: Customer Created by Collector ---
+    if (membership) {
+      try {
+        const { triggerBonusCalculation } = await import("../business-admin/bonus-actions")
+        await triggerBonusCalculation({
+          businessId: shop.businessId,
+          shopId: shop.id,
+          triggerType: "CUSTOMER_CREATED",
+          staffMemberId: membership.id,
+          staffUserId: user.id,
+          staffName: user.name || "Unknown",
+          staffRole: "DEBT_COLLECTOR",
+          sourceId: customer.id,
+          sourceRef: `Customer: ${payload.firstName} ${payload.lastName}`,
+          amount: 1, // Fixed amount trigger, not based on a monetary amount
+        })
+      } catch (bonusError) {
+        console.error("Failed to trigger customer creation bonus:", bonusError)
+      }
+    }
+
     revalidatePath(`/collector/${shopSlug}/customers`)
     return { success: true, data: { ...customer, hasAccount: !!userAccount } }
   } catch (error) {

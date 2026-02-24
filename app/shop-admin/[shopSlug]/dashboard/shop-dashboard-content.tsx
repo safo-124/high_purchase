@@ -15,6 +15,7 @@ import {
   Bar,
 } from 'recharts'
 import Link from 'next/link'
+import { ShopBonusOverview } from '@/components/bonus-display'
 
 interface WalletStats {
   totalBalance: number
@@ -65,6 +66,40 @@ interface ShopDashboardProps {
     }[]
   }
   walletStats: WalletStats
+  bonusData?: {
+    activeRules: number
+    totalPending: number
+    totalPendingAmount: number
+    totalApproved: number
+    totalApprovedAmount: number
+    totalPaid: number
+    totalPaidAmount: number
+    thisMonthAmount: number
+    staffBonuses: {
+      staffName: string
+      staffRole: string
+      pending: number
+      pendingAmount: number
+      paid: number
+      paidAmount: number
+    }[]
+    recentRecords: {
+      id: string
+      ruleName: string
+      triggerType: string
+      sourceRef: string | null
+      baseAmount: number
+      rate: number | null
+      amount: number
+      status: string
+      createdAt: Date
+      periodStart: Date | null
+      periodEnd: Date | null
+      paidAt: Date | null
+      paymentRef: string | null
+    }[]
+    hasActiveBonuses: boolean
+  } | null
 }
 
 const PIE_COLORS = ['#06b6d4', '#8b5cf6', '#f59e0b', '#10b981']
@@ -85,6 +120,7 @@ export default function ShopDashboardContent({
   currency,
   stats,
   walletStats,
+  bonusData,
 }: ShopDashboardProps) {
   const baseUrl = `/shop-admin/${shopSlug}`
   const collectionRate = stats.totalCollected + stats.pendingPaymentsAmount > 0
@@ -676,6 +712,11 @@ export default function ShopDashboardContent({
           )}
         </div>
       </div>
+
+      {/* Staff Bonuses Overview */}
+      {bonusData && bonusData.hasActiveBonuses && (
+        <ShopBonusOverview bonusData={bonusData} currency={currency} />
+      )}
 
       {/* Quick Actions */}
       <div className="glass-card p-6 rounded-2xl relative overflow-hidden">

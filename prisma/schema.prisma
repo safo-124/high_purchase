@@ -68,6 +68,9 @@ model Business {
   suppliers       Supplier[]       @relation("BusinessSuppliers")
   supplyCategories SupplyCategory[] @relation("BusinessSupplyCategories")
   supplyItems     SupplyItem[]     @relation("BusinessSupplyItems")
+  // Bonus system relations
+  bonusRules      BonusRule[]      @relation("BusinessBonusRules")
+  bonusRecords    BonusRecord[]    @relation("BusinessBonusRecords")
 }
 
 model BusinessPolicy {
@@ -210,6 +213,7 @@ model Shop {
   conversations       Conversation[]    @relation("ShopConversations")
   dailyReports        DailyReport[]     @relation("ShopDailyReports")
   walletTransactions  WalletTransaction[] @relation("ShopWalletTransactions")
+  bonusRules           BonusRule[]          @relation("ShopBonusRules")
 
   @@index([businessId])
 }
@@ -1485,5 +1489,148 @@ enum CommissionStatus {
   PENDING
   APPROVED
   PAID
+  CANCELLED
+}
+
+// ============================================================================
+// BONUS SYSTEM - Business admin configurable bonus rules and records
+// ============================================================================
+
+// BonusRule - Configurable bonus rules designed by business admin
+model BonusRule {
+  id                String          @id @default(cuid())
+  businessId        String
+  name              String          // e.g. "Collection Commission", "New Customer Bonus"
+  description       String?         @db.Text
+  
+  // Who qualifies
+  targetRole        Role            // SALES_STAFF, DEBT_COLLECTOR, SHOP_ADMIN
+  shopId            String?         // null = all shops, or specific shop
+  
+  // What triggers the bonus
+  triggerType        BonusTriggerType
+  
+  // How it's calculated
+  calculationType   BonusCalculationType // PERCENTAGE or FIXED_AMOUNT
+  value             Decimal          @db.Decimal(12, 4) // % rate or fixed amount
+  
+  // Thresholds & caps
+  minimumThreshold  Decimal?         @db.Decimal(12, 2) // Min amount/count to qualify
+  maximumCap        Decimal?         @db.Decimal(12, 2) // Max bonus per period
+  
+  // Target-based bonuses (optional)
+  targetAmount      Decimal?         @db.Decimal(12, 2) // Target to hit for bonus
+  
+  // Tiered bonuses (JSON array of { threshold, rate/amount })
+  tiers             String?          @db.Text // JSON: [{ "min": 0, "max": 5000, "value": 3 }, { "min": 5000, "max": 10000, "value": 5 }]
+  
+  // Period
+  period            BonusPeriod      @default(MONTHLY)
+  
+  // Status
+  isActive          Boolean          @default(true)
+  
+  // Metadata
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  createdById       String?          // Business admin who created it
+  
+  // Relations
+  business          Business         @relation("BusinessBonusRules", fields: [businessId], references: [id], onDelete: Cascade)
+  shop              Shop?            @relation("ShopBonusRules", fields: [shopId], references: [id], onDelete: SetNull)
+  bonusRecords      BonusRecord[]    @relation("BonusRuleRecords")
+  
+  @@index([businessId])
+  @@index([shopId])
+  @@index([targetRole])
+  @@index([triggerType])
+  @@index([isActive])
+}
+
+// BonusRecord - Individual earned bonus records
+model BonusRecord {
+  id                String          @id @default(cuid())
+  businessId        String
+  shopId            String
+  bonusRuleId       String
+  staffMemberId     String          // ShopMember who earned the bonus
+  staffUserId       String          // User ID for easier lookups
+  staffName         String          // Snapshot of staff name
+  staffRole         Role
+  
+  // What triggered it
+  triggerType       BonusTriggerType
+  sourceId          String?         // Purchase, Payment, or Customer ID
+  sourceRef         String?         // e.g. purchase number, payment ref
+  
+  // Calculation details
+  baseAmount        Decimal         @db.Decimal(12, 2) // Amount bonus was calculated on
+  rate              Decimal?        @db.Decimal(12, 4) // Rate used (if percentage)
+  amount            Decimal         @db.Decimal(12, 2) // Final bonus amount
+  
+  // Period
+  periodStart       DateTime        @db.Date
+  periodEnd         DateTime        @db.Date
+  
+  // Status & payout
+  status            BonusStatus     @default(PENDING)
+  approvedAt        DateTime?
+  approvedById      String?
+  approvedByName    String?
+  paidAt            DateTime?
+  paidById          String?
+  paidByName        String?
+  paymentRef        String?         // Transaction reference for payout
+  
+  notes             String?         @db.Text
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  // Relations
+  business          Business        @relation("BusinessBonusRecords", fields: [businessId], references: [id], onDelete: Cascade)
+  bonusRule         BonusRule       @relation("BonusRuleRecords", fields: [bonusRuleId], references: [id], onDelete: Cascade)
+  
+  @@index([businessId])
+  @@index([shopId])
+  @@index([bonusRuleId])
+  @@index([staffMemberId])
+  @@index([staffUserId])
+  @@index([status])
+  @@index([periodStart, periodEnd])
+  @@index([triggerType])
+  @@index([createdAt])
+}
+
+enum BonusTriggerType {
+  COLLECTION          // Payment collected by collector
+  SALE                // New sale/purchase created
+  CUSTOMER_CREATED    // New customer registered
+  FULL_PAYMENT        // Customer fully pays off purchase
+  ON_TIME_COLLECTION  // Payment collected before due date
+  RECOVERY            // Payment from overdue/defaulted account
+  TARGET_HIT          // Monthly/weekly target achieved
+  SHOP_PERFORMANCE    // Shop-level performance bonus
+  ZERO_DEFAULT        // No defaults in period
+}
+
+enum BonusCalculationType {
+  PERCENTAGE    // value is a % (e.g. 5 = 5%)
+  FIXED_AMOUNT  // value is a fixed GHS amount
+}
+
+enum BonusPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  ONE_TIME
+}
+
+enum BonusStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
   CANCELLED
 }

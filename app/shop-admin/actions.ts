@@ -2787,6 +2787,49 @@ export async function recordPayment(
       }
     }
 
+    // --- BONUS TRIGGER: Payment Collection (shop-admin auto-confirm) ---
+    if (autoConfirm && payload.collectorId) {
+      try {
+        const { triggerBonusCalculation } = await import("../business-admin/bonus-actions")
+        const collectorMember = await prisma.shopMember.findUnique({
+          where: { id: payload.collectorId },
+          include: { user: { select: { id: true, name: true } } },
+        })
+        if (collectorMember) {
+          await triggerBonusCalculation({
+            businessId: shop.businessId,
+            shopId: shop.id,
+            triggerType: "COLLECTION",
+            staffMemberId: collectorMember.id,
+            staffUserId: collectorMember.user.id,
+            staffName: collectorMember.user.name || "Unknown",
+            staffRole: "DEBT_COLLECTOR",
+            sourceId: result.id,
+            sourceRef: `Payment for ${purchase.purchaseNumber}`,
+            amount: payload.amount,
+          })
+          const newAmountPaid = Number(purchase.amountPaid) + payload.amount
+          const newOutstanding = Number(purchase.totalAmount) - newAmountPaid
+          if (newOutstanding <= 0) {
+            await triggerBonusCalculation({
+              businessId: shop.businessId,
+              shopId: shop.id,
+              triggerType: "FULL_PAYMENT",
+              staffMemberId: collectorMember.id,
+              staffUserId: collectorMember.user.id,
+              staffName: collectorMember.user.name || "Unknown",
+              staffRole: "DEBT_COLLECTOR",
+              sourceId: purchase.id,
+              sourceRef: `Full payment: ${purchase.purchaseNumber}`,
+              amount: Number(purchase.totalAmount),
+            })
+          }
+        }
+      } catch (bonusError) {
+        console.error("Failed to trigger bonus calculation:", bonusError)
+      }
+    }
+
     revalidatePath(`/shop-admin/${shopSlug}/customers`)
     revalidatePath(`/shop-admin/${shopSlug}/purchases`)
     revalidatePath(`/shop-admin/${shopSlug}/pending-payments`)
@@ -3533,6 +3576,48 @@ export async function confirmPayment(
     } catch (msgError) {
       console.error("Failed to send receipt message:", msgError)
       // Don't fail the confirmation if messaging fails
+    }
+
+    // --- BONUS TRIGGER: Payment Collection ---
+    if (payment.collectorId) {
+      try {
+        const { triggerBonusCalculation } = await import("../business-admin/bonus-actions")
+        const collectorMember = await prisma.shopMember.findUnique({
+          where: { id: payment.collectorId },
+          include: { user: { select: { id: true, name: true } } },
+        })
+        if (collectorMember) {
+          await triggerBonusCalculation({
+            businessId: shop.businessId,
+            shopId: shop.id,
+            triggerType: "COLLECTION",
+            staffMemberId: collectorMember.id,
+            staffUserId: collectorMember.user.id,
+            staffName: collectorMember.user.name || "Unknown",
+            staffRole: "DEBT_COLLECTOR",
+            sourceId: payment.id,
+            sourceRef: `Payment for ${purchase.purchaseNumber}`,
+            amount: Number(payment.amount),
+          })
+          // Also trigger FULL_PAYMENT bonus if purchase is now completed
+          if (isCompleted) {
+            await triggerBonusCalculation({
+              businessId: shop.businessId,
+              shopId: shop.id,
+              triggerType: "FULL_PAYMENT",
+              staffMemberId: collectorMember.id,
+              staffUserId: collectorMember.user.id,
+              staffName: collectorMember.user.name || "Unknown",
+              staffRole: "DEBT_COLLECTOR",
+              sourceId: purchase.id,
+              sourceRef: `Full payment: ${purchase.purchaseNumber}`,
+              amount: Number(purchase.totalAmount),
+            })
+          }
+        }
+      } catch (bonusError) {
+        console.error("Failed to trigger bonus calculation:", bonusError)
+      }
     }
 
     revalidatePath(`/shop-admin/${shopSlug}/pending-payments`)
