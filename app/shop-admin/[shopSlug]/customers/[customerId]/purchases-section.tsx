@@ -209,7 +209,7 @@ export function PurchasesSection({ purchases, shopSlug, products, walletBalance 
             paymentTime: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
             isFullyPaid: newOutstanding <= 0,
           }
-          const pdfDataUri = generateReceiptPDF(receiptData)
+          const pdfDataUri = await generateReceiptPDF(receiptData)
           const link = document.createElement("a")
           link.href = pdfDataUri
           link.download = `Receipt_${purchase.purchaseNumber}_${now.toISOString().split("T")[0]}.pdf`

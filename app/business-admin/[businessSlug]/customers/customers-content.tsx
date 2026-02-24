@@ -339,7 +339,7 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
   }
 
   // Helper to generate and download a receipt PDF after a confirmed payment
-  const downloadReceipt = (purchase: Purchase, paidAmount: number, newAmountPaid: number) => {
+  const downloadReceipt = async (purchase: Purchase, paidAmount: number, newAmountPaid: number) => {
     const customer = paymentModal.customer
     if (!customer) return
     const now = new Date()
@@ -364,7 +364,7 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
       isFullyPaid: newOutstanding <= 0,
     }
     try {
-      const pdfDataUri = generateReceiptPDF(receiptData)
+      const pdfDataUri = await generateReceiptPDF(receiptData)
       // Trigger download
       const link = document.createElement("a")
       link.href = pdfDataUri
@@ -445,7 +445,7 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
           toast.success(`Payment applied to ${successCount} purchase(s)`)
           // Generate receipts for each purchase that was paid
           for (const { purchase, paidAmount, newAmountPaid } of paidPurchases) {
-            downloadReceipt(purchase, paidAmount, newAmountPaid)
+            await downloadReceipt(purchase, paidAmount, newAmountPaid)
           }
           setPaymentModal({ open: false, customer: null, purchases: [], loading: false })
           router.refresh()
@@ -475,7 +475,7 @@ export function CustomersContent({ customers, shops, collectors, businessSlug }:
         toast.success("Payment recorded and confirmed")
         // Generate and download receipt
         if (selectedPurchase) {
-          downloadReceipt(selectedPurchase, amount, selectedPurchase.amountPaid + amount)
+          await downloadReceipt(selectedPurchase, amount, selectedPurchase.amountPaid + amount)
         }
         setPaymentModal({ open: false, customer: null, purchases: [], loading: false })
         router.refresh()
