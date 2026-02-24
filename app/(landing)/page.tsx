@@ -67,66 +67,267 @@ export default async function HomePage() {
               </div>
             </div>
 
-            {/* Dashboard Preview */}
+            {/* Dashboard Preview - Faithful recreation of the actual Business Admin Dashboard */}
             <div className="relative landing-fade-in landing-delay-3 hidden lg:block">
               <div className="absolute -inset-4 bg-linear-to-r from-purple-600/20 via-blue-600/20 to-cyan-500/20 rounded-3xl blur-2xl animate-pulse-slow" />
-              <div className="relative glass-card p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-slate-500">Dashboard</p>
-                    <p className="text-lg font-bold text-white">Kwame&apos;s Electronics</p>
+              <div className="relative glass-card p-4 space-y-3 overflow-hidden max-h-135">
+                {/* Business Header */}
+                <div className="flex items-center gap-3 pb-3 border-b border-white/5">
+                  <div className="w-10 h-10 rounded-xl bg-linear-to-br from-purple-500/30 to-blue-500/30 border border-purple-500/30 flex items-center justify-center">
+                    <span className="text-base font-bold text-white">S</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
-                    <span className="text-xs text-green-400">Live</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { label: "Revenue", value: "GHS 45.2K", pct: "\u2191 12%", bg: "bg-purple-500/10 border-purple-500/20" },
-                    { label: "Collected", value: "GHS 38.1K", pct: "\u2191 8%", bg: "bg-green-500/10 border-green-500/20" },
-                    { label: "Customers", value: "234", pct: "\u2191 15%", bg: "bg-blue-500/10 border-blue-500/20" },
-                  ].map((s) => (
-                    <div key={s.label} className={`p-3 rounded-xl ${s.bg} border`}>
-                      <p className="text-xs text-slate-500">{s.label}</p>
-                      <p className="text-lg font-bold text-white">{s.value}</p>
-                      <p className="text-xs text-green-400">{s.pct}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold text-white truncate">SAYAK TRADING ENTERPRISE</p>
+                      <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-green-500/20 border border-green-500/30 text-[9px] font-semibold text-green-400">&#9679; Active</span>
                     </div>
-                  ))}
-                </div>
-                <div className="p-4 rounded-xl bg-white/2 border border-white/5">
-                  <p className="text-xs text-slate-500 mb-3">Weekly Collections</p>
-                  <div className="flex items-end gap-1.5 h-16">
-                    {[40, 65, 50, 80, 60, 90, 75].map((h, i) => (
-                      <div key={i} className="flex-1 rounded-t-md bg-linear-to-t from-purple-600/80 to-blue-500/60 transition-all duration-500 hover:from-purple-500 hover:to-blue-400" style={{ height: `${h}%` }} />
-                    ))}
-                  </div>
-                  <div className="flex justify-between mt-2">
-                    {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
-                      <span key={i} className="flex-1 text-center text-xs text-slate-600">{d}</span>
-                    ))}
+                    <p className="text-[10px] text-slate-500">We empower people and transform business</p>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-500">Recent Payments</p>
-                  {[
-                    { name: "Ama Mensah", amount: "GHS 250", status: "Paid", color: "text-green-400" },
-                    { name: "Kofi Asante", amount: "GHS 180", status: "Paid", color: "text-green-400" },
-                    { name: "Abena Osei", amount: "GHS 320", status: "Pending", color: "text-orange-400" },
-                  ].map((tx) => (
-                    <div key={tx.name} className="flex items-center justify-between p-2.5 rounded-lg bg-white/2 hover:bg-white/4 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center">
-                          <span className="text-xs font-semibold text-purple-300">{tx.name.charAt(0)}</span>
+
+                {/* Welcome */}
+                <div>
+                  <p className="text-sm text-white">Welcome back, <span className="text-amber-400 font-semibold">yes</span> &#128075;</p>
+                  <p className="text-[10px] text-slate-500">Here&apos;s an overview of your business performance and analytics.</p>
+                </div>
+
+                {/* Wallet Quick Stats - 3 Cards */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="glass-card p-3 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-linear-to-br from-indigo-500/5 to-violet-500/5" />
+                    <div className="relative z-10">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="w-8 h-8 rounded-xl bg-linear-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/30 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" /></svg>
                         </div>
-                        <span className="text-sm text-white">{tx.name}</span>
+                        <span className="text-[8px] text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded-full border border-indigo-500/20">Wallet</span>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-white">{tx.amount}</p>
-                        <p className={`text-xs ${tx.color}`}>{tx.status}</p>
+                      <p className="text-lg font-bold text-indigo-400">GH&#8373;1,200</p>
+                      <p className="text-[9px] text-slate-500">Total Wallet Balance</p>
+                    </div>
+                  </div>
+                  <div className="glass-card p-3 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-linear-to-br from-emerald-500/5 to-green-500/5" />
+                    <div className="relative z-10">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="w-8 h-8 rounded-xl bg-linear-to-br from-emerald-500/20 to-green-500/20 border border-emerald-500/30 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <span className="text-[8px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/20">Today</span>
+                      </div>
+                      <p className="text-lg font-bold text-emerald-400">GH&#8373;0</p>
+                      <p className="text-[9px] text-slate-500">Today&apos;s Deposits</p>
+                    </div>
+                  </div>
+                  <div className="glass-card p-3 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-linear-to-br from-teal-500/5 to-cyan-500/5" />
+                    <div className="relative z-10">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="w-8 h-8 rounded-xl bg-linear-to-br from-teal-500/20 to-cyan-500/20 border border-teal-500/30 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" /></svg>
+                        </div>
+                        <span className="text-[8px] text-teal-400 bg-teal-500/10 px-1.5 py-0.5 rounded-full border border-teal-500/20">All Time</span>
+                      </div>
+                      <p className="text-lg font-bold text-teal-400">GH&#8373;3,400</p>
+                      <p className="text-[9px] text-slate-500">Total Deposits</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Revenue Overview - 4 Cards */}
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="glass-card p-2.5 relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="w-7 h-7 rounded-lg bg-linear-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 flex items-center justify-center">
+                        <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      </div>
+                      <span className="text-[7px] text-green-400 bg-green-500/10 px-1 py-0.5 rounded-full border border-green-500/20">&#10003; 0%</span>
+                    </div>
+                    <p className="text-base font-bold text-white">GH&#8373;4,500</p>
+                    <p className="text-[8px] text-slate-500">Total Revenue</p>
+                  </div>
+                  <div className="glass-card p-2.5 relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="w-7 h-7 rounded-lg bg-linear-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 flex items-center justify-center">
+                        <svg className="w-3.5 h-3.5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      </div>
+                      <span className="text-[7px] text-green-400 bg-green-500/10 px-1 py-0.5 rounded-full border border-green-500/20">60% collected</span>
+                    </div>
+                    <p className="text-base font-bold text-green-400">GH&#8373;2,700</p>
+                    <p className="text-[8px] text-slate-500">Total Collected</p>
+                  </div>
+                  <div className="glass-card p-2.5 relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="w-7 h-7 rounded-lg bg-linear-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 flex items-center justify-center">
+                        <svg className="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      </div>
+                      <span className="text-[7px] text-amber-400 bg-amber-500/10 px-1 py-0.5 rounded-full border border-amber-500/20">Pending</span>
+                    </div>
+                    <p className="text-base font-bold text-amber-400">GH&#8373;1,800</p>
+                    <p className="text-[8px] text-slate-500">Outstanding Balance</p>
+                  </div>
+                  <div className="glass-card p-2.5 relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="w-7 h-7 rounded-lg bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 flex items-center justify-center">
+                        <svg className="w-3.5 h-3.5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                      </div>
+                      <span className="text-[7px] text-purple-400 bg-purple-500/10 px-1 py-0.5 rounded-full border border-purple-500/20">This Month</span>
+                    </div>
+                    <p className="text-base font-bold text-purple-400">GH&#8373;2,700</p>
+                    <p className="text-[8px] text-slate-500">Monthly Collections</p>
+                  </div>
+                </div>
+
+                {/* Collection Health + Performance Insights + Quick Actions */}
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Collection Health */}
+                  <div className="glass-card p-3 relative overflow-hidden">
+                    <p className="text-[10px] font-semibold text-white mb-0.5">Collection Health</p>
+                    <p className="text-[8px] text-slate-500 mb-2">Revenue collected vs outstanding</p>
+                    <div className="flex items-center justify-center mb-2">
+                      <div className="relative w-20 h-20">
+                        <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                          <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="6" />
+                          <circle cx="40" cy="40" r="32" fill="none" stroke="#06b6d4" strokeWidth="6" strokeDasharray="201" strokeDashoffset="80" strokeLinecap="round" />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className="text-sm font-bold text-white">60%</span>
+                          <span className="text-[7px] text-slate-500">Collected</span>
+                        </div>
                       </div>
                     </div>
-                  ))}
+                    <div className="space-y-1.5">
+                      <div>
+                        <div className="flex justify-between text-[8px] mb-0.5">
+                          <span className="text-slate-400">Collected</span>
+                          <span className="text-green-400">GH&#8373;2,700</span>
+                        </div>
+                        <div className="h-1 rounded-full bg-white/5"><div className="h-full w-[60%] rounded-full bg-linear-to-r from-green-500 to-emerald-400" /></div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-[8px] mb-0.5">
+                          <span className="text-slate-400">Outstanding</span>
+                          <span className="text-red-400">GH&#8373;1,800</span>
+                        </div>
+                        <div className="h-1 rounded-full bg-white/5"><div className="h-full w-[40%] rounded-full bg-linear-to-r from-red-500 to-orange-400" /></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Performance Insights */}
+                  <div className="glass-card p-3 relative overflow-hidden">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 rounded-lg bg-linear-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/30 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold text-white">Performance Insights</p>
+                        <p className="text-[7px] text-slate-500">AI-powered observations</p>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-start gap-1.5 p-1.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1 shrink-0" />
+                        <p className="text-[8px] text-slate-300 leading-relaxed">Collection rate is at 60%. There&apos;s room to improve debt recovery.</p>
+                      </div>
+                      <div className="flex items-start gap-1.5 p-1.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1 shrink-0" />
+                        <p className="text-[8px] text-slate-300 leading-relaxed">2 new customers in the last 30 days.</p>
+                      </div>
+                      <div className="flex items-start gap-1.5 p-1.5 rounded-lg bg-green-500/5 border border-green-500/20">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400 mt-1 shrink-0" />
+                        <p className="text-[8px] text-slate-300 leading-relaxed">GH&#8373;200 collected today &mdash; keep it up!</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Actions */}
+                  <div className="glass-card p-3 relative overflow-hidden">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 rounded-lg bg-linear-to-br from-pink-500/20 to-rose-500/20 border border-pink-500/30 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-pink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold text-white">Quick Actions</p>
+                        <p className="text-[7px] text-slate-500">Jump to common tasks</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[
+                        { label: "New Sale", color: "from-cyan-500/10 to-blue-500/5 border-cyan-500/20", iconColor: "text-cyan-400 bg-cyan-500/20", icon: "M12 4v16m8-8H4" },
+                        { label: "Customers", color: "from-green-500/10 to-emerald-500/5 border-green-500/20", iconColor: "text-green-400 bg-green-500/20", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" },
+                        { label: "Purchases", color: "from-purple-500/10 to-violet-500/5 border-purple-500/20", iconColor: "text-purple-400 bg-purple-500/20", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
+                        { label: "Wallets", color: "from-amber-500/10 to-orange-500/5 border-amber-500/20", iconColor: "text-amber-400 bg-amber-500/20", icon: "M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" },
+                        { label: "Products", color: "from-blue-500/10 to-indigo-500/5 border-blue-500/20", iconColor: "text-blue-400 bg-blue-500/20", icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" },
+                        { label: "Reports", color: "from-rose-500/10 to-pink-500/5 border-rose-500/20", iconColor: "text-rose-400 bg-rose-500/20", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
+                      ].map((action) => (
+                        <div key={action.label} className={`flex flex-col items-center gap-1 p-2 rounded-lg bg-linear-to-br ${action.color} border`}>
+                          <div className={`w-6 h-6 rounded-lg ${action.iconColor} flex items-center justify-center`}>
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={action.icon} /></svg>
+                          </div>
+                          <span className="text-[7px] font-medium text-slate-300">{action.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Revenue Trend Chart + Sale Type */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-2 glass-card p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="text-[10px] font-semibold text-white">Revenue Trend</p>
+                        <p className="text-[7px] text-slate-500">Last 6 months performance</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-cyan-500" /><span className="text-[7px] text-slate-500">Revenue</span></div>
+                        <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-purple-500" /><span className="text-[7px] text-slate-500">Purchases</span></div>
+                      </div>
+                    </div>
+                    {/* Mini area chart mockup */}
+                    <div className="relative h-16">
+                      <svg viewBox="0 0 300 60" className="w-full h-full" preserveAspectRatio="none">
+                        <defs>
+                          <linearGradient id="heroRevGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.3" />
+                            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
+                          </linearGradient>
+                          <linearGradient id="heroPurGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.2" />
+                            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        <path d="M0,50 L50,45 L100,40 L150,35 L200,20 L250,15 L300,10 L300,60 L0,60 Z" fill="url(#heroRevGrad)" />
+                        <path d="M0,50 L50,45 L100,40 L150,35 L200,20 L250,15 L300,10" fill="none" stroke="#06b6d4" strokeWidth="1.5" />
+                        <path d="M0,55 L50,52 L100,50 L150,48 L200,42 L250,38 L300,30 L300,60 L0,60 Z" fill="url(#heroPurGrad)" />
+                        <path d="M0,55 L50,52 L100,50 L150,48 L200,42 L250,38 L300,30" fill="none" stroke="#8b5cf6" strokeWidth="1.5" />
+                      </svg>
+                      <div className="absolute bottom-0 left-0 right-0 flex justify-between px-1">
+                        {["Sep", "Oct", "Nov", "Dec", "Jan", "Feb"].map((m) => (
+                          <span key={m} className="text-[7px] text-slate-600">{m}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="glass-card p-3">
+                    <p className="text-[10px] font-semibold text-white mb-0.5">Sale Type Distribution</p>
+                    <p className="text-[7px] text-slate-500 mb-2">Breakdown by sale type</p>
+                    <div className="flex items-center justify-center mb-2">
+                      <div className="relative w-16 h-16">
+                        <svg className="w-16 h-16" viewBox="0 0 64 64">
+                          <circle cx="32" cy="32" r="24" fill="none" stroke="#06b6d4" strokeWidth="7" strokeDasharray="150.8" strokeDashoffset="0" className="-rotate-90 origin-center" />
+                          <circle cx="32" cy="32" r="17" fill="none" stroke="rgba(255,255,255,0.02)" strokeWidth="1" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-cyan-500" /><span className="text-[7px] text-slate-400">Credit Sales</span></div>
+                        <span className="text-[7px] font-medium text-white">1</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
