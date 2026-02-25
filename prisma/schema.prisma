@@ -73,6 +73,18 @@ model Business {
   bonusRecords    BonusRecord[]    @relation("BusinessBonusRecords")
   // Subscription relations
   subscription    Subscription?    @relation("BusinessSubscription")
+  // Business Admin Upgrade relations
+  activities        BusinessActivity[]    @relation("BusinessActivities")
+  businessNotifications BusinessNotification[] @relation("BusinessNotifications")
+  customerSegments  CustomerSegment[]     @relation("BusinessCustomerSegments")
+  alertRules        AlertRule[]           @relation("BusinessAlertRules")
+  businessAlerts    BusinessAlert[]       @relation("BusinessAlerts")
+  salesGoals        SalesGoal[]           @relation("BusinessSalesGoals")
+  stockMovements    StockMovement[]       @relation("BusinessStockMovements")
+  returnRequests    ReturnRequest[]       @relation("BusinessReturnRequests")
+  promotions        Promotion[]           @relation("BusinessPromotions")
+  scheduledReports  ScheduledReport[]     @relation("BusinessScheduledReports")
+  dashboardConfigs  DashboardConfig[]     @relation("BusinessDashboardConfigs")
 }
 
 model BusinessPolicy {
@@ -2086,4 +2098,319 @@ model SystemSetting {
 
   @@index([key])
   @@index([group])
+}
+
+// ============================================================================
+// BUSINESS ADMIN UPGRADES
+// ============================================================================
+
+// Activity Feed & Audit Trail per Business
+model BusinessActivity {
+  id          String       @id @default(cuid())
+  businessId  String
+  userId      String?
+  userName    String?
+  action      String       // e.g., "created_sale", "confirmed_payment", "added_customer"
+  entityType  String?      // e.g., "Purchase", "Payment", "Customer", "Product"
+  entityId    String?
+  description String       @db.Text
+  metadata    Json?        // Extra data like amounts, old/new values
+  createdAt   DateTime     @default(now())
+  business    Business     @relation("BusinessActivities", fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([createdAt])
+  @@index([entityType])
+  @@index([userId])
+}
+
+// Notification Center for Business Admins
+model BusinessNotification {
+  id          String   @id @default(cuid())
+  businessId  String
+  userId      String?  // Target user, null = all business admins
+  title       String
+  body        String   @db.Text
+  type        String   @default("info") // info, warning, success, error, alert
+  link        String?  // Deep link to relevant page
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  business    Business @relation("BusinessNotifications", fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// Customer Segmentation
+model CustomerSegment {
+  id          String   @id @default(cuid())
+  businessId  String
+  name        String
+  description String?
+  color       String   @default("#06b6d4") // For visual identification
+  criteria    Json     // JSON rules: { field, operator, value }[]
+  autoAssign  Boolean  @default(false) // Auto-assign customers matching criteria
+  customerCount Int    @default(0) // Cached count
+  customerIds Json?    // Array of customer IDs in this segment
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  business    Business @relation("BusinessCustomerSegments", fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+}
+
+// Configurable Alert Rules
+model AlertRule {
+  id          String        @id @default(cuid())
+  businessId  String
+  name        String
+  type        BizAlertType
+  field       String        // e.g., "stockQuantity", "outstandingBalance", "collectionRate"
+  condition   AlertCondition
+  threshold   Decimal       @db.Decimal(12, 2)
+  isActive    Boolean       @default(true)
+  notifyEmail Boolean       @default(false)
+  notifySms   Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  business    Business      @relation("BusinessAlertRules", fields: [businessId], references: [id], onDelete: Cascade)
+  alerts      BusinessAlert[] @relation("AlertRuleAlerts")
+
+  @@index([businessId])
+  @@index([isActive])
+}
+
+// Triggered Alerts
+model BusinessAlert {
+  id          String    @id @default(cuid())
+  businessId  String
+  alertRuleId String
+  message     String    @db.Text
+  entityType  String?
+  entityId    String?
+  isRead      Boolean   @default(false)
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  business    Business  @relation("BusinessAlerts", fields: [businessId], references: [id], onDelete: Cascade)
+  alertRule   AlertRule @relation("AlertRuleAlerts", fields: [alertRuleId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([alertRuleId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// Sales Goals & Target Tracking
+model SalesGoal {
+  id            String     @id @default(cuid())
+  businessId    String
+  shopId        String?    // null = business-wide
+  staffId       String?    // null = all staff
+  name          String
+  type          GoalType
+  targetAmount  Decimal    @db.Decimal(12, 2)
+  currentAmount Decimal    @default(0) @db.Decimal(12, 2)
+  period        GoalPeriod
+  startDate     DateTime
+  endDate       DateTime
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  business      Business   @relation("BusinessSalesGoals", fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([shopId])
+  @@index([isActive])
+  @@index([endDate])
+}
+
+// Inventory Movement Log
+model StockMovement {
+  id          String       @id @default(cuid())
+  businessId  String
+  productId   String
+  shopId      String?
+  type        MovementType
+  quantity    Int
+  previousQty Int
+  newQty      Int
+  reason      String?
+  reference   String?      // e.g., purchase ID, return ID
+  userId      String?
+  userName    String?
+  createdAt   DateTime     @default(now())
+  business    Business     @relation("BusinessStockMovements", fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([productId])
+  @@index([shopId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// Return & Refund Workflow
+model ReturnRequest {
+  id              String       @id @default(cuid())
+  businessId      String
+  purchaseId      String
+  customerId      String
+  returnNumber    String       @unique
+  reason          String       @db.Text
+  status          ReturnStatus @default(PENDING)
+  refundAmount    Decimal?     @db.Decimal(12, 2)
+  refundMethod    String?      // "wallet", "cash", "mobile_money"
+  items           Json?        // Array of { productName, quantity, unitPrice }
+  adminNotes      String?      @db.Text
+  processedById   String?
+  processedAt     DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  business        Business     @relation("BusinessReturnRequests", fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([purchaseId])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Business-Level Promotions & Discounts
+model Promotion {
+  id            String          @id @default(cuid())
+  businessId    String
+  name          String
+  description   String?
+  type          PromotionType
+  value         Decimal         @db.Decimal(12, 2) // Percentage or fixed amount
+  minPurchase   Decimal?        @db.Decimal(12, 2)
+  maxDiscount   Decimal?        @db.Decimal(12, 2) // Cap for percentage
+  applicableTo  String?         // JSON: product IDs, category IDs, or "all"
+  shopIds       Json?           // Specific shops or null for all
+  usageLimit    Int             @default(0)  // 0 = unlimited
+  usedCount     Int             @default(0)
+  validFrom     DateTime
+  validUntil    DateTime
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  business      Business        @relation("BusinessPromotions", fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([isActive])
+  @@index([validFrom, validUntil])
+}
+
+// Scheduled Automated Reports
+model ScheduledReport {
+  id            String          @id @default(cuid())
+  businessId    String
+  name          String
+  reportType    BizReportType
+  frequency     ReportFrequency
+  recipients    Json            // Array of email addresses
+  filters       Json?           // Optional filters like shopId, dateRange
+  lastSentAt    DateTime?
+  nextRunAt     DateTime?
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  business      Business        @relation("BusinessScheduledReports", fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([isActive])
+  @@index([nextRunAt])
+}
+
+// Dashboard Customization Settings
+model DashboardConfig {
+  id            String   @id @default(cuid())
+  businessId    String
+  userId        String
+  widgetOrder   Json?    // Array of widget IDs in display order
+  hiddenWidgets Json?    // Array of hidden widget IDs
+  dateRange     String   @default("30d") // Default date range: 7d, 30d, 90d, 1y, all
+  theme         String   @default("dark") // dark or light
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  business      Business @relation("BusinessDashboardConfigs", fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, userId])
+  @@index([businessId])
+  @@index([userId])
+}
+
+// New enums for business admin upgrades
+enum BizAlertType {
+  LOW_STOCK
+  OVERDUE_PAYMENT
+  HIGH_OUTSTANDING
+  LOW_COLLECTION_RATE
+  REVENUE_DROP
+  CUSTOM
+}
+
+enum AlertCondition {
+  LESS_THAN
+  GREATER_THAN
+  EQUALS
+  LESS_THAN_OR_EQUAL
+  GREATER_THAN_OR_EQUAL
+}
+
+enum GoalType {
+  REVENUE
+  COLLECTIONS
+  NEW_CUSTOMERS
+  NEW_SALES
+  UNITS_SOLD
+}
+
+enum GoalPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum MovementType {
+  SALE
+  RETURN
+  ADJUSTMENT
+  TRANSFER
+  RESTOCK
+  DAMAGE
+}
+
+enum ReturnStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PromotionType {
+  PERCENTAGE_DISCOUNT
+  FIXED_DISCOUNT
+  BUY_X_GET_Y
+  FREE_DELIVERY
+}
+
+enum BizReportType {
+  SALES_SUMMARY
+  COLLECTION_REPORT
+  INVENTORY_STATUS
+  CUSTOMER_ANALYSIS
+  STAFF_PERFORMANCE
+  FINANCIAL_OVERVIEW
+}
+
+enum ReportFrequency {
+  DAILY_REPORT
+  WEEKLY_REPORT
+  MONTHLY_REPORT
+  QUARTERLY_REPORT
 }

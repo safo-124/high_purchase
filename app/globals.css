@@ -718,3 +718,31 @@
     0 4px 16px rgba(139, 92, 246, 0.25),
     0 0 0 1px rgba(255, 255, 255, 0.4) inset;
 }
+
+/* Light mode sidebar */
+.light-mode aside {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(139, 92, 246, 0.1) !important;
+}
+
+.light-mode header {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(139, 92, 246, 0.1) !important;
+}
+
+/* Light mode bg helpers */
+.light-mode [class*="bg-white/"][class*="03"],
+.light-mode [class*="bg-white/"][class*="02"],
+.light-mode [class*="bg-slate-900"] {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.light-mode [class*="border-white/5"],
+.light-mode [class*="border-white/10"] {
+  border-color: rgba(139, 92, 246, 0.08) !important;
+}
+
+/* Light mode animations overlay */
+.light-mode [class*="opacity-"][class*="02"] {
+  opacity: 0.01 !important;
+}

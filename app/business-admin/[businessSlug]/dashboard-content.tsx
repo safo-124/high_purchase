@@ -1068,6 +1068,27 @@ export function DashboardContent({ stats, businessName, currency, walletStats, b
           </div>
         </div>
       </div>
+
+      {/* Quick Links to New Features */}
+      <div>
+        <h3 className="text-lg font-bold text-white mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {[
+            { name: "Activity", href: `${baseUrl}/activity`, icon: "📋", color: "from-blue-500/20 to-indigo-500/20 border-blue-500/20" },
+            { name: "Alerts", href: `${baseUrl}/alerts`, icon: "⚠️", color: "from-amber-500/20 to-orange-500/20 border-amber-500/20" },
+            { name: "Goals", href: `${baseUrl}/goals`, icon: "🎯", color: "from-emerald-500/20 to-green-500/20 border-emerald-500/20" },
+            { name: "Reports", href: `${baseUrl}/advanced-reports`, icon: "📊", color: "from-cyan-500/20 to-teal-500/20 border-cyan-500/20" },
+            { name: "Promotions", href: `${baseUrl}/promotions`, icon: "🏷️", color: "from-purple-500/20 to-violet-500/20 border-purple-500/20" },
+            { name: "Segments", href: `${baseUrl}/segments`, icon: "👥", color: "from-rose-500/20 to-pink-500/20 border-rose-500/20" },
+          ].map(action => (
+            <a key={action.name} href={action.href}
+              className={`glass-card p-4 text-center hover:scale-105 transition-all duration-200 bg-gradient-to-br ${action.color} group`}>
+              <span className="text-2xl block mb-2 group-hover:scale-110 transition-transform">{action.icon}</span>
+              <span className="text-xs font-medium text-slate-300">{action.name}</span>
+            </a>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
