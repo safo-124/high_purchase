@@ -576,6 +576,27 @@
 }
 
 /* ============================================
+   NATIVE SELECT / OPTION FIX (dark theme)
+   Browser renders <option> with its own bg;
+   white text on white option bg = invisible.
+   ============================================ */
+select option {
+  background-color: #1e1b2e;
+  color: #e2e8f0;
+}
+
+select option:checked,
+select option:hover {
+  background-color: #2d2a42;
+  color: #fff;
+}
+
+select optgroup {
+  background-color: #1e1b2e;
+  color: #94a3b8;
+}
+
+/* ============================================
    LIGHT MODE OVERRIDES
    ============================================ */
 
@@ -745,4 +766,22 @@
 /* Light mode animations overlay */
 .light-mode [class*="opacity-"][class*="02"] {
   opacity: 0.01 !important;
+}
+/* Light mode select/option */
+.light-mode select option {
+  background-color: #ffffff;
+  color: #1e1b4b;
+}
+
+.light-mode select option:checked,
+.light-mode select option:hover {
+  background-color: #f0eef8;
+  color: #1e1b4b;
+}
+
+/* Light mode select element styling */
+.light-mode select {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  border-color: rgba(139, 92, 246, 0.15) !important;
+  color: #1e1b4b !important;
 }
