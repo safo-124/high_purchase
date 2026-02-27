@@ -209,7 +209,7 @@ export default function AboutPage() {
                 Whether you want to use High Purchase for your business or join our team, we&apos;d love to hear from you.
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-4 justify-center">
-                <Link href="/login" className="w-full sm:w-auto px-10 py-4 text-base font-semibold text-white rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-xl shadow-purple-500/25 hover:-translate-y-0.5">
+                <Link href="/register" className="w-full sm:w-auto px-10 py-4 text-base font-semibold text-white rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-xl shadow-purple-500/25 hover:-translate-y-0.5">
                   Get Started Free →
                 </Link>
                 <Link href="/contact" className="w-full sm:w-auto px-10 py-4 text-base font-medium text-slate-300 hover:text-white rounded-2xl border border-white/10 hover:border-white/20 hover:bg-white/5 transition-all">

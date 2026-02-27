@@ -448,7 +448,7 @@ export default function FeaturesPage() {
               <p className="text-base text-slate-400 max-w-xl mx-auto mb-8">
                 Sign up for free and start managing your hire purchase business with built-in accounting today.
               </p>
-              <Link href="/login" className="group inline-flex px-10 py-4 text-base font-semibold text-white rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-xl shadow-purple-500/25 hover:shadow-purple-500/40 hover:-translate-y-0.5 relative overflow-hidden">
+              <Link href="/register" className="group inline-flex px-10 py-4 text-base font-semibold text-white rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-xl shadow-purple-500/25 hover:shadow-purple-500/40 hover:-translate-y-0.5 relative overflow-hidden">
                 <span className="relative z-10">Get Started Free &rarr;</span>
                 <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
               </Link>

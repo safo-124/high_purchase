@@ -55,7 +55,7 @@ export default function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/login" className="block w-full text-center px-6 py-3.5 text-sm font-semibold text-white rounded-xl border border-white/10 hover:border-white/20 hover:bg-white/5 transition-all">
+              <Link href="/register" className="block w-full text-center px-6 py-3.5 text-sm font-semibold text-white rounded-xl border border-white/10 hover:border-white/20 hover:bg-white/5 transition-all">
                 Get Started Free
               </Link>
             </div>
@@ -97,7 +97,7 @@ export default function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/login" className="block w-full text-center px-6 py-3.5 text-sm font-semibold text-white rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-lg shadow-purple-500/25">
+              <Link href="/register" className="block w-full text-center px-6 py-3.5 text-sm font-semibold text-white rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-lg shadow-purple-500/25">
                 Start Free Trial →
               </Link>
             </div>
@@ -269,7 +269,7 @@ export default function PricingPage() {
                 No credit card required. Set up your first shop in under 5 minutes.
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-4 justify-center">
-                <Link href="/login" className="w-full sm:w-auto px-10 py-4 text-base font-semibold text-white rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-xl shadow-purple-500/25 hover:-translate-y-0.5">
+                <Link href="/register" className="w-full sm:w-auto px-10 py-4 text-base font-semibold text-white rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-xl shadow-purple-500/25 hover:-translate-y-0.5">
                   Get Started Free →
                 </Link>
                 <Link href="/contact" className="w-full sm:w-auto px-10 py-4 text-base font-medium text-slate-300 hover:text-white rounded-2xl border border-white/10 hover:border-white/20 hover:bg-white/5 transition-all">

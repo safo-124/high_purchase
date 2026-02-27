@@ -291,7 +291,7 @@ export default function ContactPage() {
               <p className="text-base text-slate-400 max-w-xl mx-auto mb-8">
                 No need to talk to sales. Create your free account and start using High Purchase in minutes.
               </p>
-              <Link href="/login" className="inline-flex px-10 py-4 text-base font-semibold text-white rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-xl shadow-purple-500/25 hover:-translate-y-0.5">
+              <Link href="/register" className="inline-flex px-10 py-4 text-base font-semibold text-white rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-xl shadow-purple-500/25 hover:-translate-y-0.5">
                 Get Started Free →
               </Link>
             </div>
