@@ -76,6 +76,7 @@ export function BusinessStaffReportsContent({
   const [customEndDate, setCustomEndDate] = useState("")
   const [allReports, setAllReports] = useState<BusinessStaffDailyReportData[]>(reports)
   const [isLoadingReports, setIsLoadingReports] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   // Helper function to format date as YYYY-MM-DD in local timezone
   const formatDateKey = (date: Date) => {
@@ -417,31 +418,87 @@ export function BusinessStaffReportsContent({
   const isToday = (dateKey: string) => dateKey === formatDateKey(today)
 
   // CSV Export
-  const handleExportCSV = () => {
-    const rows = [
-      ["Date", "Shop", "Staff", "Role", "Type", "Sales Amount", "Collected", "Wallet Deposits", "Status", "Notes"]
-    ]
-    for (const r of filteredReports) {
-      rows.push([
-        new Date(r.reportDate).toLocaleDateString("en-GB"),
-        r.shopName, r.staffName, r.staffRole, r.reportType,
-        String(r.totalSalesAmount || 0), String(r.totalCollected || 0),
-        String(r.totalWalletDeposits || 0), r.status,
-        (r.notes || "").replace(/,/g, ";"),
-      ])
+  const handleExportCSV = async () => {
+    setIsExporting(true)
+    try {
+      // Fetch customer details for all reports
+      const allDetails: Map<string, ReportCustomerDetail[]> = new Map()
+      await Promise.all(
+        filteredReports.map(async (r) => {
+          try {
+            const result = await getBusinessDailyReportDetails(businessSlug, r.id)
+            if (result.success && result.customers) {
+              allDetails.set(r.id, result.customers)
+            }
+          } catch { /* skip failed fetches */ }
+        })
+      )
+
+      const rows = [
+        ["Date", "Time", "Shop", "Staff", "Role", "Type", "Customer", "Sales Amount", "Collected", "Wallet Deposits", "Status", "Notes"]
+      ]
+      for (const r of filteredReports) {
+        const customers = allDetails.get(r.id)
+        if (customers && customers.length > 0) {
+          // Expand each customer item as a separate row
+          for (const cust of customers) {
+            for (const item of cust.items) {
+              rows.push([
+                new Date(r.reportDate).toLocaleDateString("en-GB"),
+                item.time || "",
+                r.shopName, r.staffName, r.staffRole, r.reportType,
+                cust.customerName,
+                String(r.reportType === "SALES" ? item.amount : 0),
+                String(r.reportType === "COLLECTION" ? item.amount : 0),
+                String(r.reportType === "WALLET" ? item.amount : 0),
+                r.status,
+                (item.description || "").replace(/,/g, ";"),
+              ])
+            }
+          }
+        } else {
+          // Fallback: no customer detail available, use aggregate
+          rows.push([
+            new Date(r.reportDate).toLocaleDateString("en-GB"),
+            "",
+            r.shopName, r.staffName, r.staffRole, r.reportType,
+            "",
+            String(r.totalSalesAmount || 0), String(r.totalCollected || 0),
+            String(r.totalWalletDeposits || 0), r.status,
+            (r.notes || "").replace(/,/g, ";"),
+          ])
+        }
+      }
+      const csv = rows.map(row => row.map(cell => `"${cell}"`).join(",")).join("\n")
+      const blob = new Blob([csv], { type: "text/csv" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `staff-reports-${MONTHS[currentMonth]}-${currentYear}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setIsExporting(false)
     }
-    const csv = rows.map(row => row.map(cell => `"${cell}"`).join(",")).join("\n")
-    const blob = new Blob([csv], { type: "text/csv" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `staff-reports-${MONTHS[currentMonth]}-${currentYear}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   // PDF Export
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    setIsExporting(true)
+    try {
+      // Fetch customer details for all reports
+      const allDetails: Map<string, ReportCustomerDetail[]> = new Map()
+      await Promise.all(
+        filteredReports.map(async (r) => {
+          try {
+            const result = await getBusinessDailyReportDetails(businessSlug, r.id)
+            if (result.success && result.customers) {
+              allDetails.set(r.id, result.customers)
+            }
+          } catch { /* skip failed fetches */ }
+        })
+      )
+
     const doc = new jsPDF()
     const pageWidth = doc.internal.pageSize.getWidth()
     const primaryColor: [number, number, number] = [99, 102, 241] // indigo
@@ -524,41 +581,55 @@ export function BusinessStaffReportsContent({
 
     yPos += 25
 
-    // Reports Table
-    const tableData = filteredReports.map(r => {
+    // Reports Table - now with Customer and Time columns
+    const tableData: string[][] = []
+    for (const r of filteredReports) {
       const date = new Date(r.reportDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
       const type = r.reportType === "SALES" ? "Sales" : r.reportType === "WALLET" ? "Wallet" : "Collection"
-      const amount = r.reportType === "SALES"
-        ? (r.totalSalesAmount || 0)
-        : r.reportType === "WALLET"
-        ? (r.totalWalletDeposits || 0)
-        : (r.totalCollected || 0)
       const role = r.staffRole === "SALES_STAFF" ? "Sales" : r.staffRole === "DEBT_COLLECTOR" ? "Collector" : r.staffRole
-      return [date, r.shopName, r.staffName, role, type, `GHS ${amount.toLocaleString()}`, r.status === "REVIEWED" ? "Reviewed" : "Pending"]
-    })
+      const statusLabel = r.status === "REVIEWED" ? "Reviewed" : "Pending"
+      const customers = allDetails.get(r.id)
+
+      if (customers && customers.length > 0) {
+        for (const cust of customers) {
+          for (const item of cust.items) {
+            tableData.push([date, item.time || "", r.shopName, r.staffName, role, type, cust.customerName, `GHS ${item.amount.toLocaleString()}`, statusLabel])
+          }
+        }
+      } else {
+        const amount = r.reportType === "SALES"
+          ? (r.totalSalesAmount || 0)
+          : r.reportType === "WALLET"
+          ? (r.totalWalletDeposits || 0)
+          : (r.totalCollected || 0)
+        tableData.push([date, "", r.shopName, r.staffName, role, type, "", `GHS ${amount.toLocaleString()}`, statusLabel])
+      }
+    }
 
     autoTable(doc, {
       startY: yPos,
-      head: [["Date", "Shop", "Staff", "Role", "Type", "Amount", "Status"]],
+      head: [["Date", "Time", "Shop", "Staff", "Role", "Type", "Customer", "Amount", "Status"]],
       body: tableData,
       theme: "striped",
       headStyles: {
         fillColor: primaryColor,
         textColor: [255, 255, 255],
-        fontSize: 9,
+        fontSize: 8,
         fontStyle: "bold",
       },
       bodyStyles: {
-        fontSize: 8,
+        fontSize: 7,
         textColor: textColor,
       },
       alternateRowStyles: {
         fillColor: [248, 250, 252],
       },
       columnStyles: {
-        0: { cellWidth: 20 },
-        5: { halign: "right", fontStyle: "bold" },
-        6: { halign: "center" },
+        0: { cellWidth: 18 },
+        1: { cellWidth: 16 },
+        6: { cellWidth: 30 },
+        7: { halign: "right", fontStyle: "bold" },
+        8: { halign: "center", cellWidth: 18 },
       },
       margin: { left: 14, right: 14 },
     })
@@ -626,6 +697,9 @@ export function BusinessStaffReportsContent({
     const fileStart = rangeStartDate.toISOString().slice(0, 10)
     const fileEnd = rangeEndDate.toISOString().slice(0, 10)
     doc.save(`staff-reports-${fileStart}-to-${fileEnd}.pdf`)
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   // Individual Report PDF
@@ -1115,9 +1189,19 @@ export function BusinessStaffReportsContent({
 
           {/* Export Buttons */}
           <div className="flex items-center gap-2">
+            {isExporting && (
+              <div className="flex items-center gap-1.5 text-xs text-amber-400 mr-1">
+                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Exporting...
+              </div>
+            )}
             <button
               onClick={handleExportCSV}
-              className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 text-sm font-medium transition-all flex items-center gap-1.5"
+              disabled={isExporting}
+              className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 text-sm font-medium transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Export to CSV"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1127,7 +1211,8 @@ export function BusinessStaffReportsContent({
             </button>
             <button
               onClick={handleExportPDF}
-              className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:text-red-300 hover:bg-red-500/20 text-sm font-medium transition-all flex items-center gap-1.5"
+              disabled={isExporting}
+              className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:text-red-300 hover:bg-red-500/20 text-sm font-medium transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Download PDF Report"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
