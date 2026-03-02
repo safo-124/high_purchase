@@ -17,7 +17,7 @@ export default async function BusinessDetailPage({
     notFound()
   }
 
-  const { business, admins, shops, counts, financials, activity } = data
+  const { business, admins, shops, counts, financials, activity, teamMembers, recentActivityFeed } = data
 
   const formatGHS = (n: number) =>
     `GHS ${n.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -426,6 +426,217 @@ export default async function BusinessDetailPage({
               </div>
             )}
           </div>
+        </div>
+
+        {/* ===== Team Members & Online Status ===== */}
+        <div className="mb-3">
+          <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wider">Team Members & Online Status</h3>
+        </div>
+        <div className="glass-card p-6 mb-10">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/15 border border-green-500/30 flex items-center justify-center">
+                <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">All Team Members</h3>
+                <p className="text-xs text-slate-400">
+                  {teamMembers.filter(m => m.lastSeenAt && (new Date().getTime() - new Date(m.lastSeenAt).getTime()) < 300000).length} online now · {teamMembers.length} total
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                <span className="text-slate-400">Online (≤5min)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <span className="text-slate-400">Recent (≤1hr)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-slate-600" />
+                <span className="text-slate-400">Offline</span>
+              </div>
+            </div>
+          </div>
+          
+          {teamMembers.length === 0 ? (
+            <p className="text-sm text-slate-500 text-center py-8">No team members found</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {(() => {
+                // Deduplicate by user id (a user may appear as both business admin and shop member)
+                const seen = new Set<string>()
+                const unique = teamMembers.filter(m => {
+                  if (seen.has(m.id)) return false
+                  seen.add(m.id)
+                  return true
+                })
+                // Sort: online first, then by lastSeenAt desc
+                const sorted = unique.sort((a, b) => {
+                  const aTime = a.lastSeenAt ? new Date(a.lastSeenAt).getTime() : 0
+                  const bTime = b.lastSeenAt ? new Date(b.lastSeenAt).getTime() : 0
+                  return bTime - aTime
+                })
+                return sorted.map((member) => {
+                  const now = new Date().getTime()
+                  const lastSeen = member.lastSeenAt ? new Date(member.lastSeenAt).getTime() : 0
+                  const diffMs = now - lastSeen
+                  const isOnline = member.lastSeenAt && diffMs < 300000 // 5 min
+                  const isRecent = member.lastSeenAt && diffMs < 3600000 // 1 hr
+                  const roleLabel = member.role === "BUSINESS_ADMIN" ? "Business Admin"
+                    : member.role === "SHOP_ADMIN" ? "Shop Admin"
+                    : member.role === "SALES_STAFF" ? "Sales Staff"
+                    : member.role === "DEBT_COLLECTOR" ? "Debt Collector"
+                    : member.role
+                  const roleColor = member.role === "BUSINESS_ADMIN" ? "text-purple-400 bg-purple-500/10 border-purple-500/20"
+                    : member.role === "SHOP_ADMIN" ? "text-blue-400 bg-blue-500/10 border-blue-500/20"
+                    : member.role === "SALES_STAFF" ? "text-cyan-400 bg-cyan-500/10 border-cyan-500/20"
+                    : member.role === "DEBT_COLLECTOR" ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                    : "text-slate-400 bg-slate-500/10 border-slate-500/20"
+                  const avatarGradient = member.role === "BUSINESS_ADMIN" ? "from-purple-500/30 to-violet-500/20 border-purple-500/30"
+                    : member.role === "SHOP_ADMIN" ? "from-blue-500/30 to-indigo-500/20 border-blue-500/30"
+                    : member.role === "SALES_STAFF" ? "from-cyan-500/30 to-teal-500/20 border-cyan-500/30"
+                    : "from-amber-500/30 to-orange-500/20 border-amber-500/30"
+
+                  return (
+                    <div key={`${member.id}-${member.role}-${member.shopName}`} className={`p-3.5 rounded-xl border transition-all ${
+                      isOnline
+                        ? "bg-green-500/[0.03] border-green-500/20"
+                        : isRecent
+                        ? "bg-amber-500/[0.02] border-amber-500/10"
+                        : "bg-white/[0.02] border-white/5"
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex-shrink-0">
+                          <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${avatarGradient} border flex items-center justify-center`}>
+                            <span className="text-sm font-semibold text-white/80">{member.name.charAt(0).toUpperCase()}</span>
+                          </div>
+                          <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#1e1b2e] ${
+                            isOnline ? "bg-green-400 animate-pulse" : isRecent ? "bg-amber-400" : "bg-slate-600"
+                          }`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white truncate">{member.name}</p>
+                          <p className="text-xs text-slate-500 truncate">{member.shopName}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/5">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${roleColor}`}>
+                          {roleLabel}
+                        </span>
+                        <span className={`text-[10px] ${isOnline ? "text-green-400 font-medium" : "text-slate-500"}`}>
+                          {isOnline ? "● Online" : timeAgo(member.lastSeenAt)}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })
+              })()}
+            </div>
+          )}
+        </div>
+
+        {/* ===== Full Recent Activity Feed ===== */}
+        <div className="mb-3">
+          <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wider">Recent Activity Feed</h3>
+        </div>
+        <div className="glass-card p-6 mb-10">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/15 border border-indigo-500/30 flex items-center justify-center">
+              <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Activity Timeline</h3>
+              <p className="text-xs text-slate-400">Payments, purchases, wallet deposits & daily reports</p>
+            </div>
+          </div>
+
+          {recentActivityFeed.length === 0 ? (
+            <p className="text-sm text-slate-500 text-center py-8">No recent activity</p>
+          ) : (
+            <div className="relative">
+              {/* Timeline line */}
+              <div className="absolute left-[19px] top-0 bottom-0 w-px bg-gradient-to-b from-indigo-500/30 via-purple-500/20 to-transparent" />
+              
+              <div className="space-y-1">
+                {recentActivityFeed.map((item, idx) => {
+                  const iconConfig = item.type === "PAYMENT"
+                    ? { bg: "bg-green-500/15 border-green-500/30", color: "text-green-400", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" /> }
+                    : item.type === "PURCHASE"
+                    ? { bg: "bg-blue-500/15 border-blue-500/30", color: "text-blue-400", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /> }
+                    : item.type === "WALLET"
+                    ? { bg: "bg-cyan-500/15 border-cyan-500/30", color: "text-cyan-400", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z" /> }
+                    : { bg: "bg-purple-500/15 border-purple-500/30", color: "text-purple-400", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /> }
+
+                  const typeBadge = item.type === "PAYMENT"
+                    ? { label: "Payment", cls: "text-green-400 bg-green-500/10 border-green-500/20" }
+                    : item.type === "PURCHASE"
+                    ? { label: "Purchase", cls: "text-blue-400 bg-blue-500/10 border-blue-500/20" }
+                    : item.type === "WALLET"
+                    ? { label: "Wallet", cls: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" }
+                    : { label: "Report", cls: "text-purple-400 bg-purple-500/10 border-purple-500/20" }
+
+                  // Show date dividers
+                  const currentDate = new Date(item.createdAt).toLocaleDateString("en-GH", { dateStyle: "medium" })
+                  const prevDate = idx > 0 ? new Date(recentActivityFeed[idx - 1].createdAt).toLocaleDateString("en-GH", { dateStyle: "medium" }) : null
+                  const showDateLabel = idx === 0 || currentDate !== prevDate
+
+                  return (
+                    <div key={item.id}>
+                      {showDateLabel && (
+                        <div className="flex items-center gap-3 py-2 ml-11">
+                          <span className="text-xs font-medium text-slate-400 bg-white/5 px-2.5 py-1 rounded-lg">
+                            {currentDate}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-white/[0.02] transition-colors">
+                        <div className={`w-9 h-9 rounded-xl ${iconConfig.bg} border flex items-center justify-center flex-shrink-0 z-10`}>
+                          <svg className={`w-4 h-4 ${iconConfig.color}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            {iconConfig.icon}
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm text-white">{item.description}</p>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                                {item.customerName && (
+                                  <span className="text-xs text-slate-400">
+                                    <span className="text-slate-600">Customer:</span> {item.customerName}
+                                  </span>
+                                )}
+                                {item.staffName && (
+                                  <span className="text-xs text-slate-400">
+                                    <span className="text-slate-600">By:</span> {item.staffName}
+                                  </span>
+                                )}
+                                <span className="text-xs text-slate-500">{item.shopName}</span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${typeBadge.cls}`}>
+                                {typeBadge.label}
+                              </span>
+                              <span className="text-[10px] text-slate-500">
+                                {new Date(item.createdAt).toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ===== Monthly Activity (if data exists) ===== */}

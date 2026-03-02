@@ -1140,6 +1140,11 @@ export async function getBusinessUsage(businessId: string) {
     recentAuditLogs,
     lastPurchase,
     lastPayment,
+    allStaffMembers,
+    recentPayments,
+    recentPurchases,
+    recentWalletTxns,
+    recentDailyReports,
   ] = await Promise.all([
     // Customer counts
     prisma.customer.count({ where: { shopId: { in: shopIds } } }),
@@ -1230,6 +1235,54 @@ export async function getBusinessUsage(businessId: string) {
       where: { purchase: { customer: { shopId: { in: shopIds } } } },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true },
+    }),
+    // All staff members with user details & roles for online status
+    prisma.shopMember.findMany({
+      where: { shopId: { in: shopIds }, isActive: true },
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true, lastSeenAt: true } },
+        shop: { select: { name: true } },
+      },
+    }),
+    // Recent payments with details
+    prisma.payment.findMany({
+      where: { purchase: { customer: { shopId: { in: shopIds } } }, status: "COMPLETED" },
+      include: {
+        collector: { include: { user: { select: { name: true } }, shop: { select: { name: true } } } },
+        purchase: { include: { customer: { select: { firstName: true, lastName: true, phone: true, shop: { select: { name: true } } } } } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
+    // Recent purchases
+    prisma.purchase.findMany({
+      where: { customer: { shopId: { in: shopIds } } },
+      include: {
+        customer: { select: { firstName: true, lastName: true, shop: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 15,
+    }),
+    // Recent wallet transactions
+    prisma.walletTransaction.findMany({
+      where: { shopId: { in: shopIds }, status: "CONFIRMED" },
+      include: {
+        customer: { select: { firstName: true, lastName: true } },
+        createdBy: { include: { user: { select: { name: true } } } },
+        shop: { select: { name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 15,
+    }),
+    // Recent daily reports
+    prisma.dailyReport.findMany({
+      where: { shopId: { in: shopIds } },
+      include: {
+        shopMember: { include: { user: { select: { name: true } } } },
+        shop: { select: { name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 15,
     }),
   ])
 
@@ -1361,5 +1414,75 @@ export async function getBusinessUsage(businessId: string) {
       })),
       monthlyActivity,
     },
+    // All team members (business admins + shop staff) with online status
+    teamMembers: [
+      ...business.members.map((m) => ({
+        id: m.user.id,
+        name: m.user.name || "No name",
+        email: m.user.email,
+        role: "BUSINESS_ADMIN" as const,
+        shopName: "All Shops",
+        lastSeenAt: m.user.lastSeenAt,
+      })),
+      ...allStaffMembers.map((sm) => ({
+        id: sm.user.id,
+        name: sm.user.name || "No name",
+        email: sm.user.email,
+        role: sm.user.role as string,
+        shopName: sm.shop.name,
+        lastSeenAt: sm.user.lastSeenAt,
+      })),
+    ],
+    // Unified recent activity feed
+    recentActivityFeed: [
+      ...recentPayments.map((p) => ({
+        id: p.id,
+        type: "PAYMENT" as const,
+        description: `Payment of GHS ${Number(p.amount).toLocaleString()} collected`,
+        customerName: `${p.purchase.customer.firstName} ${p.purchase.customer.lastName}`,
+        staffName: p.collector?.user.name || "Shop Admin",
+        staffRole: p.collector ? "DEBT_COLLECTOR" : "SHOP_ADMIN",
+        shopName: p.purchase.customer.shop.name,
+        amount: Number(p.amount),
+        createdAt: p.createdAt,
+      })),
+      ...recentPurchases.map((p) => ({
+        id: p.id,
+        type: "PURCHASE" as const,
+        description: `New purchase of GHS ${Number(p.totalAmount).toLocaleString()}`,
+        customerName: `${p.customer.firstName} ${p.customer.lastName}`,
+        staffName: "",
+        staffRole: "SALES_STAFF",
+        shopName: p.customer.shop.name,
+        amount: Number(p.totalAmount),
+        createdAt: p.createdAt,
+      })),
+      ...recentWalletTxns.map((w) => ({
+        id: w.id,
+        type: "WALLET" as const,
+        description: `Wallet ${w.type.toLowerCase()} of GHS ${Number(w.amount).toLocaleString()}`,
+        customerName: `${w.customer.firstName} ${w.customer.lastName}`,
+        staffName: w.createdBy?.user.name || "Admin",
+        staffRole: "STAFF",
+        shopName: w.shop.name,
+        amount: Number(w.amount),
+        createdAt: w.createdAt,
+      })),
+      ...recentDailyReports.map((r) => {
+        const rtLabel = r.reportType === "SALES" ? "Sales" : r.reportType === "COLLECTION" ? "Collection" : "Wallet"
+        const amtVal = Number(r.totalCollected || r.totalSalesAmount || 0)
+        return {
+          id: r.id,
+          type: "REPORT" as const,
+          description: `${rtLabel} report submitted${amtVal > 0 ? ` — GHS ${amtVal.toLocaleString()}` : ""}`,
+          customerName: "",
+          staffName: r.shopMember.user.name || "Staff",
+          staffRole: r.reportType === "SALES" ? "SALES_STAFF" : "DEBT_COLLECTOR",
+          shopName: r.shop.name,
+          amount: amtVal,
+          createdAt: r.createdAt,
+        }
+      }),
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 30),
   }
 }
